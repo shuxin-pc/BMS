@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "BMS Team",
+  "classifications": ["Web", "API", "Microservice"],
+  "identity": "BMS.Microservice.Template",
+  "name": "BMS Microservice Template",
+  "shortName": "bms-service",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "Bms.ServiceTemplate",
+  "preferNameDirectory": true,
+  "symbols": {
+    "ServiceName": {
+      "type": "parameter",
+      "defaultValue": "NewService",
+      "replaces": "ServiceTemplate",
+      "isRequired": true
+    }
+  }
+}

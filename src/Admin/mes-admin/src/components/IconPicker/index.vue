@@ -19,9 +19,10 @@
         </template>
       </el-input>
       <el-upload
+        v-if="showUpload"
         :auto-upload="false"
         :show-file-list="false"
-        :accept="'.svg,.png,.jpg,.jpeg'"
+        :accept="'.png,.jpg,.jpeg'"
         :on-change="handleFileChange"
       >
         <el-button type="primary">
@@ -76,7 +77,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type UploadRawFile } from 'element-plus'
 import { Search, Upload } from '@element-plus/icons-vue'
 
 // 图标列表（从 Element Plus 提取常用图标）
@@ -104,11 +105,14 @@ const iconList = [
 interface Props {
   visible: boolean
   modelValue: string
+  /** 是否显示上传按钮 */
+  showUpload?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
-  modelValue: ''
+  modelValue: '',
+  showUpload: true
 })
 
 const emit = defineEmits<{
@@ -153,19 +157,24 @@ const handleSelectIcon = (icon: string) => {
   uploadedImage.value = ''
 }
 
+// 图片大小限制 50KB，Base64 编码会增加约 33% 长度
+const MAX_FILE_SIZE = 50 * 1024
+const MAX_FIELD_LENGTH = Math.floor(MAX_FILE_SIZE * 1.33)
+
 // 上传文件
-const handleFileChange = async (file: any) => {
-  const isImage = file.raw.type === 'image/svg+xml' ||
-                  file.raw.type === 'image/png' ||
+const handleFileChange = async (file: UploadRawFile) => {
+  const isImage = file.raw.type === 'image/png' ||
                   file.raw.type === 'image/jpeg'
 
   if (!isImage) {
-    ElMessage.error('请上传 SVG、PNG 或 JPG 格式的图片')
+    ElMessage.error('请上传 PNG 或 JPG 格式的图片')
     return
   }
 
-  if (file.raw.size > 100 * 1024) {
-    ElMessage.warning('图片大小建议不超过 100KB')
+  // 检查文件大小是否超过 50KB 限制
+  if (file.raw.size > MAX_FILE_SIZE) {
+    ElMessage.error(`图片大小不能超过 50KB，请选择更小的图片`)
+    return
   }
 
   // 转换为 Base64
@@ -208,14 +217,14 @@ const handleClose = () => {
   max-height: 360px;
   overflow-y: auto;
   padding: 12px;
-  background: var(--bg-secondary);
+  background: #f9fafb;
   border-radius: 8px;
-  border: 1px solid var(--border-primary);
+  border: 1px solid #e5e7eb;
 }
 
 .no-result {
   text-align: center;
-  color: var(--text-tertiary);
+  color: #9ca3af;
   padding: 40px 0;
 }
 
@@ -238,19 +247,28 @@ const handleClose = () => {
 }
 
 .icon-item:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-primary);
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.icon-item:hover .icon-name {
+  color: #1f2937;
 }
 
 .icon-item.active {
   background: rgba(6, 212, 228, 0.15);
-  border-color: var(--primary);
+  border-color: #06b6d4;
+}
+
+.icon-item.active .icon-name {
+  color: #1f2937;
+  font-weight: 600;
 }
 
 .icon-item .icon-name {
   margin-top: 6px;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: #6b7280;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -264,13 +282,13 @@ const handleClose = () => {
   gap: 12px;
   margin-top: 16px;
   padding: 12px;
-  background: var(--bg-secondary);
+  background: #f9fafb;
   border-radius: 8px;
-  border: 1px solid var(--border-primary);
+  border: 1px solid #e5e7eb;
 }
 
 .preview-label {
-  color: var(--text-tertiary);
+  color: #6b7280;
   font-size: 13px;
 }
 
@@ -278,7 +296,13 @@ const handleClose = () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-primary);
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.icon-grid-container :deep(.el-icon),
+.icon-preview :deep(.el-icon) {
+  color: #1f2937;
 }
 
 .preview-image {
@@ -288,7 +312,7 @@ const handleClose = () => {
 }
 
 .preview-placeholder {
-  color: var(--text-tertiary);
+  color: #9ca3af;
   font-style: italic;
 }
 </style>

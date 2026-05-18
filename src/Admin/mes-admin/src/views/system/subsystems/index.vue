@@ -63,19 +63,7 @@
         style="width: 100%"
       >
         <el-table-column prop="code" label="子系统编码" min-width="120" />
-        <el-table-column prop="name" label="子系统名称" min-width="120">
-          <template #default="{ row }">
-            <el-icon v-if="row.icon && !row.icon.startsWith('data:')" class="subsystem-icon">
-              <component :is="row.icon" />
-            </el-icon>
-            <img
-              v-else-if="row.icon && row.icon.startsWith('data:')"
-              :src="row.icon"
-              class="subsystem-icon-img"
-            />
-            <span>{{ row.name }}</span>
-          </template>
-        </el-table-column>
+        <el-table-column prop="name" label="子系统名称" min-width="120" />
         <el-table-column prop="icon" label="图标" width="80" align="center">
           <template #default="{ row }">
             <el-icon v-if="row.icon && !row.icon.startsWith('data:')" size="20">
@@ -207,7 +195,6 @@
           :props="treeProps"
           show-checkbox
           node-key="id"
-          :default-checked-keys="checkedMenuIds"
           :default-expand-all="true"
         />
       </div>
@@ -228,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TreeInstance } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit, Menu, Picture } from '@element-plus/icons-vue'
 import {
@@ -236,7 +223,17 @@ import {
   getSubsystemMenus, assignSubsystemMenus, getMenus,
   type Subsystem, type SubsystemCreate, type SubsystemUpdate
 } from '@/api/system'
+import { useUserStore } from '@/stores/user'
 import IconPicker from '@/components/IconPicker/index.vue'
+import { useSortAutoFill } from '@/composables/useSortAutoFill'
+
+const userStore = useUserStore()
+
+// 排序自动填充
+const { autoSort, calculateAutoSort } = useSortAutoFill(
+  () => tableData.value,
+  () => null // 子系统无层级，parentId 始终为 null
+)
 
 // 菜单类型定义
 type Menu = {
@@ -279,7 +276,10 @@ const formData = reactive({
 })
 
 const formRules: FormRules = {
-  code: [{ required: true, message: '请输入子系统编码', trigger: 'blur' }],
+  code: [
+    { required: true, message: '请输入子系统编码', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9_]+$/, message: '子系统编码只能包含字母、数字、下划线', trigger: 'blur' }
+  ],
   name: [{ required: true, message: '请输入子系统名称', trigger: 'blur' }]
 }
 
@@ -312,16 +312,28 @@ const formatDate = (dateStr: string) => {
   })
 }
 
+// 获取授权的子系统列表（从 userStore 获取已过滤的数据）
+const authorizedSubsystems = computed(() => userStore.authorizedSubsystems)
+
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
   try {
-    const res = await getSubsystems({
-      name: searchForm.name || undefined,
-      code: searchForm.code || undefined,
-      status: searchForm.status
-    })
-    tableData.value = res
+    // 使用权限过滤后的子系统数据
+    let filteredData = authorizedSubsystems.value
+
+    // 应用搜索过滤
+    if (searchForm.name) {
+      filteredData = filteredData.filter(s => s.name?.includes(searchForm.name))
+    }
+    if (searchForm.code) {
+      filteredData = filteredData.filter(s => s.code?.includes(searchForm.code))
+    }
+    if (searchForm.status !== undefined) {
+      filteredData = filteredData.filter(s => s.status === searchForm.status)
+    }
+
+    tableData.value = filteredData
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -330,19 +342,24 @@ const loadData = async () => {
 }
 
 // 加载菜单树
-const loadMenuTree = async () => {
+const loadMenuTree = async (checkedIds?: number[]) => {
   try {
     const res = await getMenus({})
     menuTree.value = buildTree(res)
+    // 菜单树渲染完成后设置选中状态
+    if (checkedIds && menuTreeRef.value) {
+      await nextTick()
+      menuTreeRef.value.setCheckedKeys(checkedIds)
+    }
   } catch (error) {
     console.error('加载菜单树失败', error)
   }
 }
 
 // 构建树形结构
-const buildTree = (list: any[]): any[] => {
-  const map: Record<number, any> = {}
-  const result: any[] = []
+const buildTree = (list: Menu[]): Menu[] => {
+  const map: Record<number, Menu> = {}
+  const result: Menu[] = []
   list.forEach(item => {
     map[item.id] = { ...item, children: [] }
   })
@@ -370,9 +387,12 @@ const handleReset = () => {
 }
 
 // 新增
-const handleAdd = () => {
+const handleAdd = async () => {
   isEdit.value = false
   resetForm()
+  // 计算自动填充排序值
+  await calculateAutoSort()
+  formData.sort = autoSort.value
   dialogVisible.value = true
 }
 
@@ -397,6 +417,8 @@ const handleDelete = async (row: Subsystem) => {
     })
     await deleteSubsystem(row.id)
     ElMessage.success('删除成功')
+    // 刷新用户store中的子系统列表
+    await userStore.getAuthorizedSubsystems()
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -411,8 +433,9 @@ const handleAssignMenus = async (row: Subsystem) => {
   try {
     const menuIds = await getSubsystemMenus(row.id)
     checkedMenuIds.value = menuIds
-    await loadMenuTree()
     menuDialogVisible.value = true
+    // 在弹窗显示后加载菜单树并设置选中状态
+    await loadMenuTree(menuIds)
   } catch (error) {
     ElMessage.error('加载菜单失败')
   }
@@ -449,6 +472,8 @@ const handleSubmit = async () => {
           ElMessage.success('创建成功')
         }
         dialogVisible.value = false
+        // 刷新用户store中的子系统列表
+        await userStore.getAuthorizedSubsystems()
         loadData()
       } catch (error: any) {
         ElMessage.error(error.message || '操作失败')
@@ -463,15 +488,15 @@ const handleSubmit = async () => {
 const handleMenuSubmit = async () => {
   if (!menuTreeRef.value || !currentSubsystem.value) return
   const checkedNodes = menuTreeRef.value.getCheckedNodes(false)
-  const halfCheckedNodes = menuTreeRef.value.getHalfCheckedNodes()
-  const allCheckedIds = [
-    ...checkedNodes.map((n: any) => n.id),
-    ...halfCheckedNodes.map((n: any) => n.id)
-  ]
+  // 只保存叶子节点（没有子节点的菜单），不保存半选的父节点
+  // 同时去重避免重复键错误
+  const leafNodeIds = [...new Set(checkedNodes
+    .filter((n: Menu) => !n.children || n.children.length === 0)
+    .map((n: Menu) => n.id))]
 
   menuSubmitLoading.value = true
   try {
-    await assignSubsystemMenus(currentSubsystem.value.id, { menuIds: allCheckedIds })
+    await assignSubsystemMenus(currentSubsystem.value.id, { menuIds: leafNodeIds })
     ElMessage.success('分配成功')
     menuDialogVisible.value = false
   } catch (error: any) {
@@ -626,54 +651,66 @@ onMounted(() => {
   color: var(--text-tertiary);
 }
 
-/* 菜单树 */
+/* 菜单树 - 浅色弹窗版 */
 .menu-tree-container {
   max-height: 400px;
   overflow-y: auto;
   padding: 12px;
-  background: var(--bg-secondary);
+  background: #f9fafb;
   border-radius: 8px;
-  border: 1px solid var(--border-primary);
+  border: 1px solid #e5e7eb;
 }
 
 :deep(.el-tree) {
   background: transparent;
-  color: var(--text-primary);
+  color: #1f2937;
 }
 
 :deep(.el-tree-node__content) {
   background: transparent;
   border-radius: 4px;
-  height: 32px;
-  color: var(--text-primary);
+  height: 36px;
+  color: #1f2937;
 }
 
 :deep(.el-tree-node__content:hover) {
-  background: var(--bg-hover);
+  background: #f3f4f6;
 }
 
 :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  background: rgba(6, 212, 228, 0.15);
-  color: var(--primary);
+  background: rgba(6, 212, 228, 0.1);
+  color: #06b6d4;
+}
+
+:deep(.el-tree-node__label) {
+  color: #1f2937;
+}
+
+:deep(.el-tree-node__expand-icon) {
+  color: #9ca3af;
+}
+
+:deep(.el-tree-node__expand-icon.expanded) {
+  color: #06b6d4;
 }
 
 :deep(.el-checkbox__inner) {
-  background: var(--bg-tertiary);
-  border-color: var(--border-primary);
+  background: #ffffff;
+  border-color: #d1d5db;
 }
 
 :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: #06b6d4;
+  border-color: #06b6d4;
 }
 
 :deep(.el-checkbox__label) {
-  color: var(--text-primary);
+  color: #1f2937;
 }
 
 /* 表单样式 */
 :deep(.el-form-item__label) {
-  color: var(--text-secondary);
+  color: #4b5563;
 }
 
 :deep(.el-form-item) {

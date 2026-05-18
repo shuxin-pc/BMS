@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # API网关
+  mes-gateway:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        SERVICE_PATH: src/Gateway/Mes.Gateway.Api/Mes.Gateway.Api.csproj
+    image: mes-gateway:latest
+    container_name: mes-gateway
+    ports:
+      - "5000:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Consul__Host=consul
+      - Service__Host=mes-gateway
+      - Service__Port=80
+    depends_on:
+      - consul
+    networks:
+      - mes-network
+    restart: unless-stopped
+
+  # 认证服务
+  mes-identity:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        SERVICE_PATH: src/Services/Identity/Mes.Identity.Api/Mes.Identity.Api.csproj
+    image: mes-identity:latest
+    container_name: mes-identity
+    ports:
+      - "5002:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__IdentityDb=Host=postgres;Database=mes_identity;Username=postgres;Password=mes@2026
+      - Consul__Host=consul
+      - Service__Host=mes-identity
+      - Service__Port=80
+    depends_on:
+      - postgres
+      - consul
+    networks:
+      - mes-network
+    restart: unless-stopped
+
+networks:
+  mes-network:
+    external: true

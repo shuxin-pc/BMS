@@ -1,0 +1,33 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore Mes.sln
+
+      - name: Build
+        run: dotnet build Mes.sln --no-restore -c Release
+
+      - name: Test
+        run: dotnet test Mes.sln --no-build -c Release --verbosity normal
+
+      - name: Build Docker images
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker build -f build/Dockerfile --build-arg SERVICE_PATH=src/Gateway/Mes.Gateway.Api/Mes.Gateway.Api.csproj -t mes-gateway:latest .
+          docker build -f build/Dockerfile --build-arg SERVICE_PATH=src/Services/Identity/Mes.Identity.Api/Mes.Identity.Api.csproj -t mes-identity:latest .

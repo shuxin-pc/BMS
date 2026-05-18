@@ -1,0 +1,1293 @@
+/**
+ * MES系统 深色科技风 样式规范
+ * 版本：v2.0 增强科技感
+ * 适用：所有前端页面
+ */
+
+/* ==========================================
+   字体引入（科技感）
+   ========================================== */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+/* ==========================================
+   颜色变量定义
+   ========================================== */
+:root {
+  /* 背景色 */
+  --bg-primary: #0a0e17;        /* 深邃背景（侧边栏、头部） */
+  --bg-secondary: #0f1419;      /* 主背景（页面） */
+  --bg-tertiary: #1a2332;       /* 卡片背景 */
+  --bg-elevated: #232f3e;       /* 悬浮/激活背景 */
+  --bg-hover: #2a3a4d;          /* 悬浮背景 */
+  --bg-active: #1e293b;         /* 激活背景 */
+  --bg-glow: rgba(6, 182, 212, 0.1);  /* 发光背景 */
+
+  /* 文字色 */
+  --text-primary: #e8f4f8;      /* 主文字（标题、重要内容） */
+  --text-secondary: #b8c5d0;    /* 次要文字（正文、普通内容） */
+  --text-tertiary: #6b7a8a;     /* 辅助文字（提示、次要信息） */
+  --text-disabled: #4a5568;     /* 禁用文字 */
+
+  /* 边框色 */
+  --border-primary: #2d3a4d;    /* 主边框 */
+  --border-secondary: #3d4f63;  /* 次边框 */
+  --border-tertiary: #4a6080;   /* 强调边框 */
+  --border-glow: rgba(6, 182, 212, 0.5);  /* 发光边框 */
+
+  /* 主题色 - 青色科技风 */
+  --primary: #06d4e4;           /* 主色调（亮青色） */
+  --primary-dim: #0891b2;      /* 主色调暗淡 */
+  --primary-hover: #22d3ee;    /* 主色调悬浮（更亮） */
+  --primary-active: #0891b2;   /* 主色调激活 */
+  --primary-glow: rgba(6, 212, 228, 0.4); /* 发光效果 */
+
+  /* 功能色 */
+  --success: #10fa9e;           /* 成功（亮绿） */
+  --success-dim: #10b981;      /* 成功暗淡 */
+  --warning: #fbbf24;           /* 警告（亮橙） */
+  --warning-dim: #f59e0b;      /* 警告暗淡 */
+  --danger: #ff5757;            /* 危险（亮红） */
+  --danger-dim: #ef4444;       /* 危险暗淡 */
+  --info: #5b9bff;              /* 信息（亮蓝） */
+  --info-dim: #3b82f6;         /* 信息暗淡 */
+
+  /* 渐变色 */
+  --gradient-header: linear-gradient(135deg, #0a0e17 0%, #0f1419 50%, #1a2332 100%);
+  --gradient-primary: linear-gradient(135deg, #06d4e4 0%, #0891b2 100%);
+  --gradient-blue: linear-gradient(135deg, #5b9bff 0%, #3b82f6 100%);
+  --gradient-green: linear-gradient(135deg, #10fa9e 0%, #10b981 100%);
+  --gradient-orange: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  --gradient-purple: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+  --gradient-red: linear-gradient(135deg, #ff5757 0%, #ef4444 100%);
+
+  /* 阴影 */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow-primary: 0 0 20px rgba(6, 212, 228, 0.3);
+  --shadow-glow-success: 0 0 20px rgba(16, 250, 158, 0.3);
+  --shadow-glow-warning: 0 0 20px rgba(251, 191, 36, 0.3);
+  --shadow-glow-danger: 0 0 20px rgba(255, 87, 87, 0.3);
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+/* ==========================================
+   全局样式重置
+   ========================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'JetBrains Mono', 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 科技感背景网格 */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(6, 212, 228, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 212, 228, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ==========================================
+   自定义滚动条
+   ========================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-tertiary);
+}
+
+/* ==========================================
+   Element Plus 组件全局样式覆盖
+   ========================================== */
+
+/* 输入框科技风 */
+:deep(.el-input__wrapper) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: none !important;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-input__wrapper:hover) {
+  border-color: var(--border-secondary);
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px var(--primary-glow) !important;
+}
+
+:deep(.el-input__inner) {
+  color: var(--text-primary) !important;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+
+:deep(.el-input__inner::placeholder) {
+  color: var(--text-tertiary) !important;
+}
+
+/* 文本域 - 科技风 */
+:deep(.el-textarea__inner) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  box-shadow: none !important;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-textarea__inner:hover) {
+  border-color: var(--border-secondary);
+}
+
+:deep(.el-textarea__inner:focus) {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px var(--primary-glow) !important;
+}
+
+:deep(.el-textarea__inner::placeholder) {
+  color: var(--text-tertiary);
+}
+
+/* 通用按钮科技风 */
+:deep(.el-button) {
+  --el-button-text-color: var(--text-primary);
+  --el-button-border-color: var(--border-secondary);
+  --el-button-bg-color: var(--bg-tertiary);
+  --el-button-hover-bg-color: var(--bg-hover);
+  --el-button-hover-border-color: var(--primary);
+  --el-button-hover-text-color: var(--primary);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+/* 圆形按钮 - 科技风 */
+:deep(.el-button.is-circle) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  color: var(--text-secondary) !important;
+}
+
+:deep(.el-button.is-circle:hover) {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+  box-shadow: var(--shadow-glow-primary) !important;
+}
+
+/* 普通按钮 - 科技风 */
+:deep(.el-button:not(.is-circle):not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info)) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  color: var(--text-secondary) !important;
+}
+
+:deep(.el-button:not(.is-circle):not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info):hover) {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+:deep(.el-button--primary) {
+  --el-button-bg-color: var(--primary) !important;
+  --el-button-border-color: var(--primary) !important;
+  --el-button-text-color: var(--bg-primary) !important;
+  --el-button-hover-bg-color: var(--primary-hover) !important;
+  --el-button-hover-border-color: var(--primary-hover) !important;
+  --el-button-hover-text-color: var(--bg-primary) !important;
+  font-weight: 600;
+}
+
+:deep(.el-button--primary:hover) {
+  box-shadow: var(--shadow-glow-primary);
+}
+
+:deep(.el-button--success) {
+  --el-button-bg-color: var(--success);
+  --el-button-border-color: var(--success);
+}
+
+:deep(.el-button--warning) {
+  --el-button-bg-color: var(--warning);
+  --el-button-border-color: var(--warning);
+}
+
+:deep(.el-button--danger) {
+  --el-button-bg-color: var(--danger);
+  --el-button-border-color: var(--danger);
+}
+
+:deep(.el-button--info) {
+  --el-button-bg-color: var(--info);
+  --el-button-border-color: var(--info);
+}
+
+/* link 类型按钮 - 科技风 */
+:deep(.el-button.is-link) {
+  color: var(--primary) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 8px;
+}
+
+:deep(.el-button.is-link:hover) {
+  color: var(--primary-hover) !important;
+  background: rgba(6, 212, 228, 0.1) !important;
+  text-shadow: 0 0 10px var(--primary-glow);
+}
+
+/* 普通按钮（非primary非danger）基础样式 */
+:deep(.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning):not(.el-button--info):not(.is-link)) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  color: var(--text-secondary) !important;
+}
+
+:deep(.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning):not(.el-button--info):not(.is-link):hover) {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+/* 下拉选择器 */
+:deep(.el-select) {
+  --el-select-input-color: var(--text-primary) !important;
+  --el-select-border-color: var(--border-primary) !important;
+  --el-select-background-color: var(--bg-tertiary) !important;
+  --el-select-option-text-color: var(--text-primary) !important;
+  --el-select-option-hover-background-color: var(--bg-hover) !important;
+  --el-select-option-selected-background-color: var(--bg-active) !important;
+  --el-select-option-selected-text-color: var(--primary) !important;
+}
+
+:deep(.el-select .el-input__wrapper) {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-primary) !important;
+}
+
+:deep(.el-select-dropdown) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+:deep(.el-select-dropdown__item) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-select-dropdown__item:hover) {
+  background-color: var(--bg-hover) !important;
+}
+
+:deep(.el-select-dropdown__item.selected) {
+  color: var(--primary) !important;
+  background-color: var(--bg-active) !important;
+}
+
+/* 表格 - 科技风 */
+:deep(.el-table) {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: var(--text-primary) !important;
+  --el-table-border-color: transparent !important;
+  --el-table-header-bg-color: var(--bg-tertiary) !important;
+  --el-table-header-text-color: var(--text-tertiary) !important;
+  --el-table-row-hover-bg-color: var(--bg-hover) !important;
+  background-color: transparent !important;
+}
+
+:deep(.el-table th.el-table__cell) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-table td.el-table__cell) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-table__row) {
+  background-color: var(--bg-tertiary) !important;
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--bg-hover) !important;
+}
+
+:deep(.el-table__row--striped > td.el-table__cell) {
+  background-color: rgba(6, 212, 228, 0.03) !important;
+}
+
+:deep(.el-table::before),
+:deep(.el-table__inner-wrapper::before) {
+  display: none !important;
+}
+
+/* 表格滚动区域 */
+:deep(.el-table__body-wrapper) {
+  background-color: transparent;
+}
+
+/* 列表 */
+:deep(.el-list),
+:deep(.el-list__item) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-secondary) !important;
+}
+
+:deep(.el-list__item:hover) {
+  background-color: var(--bg-hover) !important;
+}
+
+/* 下拉选择器 */
+:deep(.el-select) {
+  --el-select-input-color: var(--text-primary) !important;
+  --el-select-border-color: var(--border-secondary) !important;
+  --el-select-background-color: var(--bg-tertiary) !important;
+  --el-select-option-text-color: var(--text-primary) !important;
+  --el-select-option-hover-background-color: var(--bg-hover) !important;
+  --el-select-option-selected-background-color: var(--bg-active) !important;
+  --el-select-option-selected-text-color: var(--primary) !important;
+}
+
+:deep(.el-input__wrapper) {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-secondary) !important;
+}
+
+:deep(.el-input__inner) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-select-dropdown) {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-secondary) !important;
+}
+
+:deep(.el-select-dropdown__item) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-select-dropdown__item:hover) {
+  background-color: var(--bg-hover) !important;
+}
+
+:deep(.el-select-dropdown__item.selected) {
+  color: var(--primary) !important;
+  background-color: var(--bg-active) !important;
+}
+
+/* 弹窗/弹出层 */
+:deep(.el-popper) {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-secondary) !important;
+}
+
+:deep(.el-popper__arrow::before) {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-secondary) !important;
+}
+
+/* 下拉菜单 */
+:deep(.el-dropdown-menu) {
+  --el-dropdown-menu-bg-color: var(--bg-tertiary);
+  --el-dropdown-menu-item-color: var(--text-primary);
+  --el-dropdown-menu-item-hover-bg-color: var(--bg-hover);
+}
+
+:deep(.el-dropdown-menu__item:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--primary) !important;
+}
+
+/* 消息框 */
+:deep(.el-message-box) {
+  --el-messagebox-bg-color: var(--bg-tertiary);
+  --el-messagebox-title-color: var(--text-primary);
+  --el-messagebox-content-color: var(--text-secondary);
+}
+
+/* 消息提示 */
+:deep(.el-message) {
+  --el-message-bg-color: var(--bg-tertiary);
+  --el-message-text-color: var(--text-primary);
+}
+
+/* 对话框 - 浅色浮层风格 */
+:deep(.el-dialog) {
+  --el-dialog-bg-color: #ffffff;
+  --el-dialog-header-color: #1f2937;
+  --el-dialog-content-color: #4b5563;
+  border-radius: 12px !important;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+:deep(.el-dialog__header) {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  position: relative;
+}
+
+:deep(.el-dialog__header::after) {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  width: 60px;
+  height: 2px;
+  background: var(--primary);
+}
+
+:deep(.el-dialog__title) {
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+:deep(.el-dialog__body) {
+  padding: 24px;
+  color: #4b5563;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+:deep(.el-dialog__headerbtn .el-dialog__close) {
+  color: #9ca3af;
+  transition: color 0.3s;
+}
+
+:deep(.el-dialog__headerbtn:hover .el-dialog__close) {
+  color: var(--primary);
+}
+
+/* 弹窗内表单组件 - 浅色风格 */
+:deep(.el-dialog .el-input__wrapper) {
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db;
+  box-shadow: none !important;
+}
+
+:deep(.el-dialog .el-input__wrapper:hover) {
+  border-color: #9ca3af;
+}
+
+:deep(.el-dialog .el-input__wrapper.is-focus) {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1) !important;
+}
+
+:deep(.el-dialog .el-input__inner) {
+  color: #1f2937 !important;
+}
+
+:deep(.el-dialog .el-input__inner::placeholder) {
+  color: #9ca3af !important;
+}
+
+:deep(.el-dialog .el-textarea__inner) {
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db;
+  color: #1f2937 !important;
+}
+
+:deep(.el-dialog .el-textarea__inner:hover) {
+  border-color: #9ca3af;
+}
+
+:deep(.el-dialog .el-textarea__inner:focus) {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1) !important;
+}
+
+:deep(.el-dialog .el-select .el-input__wrapper) {
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db;
+}
+
+:deep(.el-dialog .el-select-dropdown) {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+:deep(.el-dialog .el-select-dropdown__item) {
+  color: #4b5563;
+}
+
+:deep(.el-dialog .el-select-dropdown__item.hover),
+:deep(.el-dialog .el-select-dropdown__item:hover) {
+  background-color: #f3f4f6;
+}
+
+:deep(.el-dialog .el-select-dropdown__item.selected) {
+  color: var(--primary);
+  background-color: rgba(6, 182, 212, 0.1);
+}
+
+:deep(.el-dialog .el-button:not(.el-button--primary)) {
+  background-color: #f3f4f6 !important;
+  border: 1px solid #d1d5db !important;
+  color: #4b5563 !important;
+}
+
+:deep(.el-dialog .el-button:not(.el-button--primary):hover) {
+  background-color: #e5e7eb !important;
+  border-color: #9ca3af !important;
+  color: #1f2937 !important;
+}
+
+/* 弹窗内复选框 */
+:deep(.el-dialog .el-checkbox__inner) {
+  background-color: #ffffff;
+  border-color: #d1d5db;
+}
+
+:deep(.el-dialog .el-checkbox__inner:hover) {
+  border-color: #06b6d4;
+}
+
+:deep(.el-dialog .el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: #06b6d4;
+  border-color: #06b6d4;
+}
+
+:deep(.el-dialog .el-checkbox__label) {
+  color: #4b5563;
+}
+
+/* 表单样式 - 浅色弹窗 */
+:deep(.el-form-item__label) {
+  color: #4b5563 !important;
+  font-weight: 500;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+:deep(.el-form-item__error) {
+  color: var(--danger);
+  font-size: 12px;
+  padding-top: 4px;
+}
+
+/* 数字输入框 - 科技风 */
+:deep(.el-input-number) {
+  width: 100%;
+}
+
+:deep(.el-input-number .el-input__wrapper) {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary);
+}
+
+:deep(.el-input-number .el-input__wrapper:hover) {
+  border-color: var(--border-secondary);
+}
+
+/* 级联选择器 - 科技风 */
+:deep(.el-cascader .el-input__wrapper) {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary);
+}
+
+:deep(.el-cascader-dropdown) {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+:deep(.el-cascader-node) {
+  color: var(--text-primary);
+}
+
+:deep(.el-cascader-node:hover) {
+  background: var(--bg-hover);
+}
+
+:deep(.el-cascader-node.is-selected) {
+  color: var(--primary);
+}
+
+/* 单选框 - 科技风 */
+:deep(.el-radio__label) {
+  color: var(--text-secondary);
+}
+
+:deep(.el-radio__input.is-checked .el-radio__inner) {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+:deep(.el-radio__inner) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-primary);
+}
+
+:deep(.el-radio__inner:hover) {
+  border-color: var(--primary);
+}
+
+/* 复选框 - 科技风 */
+:deep(.el-checkbox__label) {
+  color: var(--text-secondary);
+}
+
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+:deep(.el-checkbox__inner) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-primary);
+}
+
+:deep(.el-checkbox__inner:hover) {
+  border-color: var(--primary);
+}
+
+/* 标签 - 科技风 */
+:deep(.el-tag) {
+  --el-tag-text-color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  border: none;
+  font-weight: 500;
+}
+
+:deep(.el-tag--success) {
+  background-color: rgba(16, 250, 158, 0.15) !important;
+  color: var(--success) !important;
+}
+
+:deep(.el-tag--warning) {
+  background-color: rgba(251, 191, 36, 0.15) !important;
+  color: var(--warning) !important;
+}
+
+:deep(.el-tag--danger) {
+  background-color: rgba(255, 87, 87, 0.15) !important;
+  color: var(--danger) !important;
+}
+
+:deep(.el-tag--info) {
+  background-color: rgba(91, 155, 255, 0.15) !important;
+  color: var(--info) !important;
+}
+
+/* 菜单 - 科技风 */
+:deep(.el-menu) {
+  border-right: none !important;
+  background-color: transparent !important;
+}
+
+:deep(.el-menu-item),
+:deep(.el-sub-menu__title) {
+  color: var(--text-tertiary) !important;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-menu-item:hover),
+:deep(.el-sub-menu__title:hover) {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-menu-item.is-active) {
+  color: var(--primary) !important;
+  background-color: rgba(6, 212, 228, 0.1) !important;
+}
+
+:deep(.el-menu-item.is-active::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--primary);
+}
+
+:deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: var(--primary) !important;
+}
+
+/* 树形控件 - 科技风 */
+:deep(.el-tree) {
+  --el-tree-node-hover-bg-color: #f3f4f6;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+:deep(.el-tree__empty-block) {
+  min-height: 100px;
+  width: 100%;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+:deep(.el-tree__empty-text) {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* 分页 - 科技风 */
+:deep(.el-pagination) {
+  --el-pagination-bg-color: var(--bg-tertiary);
+  --el-pagination-text-color: var(--text-secondary);
+  --el-pagination-button-color: var(--text-secondary);
+  --el-pagination-button-disabled-color: var(--text-disabled);
+}
+
+:deep(.el-pagination .el-pager li) {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  margin: 0 2px;
+}
+
+:deep(.el-pagination .el-pager li:hover) {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+:deep(.el-pagination .el-pager li.is-active) {
+  background-color: var(--primary);
+  color: var(--bg-primary);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+:deep(.el-pagination .btn-prev),
+:deep(.el-pagination .btn-next) {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+/* 分页组件中的下拉选择器 */
+:deep(.el-pagination .el-select) {
+  --el-select-input-color: var(--text-primary) !important;
+}
+
+:deep(.el-pagination .el-select .el-input__wrapper) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+
+:deep(.el-pagination .el-select .el-input__wrapper:hover) {
+  border-color: var(--border-secondary) !important;
+}
+
+:deep(.el-pagination .el-select .el-input__wrapper.is-focus) {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px var(--primary-glow) !important;
+}
+
+:deep(.el-pagination .el-select-dropdown) {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+:deep(.el-pagination .el-select-dropdown__item) {
+  color: var(--text-primary);
+}
+
+:deep(.el-pagination .el-select-dropdown__item:hover) {
+  background-color: var(--bg-hover);
+}
+
+:deep(.el-pagination .el-select-dropdown__item.selected) {
+  color: var(--primary);
+  background-color: var(--bg-active);
+}
+
+/* 分页组件中的刷新/跳转按钮 */
+:deep(.el-pagination button) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  color: var(--text-secondary) !important;
+}
+
+:deep(.el-pagination button:hover) {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+:deep(.el-pagination button:disabled) {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-disabled) !important;
+}
+
+/* 分页输入框 */
+:deep(.el-pagination .el-input__wrapper) {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+
+:deep(.el-pagination .el-input__wrapper:hover) {
+  border-color: var(--border-secondary) !important;
+}
+
+:deep(.el-pagination .el-input__wrapper.is-focus) {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px var(--primary-glow) !important;
+}
+
+:deep(.el-pagination .el-input__inner) {
+  color: var(--text-primary);
+}
+
+/* 分页更多按钮(...) */
+:deep(.el-pagination .btn-quickprev),
+:deep(.el-pagination .btn-quicknext) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-pagination .btn-quickprev:hover),
+:deep(.el-pagination .btn-quicknext:hover) {
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+/* 分页省略号 */
+:deep(.el-pagination .el-pager li.btn-quickprev),
+:deep(.el-pagination .el-pager li.btn-quicknext) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+}
+
+/* 分页省略号hover */
+:deep(.el-pagination .el-pager li.btn-quickprev:hover),
+:deep(.el-pagination .el-pager li.btn-quicknext:hover) {
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+/* 分页中更多的文字 */
+:deep(.el-pagination .el-pager li.more) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-pagination .el-pager li.more:hover) {
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+/* 分页跳转 */
+:deep(.el-pagination .el-pagination__jump) {
+  color: var(--text-secondary) !important;
+}
+
+/* 分页总数 */
+:deep(.el-pagination .el-pagination__total) {
+  color: var(--text-tertiary) !important;
+}
+
+/* 分页选择器下拉箭头 */
+:deep(.el-pagination .el-select .el-input__suffix) {
+  color: var(--text-tertiary) !important;
+}
+
+:deep(.el-pagination .el-select .el-input__suffix-inner) {
+  color: var(--text-tertiary) !important;
+}
+
+:deep(.el-pagination .el-select .el-icon) {
+  color: var(--text-tertiary) !important;
+}
+
+/* 分页图标颜色 */
+:deep(.el-pagination .btn-prev .el-icon),
+:deep(.el-pagination .btn-next .el-icon) {
+  color: var(--text-secondary) !important;
+}
+
+:deep(.el-pagination .btn-prev:hover .el-icon),
+:deep(.el-pagination .btn-next:hover .el-icon) {
+  color: var(--primary) !important;
+}
+
+/* 全局图标颜色 */
+:deep(.el-icon) {
+  color: inherit;
+}
+
+/* 所有按钮内的图标 */
+:deep(.el-button .el-icon) {
+  color: inherit;
+}
+
+/* 表格通用样式 - 确保全局覆盖 */
+:deep(.el-table) {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: var(--text-primary) !important;
+  --el-table-border-color: transparent !important;
+  --el-table-header-bg-color: var(--bg-tertiary) !important;
+  --el-table-row-hover-bg-color: var(--bg-hover) !important;
+  background-color: transparent !important;
+  color: var(--text-primary);
+}
+
+:deep(.el-table th.el-table__cell) {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-table td.el-table__cell) {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-table__row) {
+  background-color: transparent !important;
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--bg-hover) !important;
+}
+
+:deep(.el-table__row--striped > td.el-table__cell) {
+  background-color: rgba(6, 212, 228, 0.03) !important;
+}
+
+:deep(.el-table::before),
+:deep(.el-table__inner-wrapper::before) {
+  display: none !important;
+}
+
+:deep(.el-table__body-wrapper) {
+  background-color: transparent;
+}
+
+/* 消息提示 - 科技风 */
+:deep(.el-message) {
+  --el-message-bg-color: var(--bg-tertiary);
+  --el-message-text-color: var(--text-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+:deep(.el-message--success) {
+  border-color: var(--success);
+}
+
+:deep(.el-message--warning) {
+  border-color: var(--warning);
+}
+
+:deep(.el-message--error) {
+  border-color: var(--danger);
+}
+
+:deep(.el-message--info) {
+  border-color: var(--info);
+}
+
+/* ==========================================
+   通用工具类
+   ========================================== */
+
+/* 布局 */
+.flex { display: flex; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-column { display: flex; flex-direction: column; }
+
+/* 文本 */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+
+/* 间距 */
+.mb-10 { margin-bottom: 10px; }
+.mb-20 { margin-bottom: 20px; }
+.mr-10 { margin-right: 10px; }
+.p-20 { padding: 20px; }
+.px-24 { padding-left: 24px; padding-right: 24px; }
+.py-20 { padding-top: 20px; padding-bottom: 20px; }
+
+/* 卡片 - 科技风 */
+.card {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+/* 卡片发光边框效果 */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--border-secondary);
+  box-shadow: var(--shadow-lg);
+}
+
+.card:hover::before {
+  opacity: 1;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-primary);
+  position: relative;
+}
+
+/* 卡片标题装饰线 */
+.card-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  width: 40px;
+  height: 2px;
+  background: var(--primary);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.card-content {
+  padding: 20px 24px;
+}
+
+/* 科技风按钮 */
+.btn-tech {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--bg-primary);
+  font-weight: 600;
+  padding: 10px 20px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.btn-tech::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-tech:hover::before {
+  left: 100%;
+}
+
+.btn-tech:hover {
+  box-shadow: var(--shadow-glow-primary);
+  transform: translateY(-1px);
+}
+
+/* 发光边框效果 */
+.glow-border {
+  border: 1px solid var(--border-glow);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+/* 状态指示灯 */
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
+}
+
+.status-indicator::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  opacity: 0.3;
+}
+
+.status-indicator.success::after { background: var(--success); }
+.status-indicator.warning::after { background: var(--warning); }
+.status-indicator.danger::after { background: var(--danger); }
+.status-indicator.info::after { background: var(--info); }
+
+.status-indicator.success { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.status-indicator.warning { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+.status-indicator.danger { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.status-indicator.info { background: var(--info); box-shadow: 0 0 8px var(--info); }
+
+/* 数据高亮 */
+.data-highlight {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* 渐变文字 */
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary), var(--info));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ==========================================
+   图表通用样式
+   ========================================== */
+.chart-container {
+  width: 100%;
+  height: 350px;
+  padding: 20px 24px;
+}
+
+/* ECharts 深色主题配置（可在初始化图表时使用）
+{
+  tooltip: {
+    backgroundColor: 'var(--bg-tertiary)',
+    borderColor: 'var(--border-secondary)',
+    textStyle: {
+      color: 'var(--text-primary)'
+    }
+  },
+  legend: {
+    textStyle: {
+      color: 'var(--text-primary)'
+    }
+  },
+  xAxis: {
+    axisLine: {
+      lineStyle: {
+        color: 'var(--border-secondary)'
+      }
+    },
+    axisLabel: {
+      color: 'var(--text-tertiary)'
+    }
+  },
+  yAxis: {
+    axisLine: {
+      lineStyle: {
+        color: 'var(--border-secondary)'
+      }
+    },
+    axisLabel: {
+      color: 'var(--text-tertiary)'
+    },
+    splitLine: {
+      lineStyle: {
+        color: 'var(--border-secondary)'
+      }
+    }
+  }
+}
+*/
