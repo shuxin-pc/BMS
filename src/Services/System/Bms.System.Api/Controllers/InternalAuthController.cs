@@ -39,13 +39,7 @@ public class InternalAuthController : ControllerBase
     [HttpPost("validate")]
     public async Task<ValidateUserResponseDto> ValidateUser([FromBody] ValidateUserRequestDto request)
     {
-        _logger.LogInformation("===== InternalAuthController.ValidateUser 收到请求 =====");
-        _logger.LogInformation("正在验证用户：{UserName}", request.UserName);
-
         var result = await _authAppService.ValidateUserAsync(request);
-
-        _logger.LogInformation("用户 {UserName} 验证结果：是否成功={IsValid}，错误信息={Error}",
-            request.UserName, result.IsValid, result.ErrorMessage);
 
         return result;
     }
@@ -83,7 +77,7 @@ public class InternalAuthController : ControllerBase
                 ResponseStatus = request.ResponseStatus,
                 Duration = 0,
                 EntityChanges = null,
-                CreatedTime = DateTime.UtcNow
+                CreatedTime = DateTime.Now
             };
 
             _dbContext.Set<AuditLog>().Add(auditLog);

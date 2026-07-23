@@ -91,6 +91,11 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="expireTime" label="过期时间" width="170">
+          <template #default="{ row }">
+            {{ row.expireTime ? row.expireTime.slice(0, 10) : '永不过期' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="170">
           <template #default="{ row }">
             {{ formatDate(row.createdAt) }}
@@ -162,6 +167,17 @@
             <el-radio :value="0">禁用</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="过期时间" prop="expireTime">
+          <el-date-picker
+            v-model="formData.expireTime"
+            type="date"
+            placeholder="选择过期时间（不设置则永不过期）"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
@@ -218,6 +234,10 @@
                       {{ currentTenant.status === 1 ? '启用' : '禁用' }}
                     </el-tag>
                   </span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">过期时间</span>
+                  <span class="item-value">{{ currentTenant.expireTime ? currentTenant.expireTime.slice(0, 10) : '永不过期' }}</span>
                 </div>
                 <div class="detail-item">
                   <span class="item-label">创建时间</span>
@@ -328,6 +348,7 @@ const formData = reactive({
   contactPhone: '',
   contactEmail: '',
   status: 1,
+  expireTime: '',
   remark: ''
 })
 
@@ -345,6 +366,7 @@ const formRules: FormRules = {
     { max: 50, message: '联系人最多50个字符', trigger: 'blur' }
   ],
   contactPhone: [
+    { required: true, message: '联系电话不能为空', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
   ],
   contactEmail: [
@@ -408,6 +430,7 @@ const handleAdd = () => {
   formData.contactPhone = ''
   formData.contactEmail = ''
   formData.status = 1
+  formData.expireTime = ''
   formData.remark = ''
   dialogVisible.value = true
 }
@@ -422,6 +445,7 @@ const handleEdit = (row: Tenant) => {
   formData.contactPhone = row.contactPhone
   formData.contactEmail = row.contactEmail
   formData.status = row.status
+  formData.expireTime = row.expireTime ? row.expireTime.slice(0, 10) : ''
   formData.remark = row.remark || ''
   dialogVisible.value = true
   detailVisible.value = false
@@ -488,7 +512,7 @@ const handleTabBeforeChange = async (newName: string) => {
           }
         }
       } catch (error) {
-        console.error('检查子系统更改时出错:', error)
+        // 检查子系统更改时出错
       }
     }
   }
@@ -548,6 +572,7 @@ const handleSubmit = async () => {
             contactPhone: formData.contactPhone,
             contactEmail: formData.contactEmail,
             status: formData.status,
+            expireTime: formData.expireTime || null,
             remark: formData.remark,
             isolationLevel: 1
           }
@@ -561,6 +586,7 @@ const handleSubmit = async () => {
             contactPhone: formData.contactPhone,
             contactEmail: formData.contactEmail,
             status: formData.status,
+            expireTime: formData.expireTime || null,
             remark: formData.remark,
             isolationLevel: 1
           }
@@ -593,6 +619,18 @@ const formatDate = (dateStr: string) => {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
+  })
+}
+
+// 格式化过期时间（后端存储N+1天UTC，转本地日期显示要减1天）
+const formatExpireTime = (dateStr: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  date.setDate(date.getDate() - 1)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
   })
 }
 

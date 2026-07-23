@@ -346,14 +346,37 @@ const loadMenuTree = async (checkedIds?: number[]) => {
   try {
     const res = await getMenus({})
     menuTree.value = buildTree(res)
-    // 菜单树渲染完成后设置选中状态
+    // 父子联动模式下只需设置叶子节点，父节点会根据子节点状态自动呈现"勾选/半勾选/不勾选"
+    // 后端 GetMenusAsync 会合并祖先ID返回，若直接 setCheckedKeys 会让父节点强制勾选所有子节点
     if (checkedIds && menuTreeRef.value) {
       await nextTick()
-      menuTreeRef.value.setCheckedKeys(checkedIds)
+      const leafIds = collectLeafSelectedIds(menuTree.value, checkedIds)
+      menuTreeRef.value.setCheckedKeys(leafIds)
     }
   } catch (error) {
-    console.error('加载菜单树失败', error)
+    // 加载菜单树失败
   }
+}
+
+// 从 checkedIds 中过滤出叶子节点ID
+// 父子联动模式下只需设置叶子节点，父节点会根据子节点状态自动呈现"勾选/半勾选/不勾选"
+const collectLeafSelectedIds = (menus: Menu[], checkedIds: number[]): number[] => {
+  const result: number[] = []
+  const checkedSet = new Set(checkedIds)
+  const traverse = (nodes: Menu[]) => {
+    nodes.forEach(node => {
+      const hasChildren = node.children && node.children.length > 0
+      if (!hasChildren) {
+        if (checkedSet.has(node.id)) {
+          result.push(node.id)
+        }
+      } else {
+        traverse(node.children!)
+      }
+    })
+  }
+  traverse(menus)
+  return result
 }
 
 // 构建树形结构

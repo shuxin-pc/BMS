@@ -107,8 +107,8 @@ public class TenantSubsystemAppService : ITenantSubsystemAppService
             {
                 TenantId = tenantId,
                 SubsystemId = subsystemId,
-                CreatedTime = DateTime.UtcNow,
-                UpdatedTime = DateTime.UtcNow
+                CreatedTime = DateTime.Now,
+                UpdatedTime = DateTime.Now
             };
             await _tenantSubsystemRepository.AddRangeAsync(new[] { tenantSubsystem });
         }

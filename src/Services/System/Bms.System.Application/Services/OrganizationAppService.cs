@@ -1,7 +1,9 @@
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.BuildingBlocks.MultiTenant.Abstractions;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Organizations;
 using Bms.System.Domain.Entities;
+using Bms.System.Domain.Exceptions;
 using Bms.System.Domain.IRepositories;
 
 namespace Bms.System.Application.Services;
@@ -11,12 +13,49 @@ public class OrganizationAppService : IOrganizationAppService
     private readonly IOrganizationRepository _organizationRepository;
     private readonly ITenantStore _tenantStore;
     private readonly IUserRepository _userRepository;
+    private readonly ICurrentUser _currentUser;
 
-    public OrganizationAppService(IOrganizationRepository organizationRepository, ITenantStore tenantStore, IUserRepository userRepository)
+    public OrganizationAppService(
+        IOrganizationRepository organizationRepository,
+        ITenantStore tenantStore,
+        IUserRepository userRepository,
+        ICurrentUser currentUser)
     {
         _organizationRepository = organizationRepository;
         _tenantStore = tenantStore;
         _userRepository = userRepository;
+        _currentUser = currentUser;
+    }
+
+    /// <summary>
+    /// 校验当前用户能否管理组织（写操作）
+    /// - super_admin：放行
+    /// - tenant_admin：放行（具体租户约束在 Create/Update/Delete 中检查）
+    /// - 普通用户：拒绝
+    /// </summary>
+    private void CheckCanManageOrganization()
+    {
+        if (_currentUser.IsSuperAdmin || _currentUser.IsTenantAdmin)
+        {
+            return;
+        }
+        throw new PermissionDeniedException("无权管理组织架构，仅管理员可操作");
+    }
+
+    /// <summary>
+    /// 校验目标组织是否属于当前租户（tenant_admin 场景）
+    /// </summary>
+    private void CheckTenantScope(Organization targetOrg)
+    {
+        if (_currentUser.IsSuperAdmin)
+        {
+            return;
+        }
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        if (targetOrg.TenantId != currentTenantId)
+        {
+            throw new PermissionDeniedException("无权操作其他租户的组织");
+        }
     }
 
     public async Task<List<OrganizationDto>> GetTreeListAsync(OrganizationQueryDto? query, bool isSuperAdmin = true, long? tenantId = null)
@@ -205,9 +244,20 @@ public class OrganizationAppService : IOrganizationAppService
 
     public async Task<OrganizationDto> CreateAsync(OrganizationCreateDto dto)
     {
+        // 权限校验：仅管理员可创建
+        CheckCanManageOrganization();
+
         if (await _organizationRepository.ExistsCodeAsync(dto.Code))
         {
             throw new InvalidOperationException($"组织编码 {dto.Code} 已存在");
+        }
+
+        // 非 super_admin 强制使用当前租户（防止前端伪造租户ID跨租户创建组织）
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        var effectiveTenantIdStr = _currentUser.IsSuperAdmin ? dto.TenantId : currentTenantId.ToString();
+        if (!long.TryParse(effectiveTenantIdStr, out long tenantIdLong))
+        {
+            tenantIdLong = 0;
         }
 
         // 验证父组织是否存在（parentId 为 0 或 null 表示顶级组织，不需要验证）
@@ -218,12 +268,11 @@ public class OrganizationAppService : IOrganizationAppService
             {
                 throw new InvalidOperationException($"父组织 {dto.ParentId} 不存在");
             }
-        }
-
-        // 解析租户ID（字符串转long，避免JavaScript Number精度丢失）
-        if (!long.TryParse(dto.TenantId, out long tenantIdLong))
-        {
-            tenantIdLong = 0;
+            // tenant_admin 校验父组织必须在本租户内
+            if (!_currentUser.IsSuperAdmin && parent.TenantId != currentTenantId)
+            {
+                throw new PermissionDeniedException("无权在其他租户的组织下创建子组织");
+            }
         }
 
         // 获取租户编码（冗余字段）
@@ -258,11 +307,17 @@ public class OrganizationAppService : IOrganizationAppService
 
     public async Task<OrganizationDto> UpdateAsync(OrganizationUpdateDto dto)
     {
+        // 权限校验：仅管理员可更新
+        CheckCanManageOrganization();
+
         var organization = await _organizationRepository.GetByIdAsync(dto.Id);
         if (organization == null)
         {
             throw new InvalidOperationException("组织不存在");
         }
+
+        // tenant_admin 校验目标组织必须在本租户内
+        CheckTenantScope(organization);
 
         if (await _organizationRepository.ExistsCodeAsync(dto.Code, dto.Id))
         {
@@ -276,6 +331,15 @@ public class OrganizationAppService : IOrganizationAppService
             if (parent == null)
             {
                 throw new InvalidOperationException($"父组织 {dto.ParentId} 不存在");
+            }
+            // tenant_admin 校验新 ParentId 必须在本租户内（防止跨租户移动组织）
+            if (!_currentUser.IsSuperAdmin)
+            {
+                var currentTenantId = _currentUser.TenantId ?? 0;
+                if (parent.TenantId != currentTenantId)
+                {
+                    throw new PermissionDeniedException("无权将组织移动到其他租户的组织下");
+                }
             }
         }
 
@@ -302,6 +366,18 @@ public class OrganizationAppService : IOrganizationAppService
 
     public async Task DeleteAsync(long id)
     {
+        // 权限校验：仅管理员可删除
+        CheckCanManageOrganization();
+
+        var organization = await _organizationRepository.GetByIdAsync(id);
+        if (organization == null)
+        {
+            throw new InvalidOperationException("组织不存在");
+        }
+
+        // tenant_admin 校验目标组织必须在本租户内
+        CheckTenantScope(organization);
+
         // 检查是否有子组织
         var children = await _organizationRepository.GetChildrenAsync(id);
         if (children.Any())

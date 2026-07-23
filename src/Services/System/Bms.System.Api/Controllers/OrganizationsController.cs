@@ -4,6 +4,8 @@ using System.Security.Claims;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Organizations;
 using Bms.System.Application.Services;
+using Bms.System.Domain.Attributes;
+using Bms.System.Domain.Exceptions;
 
 namespace Bms.System.Api.Controllers;
 
@@ -98,12 +100,17 @@ public class OrganizationsController : ControllerBase
     /// 创建组织
     /// </summary>
     [HttpPost]
+    [Permission("system:organization:add")]
     public async Task<ApiResponseDto<OrganizationDto>> Create([FromBody] OrganizationCreateDto dto)
     {
         try
         {
             var result = await _organizationService.CreateAsync(dto);
             return ApiResponseDto<OrganizationDto>.Success(result, "创建成功");
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto<OrganizationDto>.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -115,6 +122,7 @@ public class OrganizationsController : ControllerBase
     /// 更新组织
     /// </summary>
     [HttpPut("{id}")]
+    [Permission("system:organization:edit")]
     public async Task<ApiResponseDto<OrganizationDto>> Update(long id, [FromBody] OrganizationUpdateDto dto)
     {
         try
@@ -122,6 +130,10 @@ public class OrganizationsController : ControllerBase
             dto.Id = id;
             var result = await _organizationService.UpdateAsync(dto);
             return ApiResponseDto<OrganizationDto>.Success(result, "更新成功");
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto<OrganizationDto>.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -133,12 +145,17 @@ public class OrganizationsController : ControllerBase
     /// 删除组织
     /// </summary>
     [HttpDelete("{id}")]
+    [Permission("system:organization:delete")]
     public async Task<ApiResponseDto> Delete(long id)
     {
         try
         {
             await _organizationService.DeleteAsync(id);
             return ApiResponseDto.Success(null, "删除成功");
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {

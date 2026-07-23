@@ -66,6 +66,12 @@ public class PagedRequestDto
     /// 角色ID筛选
     /// </summary>
     public long? RoleId { get; set; }
+
+    /// <summary>
+    /// 创建者租户ID筛选
+    /// 用于屏蔽平台租户跨租户创建的用户：非超管查询时由 Controller 注入当前租户ID
+    /// </summary>
+    public long? CreatorTenantId { get; set; }
 }
 
 public class PagedResponseDto<T>

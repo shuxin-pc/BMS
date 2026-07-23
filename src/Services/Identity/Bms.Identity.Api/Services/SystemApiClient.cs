@@ -54,9 +54,6 @@ public class SystemApiClient : ISystemApiClient
             }
 
             var responseJson = await response.Content.ReadAsStringAsync();
-            _logger.LogWarning("═══════════════════════════════════════════════════════════════");
-            _logger.LogWarning("【SystemApiClient 收到的响应 JSON】: {ResponseJson}", responseJson);
-            _logger.LogWarning("═══════════════════════════════════════════════════════════════");
 
             var result = JsonSerializer.Deserialize<ValidateUserResponse>(responseJson, new JsonSerializerOptions
             {
@@ -64,6 +61,7 @@ public class SystemApiClient : ISystemApiClient
                 // 允许将字符串解析为数字（处理 System API 返回的字符串类型的 long）
                 NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
             });
+
 
             return result ?? new ValidateUserResponse
             {

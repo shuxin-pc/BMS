@@ -94,7 +94,7 @@ export function usePasswordPolicy() {
         }
       }
     } catch (error) {
-      console.error('加载密码策略失败:', error)
+      // 加载密码策略失败，使用默认值
     } finally {
       loading.value = false
     }

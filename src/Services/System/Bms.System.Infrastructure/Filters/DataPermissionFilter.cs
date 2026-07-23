@@ -33,7 +33,7 @@ public class DataPermissionFilter : IDataPermissionFilter
         return scope.OrganizationIds;
     }
 
-    public async Task<bool> HasDataPermissionAsync(long userId, long? targetUserId = null, long? targetOrganizationId = null)
+    public async Task<bool> HasDataPermissionAsync(long userId, long? targetUserId = null, long? targetOrganizationId = null, bool allowSelf = true)
     {
         var scope = await GetDataPermissionScopeAsync(userId);
 
@@ -43,11 +43,12 @@ public class DataPermissionFilter : IDataPermissionFilter
                 return true;
 
             case DataScopeType.Self:
-                return targetUserId.HasValue && targetUserId.Value == userId;
+                return allowSelf && targetUserId.HasValue && targetUserId.Value == userId;
 
             case DataScopeType.DepartmentAndBelow:
             case DataScopeType.Custom:
-                if (targetUserId.HasValue && targetUserId.Value == userId)
+                // 禁改自己场景：allowSelf=false 时不再放行 targetUserId==userId
+                if (allowSelf && targetUserId.HasValue && targetUserId.Value == userId)
                 {
                     return true;
                 }
@@ -85,9 +86,8 @@ public class DataPermissionFilter : IDataPermissionFilter
         }
 
         // 获取所有角色的数据权限
-        // 权限判断逻辑：Self > DepartmentAndBelow/Custom > All
-        // 即：只要有任何角色是 Self，结果就是 Self
-        // 只有没有任何 Self 时，才考虑是否是 All 或其他
+        // 权限合并逻辑：取最宽权限（All > DepartmentAndBelow/Custom > Self）
+        // 多角色场景下，用户拥有任一角色的最高权限即按该权限处理
         bool hasSelf = false;
         bool hasAll = false;
         bool hasDepartmentOrCustom = false;
@@ -98,8 +98,8 @@ public class DataPermissionFilter : IDataPermissionFilter
             var dataPermission = await _dataPermissionRepository.GetByRoleIdAsync(role.Id);
             if (dataPermission == null)
             {
-                // 角色没有 DataPermission 记录，视为 All
-                hasAll = true;
+                // 角色没有 DataPermission 记录，视为 Self（默认拒绝）
+                hasSelf = true;
                 continue;
             }
 
@@ -113,6 +113,18 @@ public class DataPermissionFilter : IDataPermissionFilter
 
                 case DataScopeType.All:
                     hasAll = true;
+                    // All 类型也填充组织列表，避免写入校验时 OrganizationIds 为空导致校验失效
+                    if (user.TenantId > 0)
+                    {
+                        var tenantOrgs = await _organizationRepository.GetByTenantIdAsync(user.TenantId);
+                        foreach (var orgId in tenantOrgs.Select(o => o.Id))
+                        {
+                            if (!allOrgIds.Contains(orgId))
+                            {
+                                allOrgIds.Add(orgId);
+                            }
+                        }
+                    }
                     break;
 
                 case DataScopeType.DepartmentAndBelow:
@@ -142,24 +154,25 @@ public class DataPermissionFilter : IDataPermissionFilter
             }
         }
 
-        // 权限级别判断：Self > DepartmentAndBelow/Custom > All
-        if (hasSelf)
+        // 权限级别判断：取最宽权限 All > DepartmentAndBelow/Custom > Self
+        if (hasAll)
         {
-            result.ScopeType = DataScopeType.Self;
+            result.ScopeType = DataScopeType.All;
+            result.OrganizationIds = allOrgIds.Distinct().ToList();
         }
         else if (hasDepartmentOrCustom)
         {
             result.ScopeType = DataScopeType.DepartmentAndBelow;
             result.OrganizationIds = allOrgIds.Distinct().ToList();
         }
-        else if (hasAll)
+        else if (hasSelf)
         {
-            result.ScopeType = DataScopeType.All;
+            result.ScopeType = DataScopeType.Self;
         }
         else
         {
-            // 默认视为 All
-            result.ScopeType = DataScopeType.All;
+            // 默认视为 Self（默认拒绝）
+            result.ScopeType = DataScopeType.Self;
         }
 
         return result;

@@ -48,7 +48,8 @@ public class TenantCreateDtoValidator : AbstractValidator<TenantCreateDto>
             .When(x => !string.IsNullOrEmpty(x.SchemaName));
 
         RuleFor(x => x.ExpireTime)
-            .GreaterThan(DateTime.UtcNow).WithMessage("到期时间必须大于当前时间")
+            .Must(expireTime => expireTime == null || expireTime.Value.Date >= DateTime.Now.Date)
+            .WithMessage("过期时间不能早于今天")
             .When(x => x.ExpireTime.HasValue);
 
         RuleFor(x => x.AllowedSubsystems)
@@ -93,7 +94,8 @@ public class TenantUpdateDtoValidator : AbstractValidator<TenantUpdateDto>
             .When(x => !string.IsNullOrEmpty(x.SchemaName));
 
         RuleFor(x => x.ExpireTime)
-            .GreaterThan(DateTime.UtcNow).WithMessage("到期时间必须大于当前时间")
+            .Must(expireTime => expireTime == null || expireTime.Value.Date >= DateTime.Now.Date)
+            .WithMessage("过期时间不能早于今天")
             .When(x => x.ExpireTime.HasValue);
 
         RuleFor(x => x.AllowedSubsystems)

@@ -59,6 +59,16 @@ public class OrganizationRepository : IOrganizationRepository
             .AnyAsync(u => u.OrganizationId == organizationId && !u.IsDeleted);
     }
 
+    /// <summary>
+    /// 获取指定租户下的所有组织（用于 All 数据权限填充组织列表）
+    /// </summary>
+    public async Task<List<Organization>> GetByTenantIdAsync(long tenantId)
+    {
+        return await _context.Organizations
+            .Where(o => o.TenantId == tenantId && !o.IsDeleted)
+            .ToListAsync();
+    }
+
     public async Task<List<Organization>> GetByUserIdAsync(long userId)
     {
         var user = await _context.Users
@@ -91,7 +101,7 @@ public class OrganizationRepository : IOrganizationRepository
 
     public async Task UpdateAsync(Organization organization)
     {
-        organization.UpdatedTime = DateTime.UtcNow;
+        organization.UpdatedTime = DateTime.Now;
         _context.Organizations.Update(organization);
         await _context.SaveChangesAsync();
     }
@@ -116,7 +126,7 @@ public class OrganizationRepository : IOrganizationRepository
             }
 
             org.IsDeleted = true;
-            org.UpdatedTime = DateTime.UtcNow;
+            org.UpdatedTime = DateTime.Now;
             await _context.SaveChangesAsync();
         }
     }

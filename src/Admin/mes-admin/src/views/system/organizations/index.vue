@@ -272,7 +272,7 @@
         searchForm.tenantId = '1'
       }
     } catch (error) {
-      console.error('加载租户失败', error)
+      // 加载租户失败
     }
   }
 
@@ -323,7 +323,7 @@
       const res = await getOrganizations({ tenantId: currentTenantId.value })
       formOrganizationList.value = res || []
     } catch (error) {
-      console.error('加载组织列表失败', error)
+      // 加载组织列表失败
     }
   }
 
@@ -426,7 +426,7 @@
       const users = await getUserList(tenantId, realName)
       allUsers.value = users
     } catch (error) {
-      console.error('加载用户列表失败', error)
+      // 加载用户列表失败
     } finally {
       userLoading.value = false
     }

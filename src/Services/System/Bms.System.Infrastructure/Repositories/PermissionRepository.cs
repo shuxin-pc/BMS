@@ -75,7 +75,7 @@ public class PermissionRepository : IPermissionRepository
 
     public async Task UpdateAsync(Permission permission)
     {
-        permission.UpdatedTime = DateTime.UtcNow;
+        permission.UpdatedTime = DateTime.Now;
         _context.Permissions.Update(permission);
         await _context.SaveChangesAsync();
     }
@@ -86,7 +86,7 @@ public class PermissionRepository : IPermissionRepository
         if (permission != null)
         {
             permission.IsDeleted = true;
-            permission.UpdatedTime = DateTime.UtcNow;
+            permission.UpdatedTime = DateTime.Now;
             await _context.SaveChangesAsync();
         }
     }

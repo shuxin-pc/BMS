@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Domain.Entities;
+using Bms.System.Domain.Exceptions;
+using Bms.System.Domain.Interfaces;
 using Bms.System.Domain.IRepositories;
 using Bms.System.Infrastructure;
 
@@ -14,20 +17,109 @@ public class RoleAppService : IRoleAppService
     private readonly IMenuRepository _menuRepository;
     private readonly IPermissionRepository _permissionRepository;
     private readonly IDataPermissionRepository _dataPermissionRepository;
+    private readonly ICurrentUser _currentUser;
     private readonly SystemDbContext _context;
+    private readonly IUserPermissionChecker _userPermissionChecker;
+
+    // 受保护角色 Code：仅 super_admin 可创建/修改/分配
+    private static readonly HashSet<string> ProtectedRoleCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "super_admin",
+        "tenant_admin"
+    };
 
     public RoleAppService(
         IRoleRepository roleRepository,
         IMenuRepository menuRepository,
         IPermissionRepository permissionRepository,
         IDataPermissionRepository dataPermissionRepository,
-        SystemDbContext context)
+        ICurrentUser currentUser,
+        SystemDbContext context,
+        IUserPermissionChecker userPermissionChecker)
     {
         _roleRepository = roleRepository;
         _menuRepository = menuRepository;
         _permissionRepository = permissionRepository;
         _dataPermissionRepository = dataPermissionRepository;
+        _currentUser = currentUser;
         _context = context;
+        _userPermissionChecker = userPermissionChecker;
+    }
+
+    /// <summary>
+    /// 校验当前用户能否创建/更新角色（Code 与 Level 约束）
+    /// 所有非 super_admin 角色一视同仁：Controller 层权限码校验通过后，
+    /// 此处仅校验 ProtectedCode 保护 + Level 约束 + 租户隔离
+    /// </summary>
+    private async Task CheckCanWriteRoleAsync(string roleCode, int roleLevel, long? roleTenantId)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        // ProtectedCode 保护
+        if (ProtectedRoleCodes.Contains(roleCode))
+        {
+            throw new PermissionDeniedException("无权创建/修改系统保留角色");
+        }
+
+        // Level 约束：新角色 Level 必须 > 当前用户 MaxRoleLevel
+        if (roleLevel <= ctx.MaxRoleLevel)
+        {
+            throw new PermissionDeniedException("无权创建/修改同级或更高级别的角色");
+        }
+
+        // 租户隔离
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        if (roleTenantId.HasValue && roleTenantId.Value != currentTenantId)
+        {
+            throw new PermissionDeniedException("无权操作其他租户的角色");
+        }
+    }
+
+    /// <summary>
+    /// 校验当前用户能否删除/分配权限给目标角色
+    /// 所有非 super_admin 角色一视同仁：Controller 层权限码校验通过后，
+    /// 此处仅校验 ProtectedCode 保护 + Level 约束 + 租户隔离
+    /// </summary>
+    private async Task CheckCanModifyRoleAsync(Role targetRole)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        // ProtectedCode 保护
+        if (ProtectedRoleCodes.Contains(targetRole.Code))
+        {
+            throw new PermissionDeniedException("无权操作系统保留角色");
+        }
+
+        // Level 约束：目标角色 Level 必须 > 当前用户 MaxRoleLevel
+        if (targetRole.Level <= ctx.MaxRoleLevel)
+        {
+            throw new PermissionDeniedException("无权操作同级或更高级别的角色");
+        }
+
+        // 租户隔离
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        if (targetRole.TenantId != currentTenantId)
+        {
+            throw new PermissionDeniedException("无权操作其他租户的角色");
+        }
     }
 
     public async Task<ApiResponseDto<PagedResponseDto<RoleDto>>> GetPagedListAsync(PagedRequestDto request, bool isSuperAdmin = true, long? tenantId = null)
@@ -82,7 +174,7 @@ public class RoleAppService : IRoleAppService
             TenantId = r.TenantId,
             IsSystem = r.IsSystem,
             Status = r.Status,
-            Sort = r.Sort,
+            Level = r.Level,
             DataScopeType = r.DataPermission?.DataScopeType ?? 1,
             CustomOrganizationIds = r.DataPermission?.CustomOrganizationIds,
             CreatedTime = r.CreatedTime,
@@ -129,7 +221,7 @@ public class RoleAppService : IRoleAppService
             TenantId = r.TenantId,
             IsSystem = r.IsSystem,
             Status = r.Status,
-            Sort = r.Sort,
+            Level = r.Level,
             DataScopeType = r.DataPermission?.DataScopeType ?? 1,
             CustomOrganizationIds = r.DataPermission?.CustomOrganizationIds,
             CreatedTime = r.CreatedTime,
@@ -144,6 +236,7 @@ public class RoleAppService : IRoleAppService
     /// </summary>
     public async Task<ApiResponseDto<List<RoleDto>>> GetAllListWithoutFilterAsync()
     {
+        // 仅 super_admin 可调用此接口（Controller 层已加 [Permission] 限制）
         var roles = await _roleRepository.GetListAsync();
 
         var roleDtos = roles.Select(r => new RoleDto
@@ -155,7 +248,7 @@ public class RoleAppService : IRoleAppService
             TenantId = r.TenantId,
             IsSystem = r.IsSystem,
             Status = r.Status,
-            Sort = r.Sort,
+            Level = r.Level,
             DataScopeType = r.DataPermission?.DataScopeType ?? 1,
             CustomOrganizationIds = r.DataPermission?.CustomOrganizationIds,
             CreatedTime = r.CreatedTime,
@@ -182,7 +275,7 @@ public class RoleAppService : IRoleAppService
             TenantId = role.TenantId,
             IsSystem = role.IsSystem,
             Status = role.Status,
-            Sort = role.Sort,
+            Level = role.Level,
             DataScopeType = role.DataPermission?.DataScopeType ?? 1,
             CustomOrganizationIds = role.DataPermission?.CustomOrganizationIds,
             CreatedTime = role.CreatedTime,
@@ -194,21 +287,29 @@ public class RoleAppService : IRoleAppService
 
     public async Task<ApiResponseDto<RoleDto>> CreateAsync(RoleCreateDto dto, long currentTenantId, string currentTenantCode)
     {
+        // 权限校验：Code 约束 + Level 约束 + 租户隔离
+        await CheckCanWriteRoleAsync(dto.Code, dto.Level, currentTenantId);
+
         if (await _roleRepository.ExistsCodeAsync(dto.Code))
         {
             throw new InvalidOperationException($"角色编码 {dto.Code} 已存在");
         }
 
+        // 非 super_admin 强制使用当前用户租户（防止前端伪造租户ID）
+        var effectiveTenantId = _currentUser.IsSuperAdmin ? currentTenantId : (_currentUser.TenantId ?? currentTenantId);
+        var effectiveTenantCode = _currentUser.IsSuperAdmin ? currentTenantCode : (_currentUser.TenantCode ?? currentTenantCode);
+
+        // Level 由 FluentValidation 校验范围 2-99，CheckCanWriteRole 校验业务约束
         var role = new Role
         {
             Name = dto.Name,
             Code = dto.Code,
             Description = dto.Description,
             Status = dto.Status,
-            Sort = dto.Sort,
+            Level = dto.Level,
             // 新增角色时设置当前用户的租户ID
-            TenantId = currentTenantId,
-            TenantCode = currentTenantCode
+            TenantId = effectiveTenantId,
+            TenantCode = effectiveTenantCode
         };
 
         await _roleRepository.AddAsync(role);
@@ -258,9 +359,19 @@ public class RoleAppService : IRoleAppService
             throw new InvalidOperationException("角色不存在");
         }
 
+        // 权限校验：目标角色 + 新 Code/Level 约束
+        await CheckCanModifyRoleAsync(role);
+        await CheckCanWriteRoleAsync(dto.Code, dto.Level, role.TenantId);
+
         if (role.IsSystem)
         {
             throw new InvalidOperationException("系统角色不能修改");
+        }
+
+        // 纵深防御：基于硬编码 Code 保护系统保留角色（独立于 IsSystem 字段）
+        if (ProtectedRoleCodes.Contains(role.Code))
+        {
+            throw new InvalidOperationException("系统保留角色不可修改");
         }
 
         if (await _roleRepository.ExistsCodeAsync(dto.Code, dto.Id))
@@ -272,7 +383,8 @@ public class RoleAppService : IRoleAppService
         role.Name = dto.Name;
         role.Description = dto.Description;
         role.Status = dto.Status;
-        role.Sort = dto.Sort;
+        // Level 由 FluentValidation 校验范围 2-99，CheckCanWriteRole 校验业务约束
+        role.Level = dto.Level;
 
         // 使用 Attach 更新角色，排除租户ID
         var entry = _context.Roles.Attach(role);
@@ -323,7 +435,15 @@ public class RoleAppService : IRoleAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         var role = await _roleRepository.GetByIdAsync(id);
-        if (role != null && role.IsSystem)
+        if (role == null)
+        {
+            throw new InvalidOperationException("角色不存在");
+        }
+
+        // 权限校验：目标角色 Code 与租户约束
+        await CheckCanModifyRoleAsync(role);
+
+        if (role.IsSystem)
         {
             throw new InvalidOperationException("系统角色不能删除");
         }
@@ -341,11 +461,28 @@ public class RoleAppService : IRoleAppService
 
         var deletedCount = 0;
         var systemRoleCount = 0;
+        var skippedNoPermission = 0;
 
         foreach (var id in ids)
         {
             var role = await _roleRepository.GetByIdAsync(id);
-            if (role != null && role.IsSystem)
+            if (role == null)
+            {
+                continue;
+            }
+
+            // 权限校验：跳过无权操作的角色
+            try
+            {
+                await CheckCanModifyRoleAsync(role);
+            }
+            catch (PermissionDeniedException)
+            {
+                skippedNoPermission++;
+                continue;
+            }
+
+            if (role.IsSystem)
             {
                 systemRoleCount++;
                 continue;
@@ -355,9 +492,9 @@ public class RoleAppService : IRoleAppService
             deletedCount++;
         }
 
-        if (systemRoleCount > 0)
+        if (systemRoleCount > 0 || skippedNoPermission > 0)
         {
-            return ApiResponseDto.Success(null, $"成功删除 {deletedCount} 个角色，{systemRoleCount} 个系统角色被跳过");
+            return ApiResponseDto.Success(null, $"成功删除 {deletedCount} 个角色，{systemRoleCount} 个系统角色被跳过，{skippedNoPermission} 个无权操作被跳过");
         }
 
         return ApiResponseDto.Success(null, $"成功删除 {deletedCount} 个角色");
@@ -384,6 +521,9 @@ public class RoleAppService : IRoleAppService
         {
             throw new InvalidOperationException("角色不存在");
         }
+
+        // 权限校验：目标角色 Code 与租户约束
+        await CheckCanModifyRoleAsync(role);
 
         if (role.IsSystem)
         {

@@ -1,40 +1,117 @@
 {
   "Routes": [
     {
+      "DownstreamPathTemplate": "/hub/messages",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5000
+        }
+      ],
+      "UpstreamPathTemplate": "/api/system/hub/messages",
+      "UpstreamHttpMethod": [ "GET", "POST", "OPTIONS" ],
+      "WebSockets": true
+    },
+    {
+      "DownstreamPathTemplate": "/hub/messages/{everything}",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5000
+        }
+      ],
+      "UpstreamPathTemplate": "/api/system/hub/messages/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "OPTIONS" ],
+      "WebSockets": true
+    },
+    {
       "DownstreamPathTemplate": "/api/system/{everything}",
       "DownstreamScheme": "http",
-      "ServiceName": "bms-system",
-      "LoadBalancerOptions": {
-        "Type": "RoundRobin"
-      },
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5000
+        }
+      ],
       "UpstreamPathTemplate": "/api/system/{everything}",
       "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
       "RateLimitOptions": {
         "ClientWhitelist": [],
-        "EnableRateLimiting": true,
+        "EnableRateLimiting": false,
         "Period": "1m",
         "Limit": 60,
         "QuotaExceededMessage": "Too many requests, please try again later."
       }
     },
     {
-      "DownstreamPathTemplate": "/api/identity/{everything}",
+      "DownstreamPathTemplate": "/{everything}",
       "DownstreamScheme": "http",
-      "ServiceName": "bms-identity",
-      "LoadBalancerOptions": {
-        "Type": "RoundRobin"
-      },
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5010
+        }
+      ],
       "UpstreamPathTemplate": "/api/identity/{everything}",
+      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/store/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5030
+        }
+      ],
+      "UpstreamPathTemplate": "/api/store/{everything}",
+      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "RateLimitOptions": {
+        "ClientWhitelist": [],
+        "EnableRateLimiting": false,
+        "Period": "1m",
+        "Limit": 60,
+        "QuotaExceededMessage": "Too many requests, please try again later."
+      }
+    },
+    {
+      "DownstreamPathTemplate": "/api/product/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5030
+        }
+      ],
+      "UpstreamPathTemplate": "/api/product/{everything}",
+      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "RateLimitOptions": {
+        "ClientWhitelist": [],
+        "EnableRateLimiting": false,
+        "Period": "1m",
+        "Limit": 60,
+        "QuotaExceededMessage": "Too many requests, please try again later."
+      }
+    },
+    {
+      "DownstreamPathTemplate": "/api/customer/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5030
+        }
+      ],
+      "UpstreamPathTemplate": "/api/customer/{everything}",
       "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ]
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:5000",
-    "ServiceDiscoveryProvider": {
-      "Scheme": "http",
-      "Host": "localhost",
-      "Port": 8500,
-      "Type": "Consul"
+    "BaseUrl": "http://localhost:5020",
+    "DownstreamHeaderTransform": {
+      "X-Forwarded-For": "{RemoteIpAddress}"
     }
   }
 }

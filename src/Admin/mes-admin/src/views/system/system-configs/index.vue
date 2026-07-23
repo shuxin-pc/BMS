@@ -359,7 +359,7 @@ const loadTenants = async () => {
       searchForm.tenantId = '1'  // 默认平台租户
     }
   } catch (error) {
-    console.error('加载租户失败', error)
+    // 加载租户失败
   }
 }
 
@@ -423,7 +423,7 @@ const loadGroupCounts = async () => {
       tab.count = counts[tab.key] ?? 0
     })
   } catch (error) {
-    console.error('加载分组计数失败', error)
+    // 加载分组计数失败
   }
 }
 

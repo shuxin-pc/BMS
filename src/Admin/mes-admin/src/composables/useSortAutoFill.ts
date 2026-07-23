@@ -94,7 +94,6 @@ export function useSortAutoFill<T extends SortItem>(
       const maxSort = filtered.reduce((max, item) => Math.max(max, item.sort ?? 0), 0)
       autoSort.value = maxSort + 1
     } catch (error) {
-      console.error('计算自动排序失败:', error)
       autoSort.value = 0
     } finally {
       loading.value = false

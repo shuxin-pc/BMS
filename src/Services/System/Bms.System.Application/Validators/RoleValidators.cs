@@ -25,8 +25,8 @@ public class RoleCreateDtoValidator : AbstractValidator<RoleCreateDto>
         RuleFor(x => x.Status)
             .InclusiveBetween(0, 1).WithMessage("状态只能是0或1");
 
-        RuleFor(x => x.Sort)
-            .GreaterThanOrEqualTo(0).WithMessage("排序值不能小于0");
+        RuleFor(x => x.Level)
+            .InclusiveBetween(2, 99).WithMessage("角色等级必须在 2-99 之间（数字越小权限越大，0/1 为系统保留角色）");
 
         RuleFor(x => x.DataScopeType)
             .InclusiveBetween(1, 4).WithMessage("数据范围类型只能是1-4");
@@ -58,8 +58,8 @@ public class RoleUpdateDtoValidator : AbstractValidator<RoleUpdateDto>
         RuleFor(x => x.Status)
             .InclusiveBetween(0, 1).WithMessage("状态只能是0或1");
 
-        RuleFor(x => x.Sort)
-            .GreaterThanOrEqualTo(0).WithMessage("排序值不能小于0");
+        RuleFor(x => x.Level)
+            .InclusiveBetween(2, 99).WithMessage("角色等级必须在 2-99 之间（数字越小权限越大，0/1 为系统保留角色）");
 
         RuleFor(x => x.DataScopeType)
             .InclusiveBetween(1, 4).WithMessage("数据范围类型只能是1-4");

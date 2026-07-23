@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Bms.BuildingBlocks.Core.Extensions;
+using Bms.BuildingBlocks.Web.Converters;
 using Bms.Identity.Api.Data;
 using Bms.Identity.Api.Services;
 using Microsoft.IdentityModel.Tokens;
@@ -106,15 +107,17 @@ builder.Services.AddHttpClient<ISystemApiClient, SystemApiClient>(client =>
 });
 
 // ==========================================
-// 配置服务发现和其他服务
+// 配置其他服务
 // ==========================================
-builder.Services.AddConsulServiceDiscovery(builder.Configuration);
 
 // 配置 JSON 序列化：将 long 类型序列化为字符串，避免 JavaScript 大整数精度丢失
+// 与 System/Store 服务保持一致的 JsonConverter 方案
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.WriteAsString;
+        options.JsonSerializerOptions.Converters.Add(new LongToStringConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableLongToStringConverter());
+        options.JsonSerializerOptions.Converters.Add(new IntToStringConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -123,6 +126,19 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// ==========================================
+// 请求日志中间件（调试用，记录所有进入 Identity.Api 的请求）
+// ==========================================
+app.Use(async (context, next) =>
+{
+    var logger = context.RequestServices.GetService<ILogger<Program>>();
+    logger?.LogInformation("调试：Identity.Api 收到请求 {Method} {Path}{QueryString}",
+        context.Request.Method, context.Request.Path.Value, context.Request.QueryString.Value);
+    await next();
+    logger?.LogInformation("调试：Identity.Api 响应 {Method} {Path} -> {StatusCode}",
+        context.Request.Method, context.Request.Path.Value, context.Response.StatusCode);
+});
 
 // ==========================================
 // 配置中间件管道
@@ -170,8 +186,5 @@ using (var scope = app.Services.CreateScope())
         logger.LogError(ex, "出现错误：初始化 Identity 数据库时发生异常，服务将继续运行。");
     }
 }
-
-// Consul服务注册
-app.UseConsulServiceRegistration(app.Lifetime, builder.Configuration);
 
 app.Run();

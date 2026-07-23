@@ -19,7 +19,7 @@ public class ValidateUserResponse
     /// <summary>
     /// 用户ID（System API 返回字符串格式以避免精度丢失）
     /// </summary>
-    public string UserId { get; set; } = string.Empty;
+    public long UserId { get; set; }
 
     public string UserName { get; set; } = string.Empty;
     public string? RealName { get; set; }
@@ -30,7 +30,7 @@ public class ValidateUserResponse
     /// <summary>
     /// 租户ID（System API 返回字符串格式以避免精度丢失）
     /// </summary>
-    public string TenantId { get; set; } = string.Empty;
+    public long TenantId { get; set; }
 
     /// <summary>
     /// 租户代码

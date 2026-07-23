@@ -6,6 +6,7 @@ using Bms.BuildingBlocks.Web.Extensions;
 using Bms.BuildingBlocks.Web.Security;
 using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.BuildingBlocks.Core.Context;
+using Bms.BuildingBlocks.Web.Converters;
 using Bms.System.Infrastructure;
 using Bms.System.Infrastructure.Extensions;
 using Bms.System.Infrastructure.SeedData;
@@ -13,8 +14,14 @@ using Bms.System.Infrastructure.Stores;
 using Bms.System.Application.Extensions;
 using Bms.System.Application.Mapping;
 using Bms.System.Domain.Interfaces;
-using Bms.System.Api.Converters;
 using Bms.System.Api.Middleware;
+using Bms.System.Api.Hubs;
+using Bms.System.Api.Services;
+using Bms.System.Application.Services;
+
+// 启用遗留时间戳行为，避免 UTC DateTime 写入 timestamp without time zone 报错
+// PostgreSQL 的 timestamp without time zone 本身不存储时区信息，视为本地时间
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -82,6 +89,28 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new LongToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableLongToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new IntToStringConverter());
+        // 注意：DateOnlyToUtcConverter 不全局注册，因为项目中没有 DateOnly 类型属性
+        // 该转换器会导致 DateTime 属性被截断为日期字符串
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // 自定义验证错误响应格式，提取第一条错误消息返回给前端
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .SelectMany(e => e.Value!.Errors.Select(err => err.ErrorMessage))
+                .ToList();
+
+            var errorMessage = errors.FirstOrDefault() ?? "数据验证失败";
+
+            return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(new
+            {
+                code = 400,
+                message = errorMessage,
+                data = (object?)null
+            });
+        };
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -116,6 +145,11 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSystemServices(builder.Configuration);
 builder.Services.AddApplicationServices();
 
+// SignalR 实时推送
+builder.Services.AddSignalR();
+// 消息推送实现（依赖 IHubContext<MessageHub>）
+builder.Services.AddScoped<IMessagePusher, MessagePusher>();
+
 // 配置 Mapster 对象映射
 EntityMappingConfig.Configure();
 
@@ -144,6 +178,11 @@ Console.WriteLine("[Program] CORS middleware registered");
 
 // 认证和授权中间件
 app.UseAuthentication();
+
+// 内部服务调用认证（必须在认证之后、授权之前）
+// 检测 X-Internal-Service headers，为服务间调用设置超级管理员身份
+app.UseMiddleware<InternalServiceAuthMiddleware>();
+
 app.UseAuthorization();
 Console.WriteLine("[Program] Authentication and Authorization middleware registered");
 
@@ -151,13 +190,20 @@ Console.WriteLine("[Program] Authentication and Authorization middleware registe
 app.UseMultiTenant();
 Console.WriteLine("[Program] MultiTenant middleware registered");
 
+// 权限校验中间件（必须在认证授权之后、路由之前）
+// 检查 [Permission] 特性标记的接口所需权限码
+app.UsePermissionMiddleware();
+Console.WriteLine("[Program] Permission middleware registered");
+
 // 审计日志中间件（必须在认证授权和多租户之后）
 app.UseAuditLog();
 Console.WriteLine("[Program] AuditLog middleware registered");
 
 // 路由映射
 app.MapControllers();
-Console.WriteLine("[Program] Controllers mapped");
+// SignalR Hub 映射（前端通过 /hub/messages 连接，经网关转发）
+app.MapHub<MessageHub>("/hub/messages");
+Console.WriteLine("[Program] Controllers and SignalR Hub mapped");
 
 // ==========================================
 // 数据库初始化和种子数据
@@ -186,6 +232,11 @@ using (var scope = app.Services.CreateScope())
         logger.LogInformation("正在初始化系统配置...");
         SystemSeedData.InitializeSystemConfigs(context);
         logger.LogInformation("系统配置初始化完成。");
+
+        // 补全所有页面菜单的"页面查看"按钮（幂等，支持已有数据库增量迁移）
+        logger.LogInformation("正在检查页面查看按钮...");
+        SystemSeedData.EnsurePageViewButtons(context, idGenerator);
+        logger.LogInformation("页面查看按钮检查完成。");
     }
     catch (Exception ex)
     {

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { getMenuTree, login, getCurrentUser } from '@/api/system'
+import { getAuthorizedStores as fetchAuthorizedStores } from '@/api/store'
+import type { Store } from '@/api/store/types'
 import type { Menu, Subsystem } from '@/api/system/types'
 
 export interface UserInfo {
@@ -14,6 +16,8 @@ export interface UserInfo {
   permissions: string[]
   tenantId?: number | string
   tenantCode?: string
+  /** 当前用户最高角色等级（数字越小权限越大，无角色时为 100） */
+  maxRoleLevel?: number
 }
 
 export const useUserStore = defineStore('user', {
@@ -30,22 +34,19 @@ export const useUserStore = defineStore('user', {
       roleIds: [],
       permissions: [],
       tenantId: localStorage.getItem('tenantId') || 0,
-      tenantCode: localStorage.getItem('tenantCode') || undefined
+      tenantCode: localStorage.getItem('tenantCode') || undefined,
+      maxRoleLevel: 100
     },
     // 用户授权的子系统列表
     authorizedSubsystems: [] as Subsystem[],
-    // 当前选中的子系统ID
-    currentSubsystemId: 0 as number,
+    // 当前选中的子系统ID（snowflake ID 超过 JS 安全整数范围，必须用 string 存储）
+    currentSubsystemId: localStorage.getItem('currentSubsystemId') || '',
+    // 当前租户下授权的门店列表（仅 store 子系统使用）
+    authorizedStores: [] as Store[],
+    // 当前选中的门店ID（string 存储，与 currentSubsystemId 一致）
+    currentStoreId: localStorage.getItem('currentStoreId') || '',
     // 菜单数据
     menus: [
-      {
-        id: 1,
-        parentId: 0,
-        name: '首页',
-        path: '/dashboard',
-        icon: 'HomeFilled',
-        type: 1
-      },
       {
         id: 2,
         parentId: 0,
@@ -145,6 +146,10 @@ export const useUserStore = defineStore('user', {
       // tenantId 为 0 或 undefined 时返回 undefined
       return state.userInfo.tenantId || undefined
     },
+    // 获取当前用户最高角色等级（数字越小权限越大，无角色时为 100）
+    maxRoleLevel: (state): number => {
+      return state.userInfo.maxRoleLevel ?? 100
+    },
     // 判断当前用户是否拥有指定权限（超级管理员不受限制）
     hasPermission: (state) => (permissionCode: string): boolean => {
       // 超级管理员拥有所有权限
@@ -153,6 +158,41 @@ export const useUserStore = defineStore('user', {
       }
       // 检查用户权限列表中是否包含指定权限
       return state.userInfo.permissions.includes(permissionCode)
+    },
+    // 判断当前子系统是否为 store 子系统（用于门店切换器显示判断）
+    isStoreSubsystem: (state): boolean => {
+      if (!state.currentSubsystemId) return false
+      const current = state.authorizedSubsystems.find(s => String(s.id) === state.currentSubsystemId)
+      return current?.code === 'StoreManagement'
+    },
+    // 当前门店名称（用于门店切换器显示）
+    currentStoreName: (state): string => {
+      if (!state.currentStoreId) return ''
+      const store = state.authorizedStores.find(s => String(s.id) === state.currentStoreId)
+      return store?.name || ''
+    },
+    /**
+     * 当前子系统授权菜单中排序第1的可导航叶子菜单路径
+     * 用于首页跳转：根路径 / 及 /dashboard 应跳转到此路径，而非硬编码 dashboard
+     * 菜单树按 sort 排序，深度优先遍历返回第一个有 path 的叶子（跳过按钮类型 type=2）
+     */
+    firstAuthorizedLeafPath: (state): string | null => {
+      const findLeaf = (menus: Menu[]): string | null => {
+        for (const menu of menus) {
+          // 跳过按钮类型，按钮不可导航
+          if (menu.type === 2) continue
+          // 有子菜单时递归查找
+          if (menu.children && menu.children.length > 0) {
+            const path = findLeaf(menu.children)
+            if (path) return path
+          } else if (menu.path) {
+            return menu.path
+          }
+        }
+        return null
+      }
+      const result = findLeaf(state.menus)
+      return result
     }
   },
 
@@ -164,6 +204,16 @@ export const useUserStore = defineStore('user', {
 
       // 登录成功后获取用户信息
       await this.getUserInfo()
+
+      // 预加载授权子系统和菜单，确保路由守卫能获取到 firstAuthorizedLeafPath
+      // 否则路由守卫因 userInfo 已设置而跳过加载，firstAuthorizedLeafPath 返回 null 导致跳转失效
+      await this.getAuthorizedSubsystems()
+      await this.getMenus()
+
+      // 若当前子系统的第一个是 store 子系统，预加载授权门店
+      if (this.isStoreSubsystem && this.authorizedStores.length === 0) {
+        await this.getAuthorizedStores()
+      }
 
       return true
     },
@@ -182,15 +232,21 @@ export const useUserStore = defineStore('user', {
         roleIds: [],
         permissions: [],
         tenantId: 0,
-        tenantCode: undefined
+        tenantCode: undefined,
+        maxRoleLevel: 100
       }
       // 清空权限数据
       this.authorizedSubsystems = []
-      this.currentSubsystemId = 0
+      this.currentSubsystemId = ''
       this.menus = []
+      // 清空门店数据
+      this.authorizedStores = []
+      this.currentStoreId = ''
       localStorage.removeItem('token')
       localStorage.removeItem('tenantId')
       localStorage.removeItem('tenantCode')
+      localStorage.removeItem('currentSubsystemId')
+      localStorage.removeItem('currentStoreId')
     },
 
     async getUserInfo() {
@@ -207,7 +263,8 @@ export const useUserStore = defineStore('user', {
           roleIds: user.roleIds || [],
           permissions: user.permissions || [],
           tenantId: user.tenantId,
-          tenantCode: user.tenantCode
+          tenantCode: user.tenantCode,
+          maxRoleLevel: user.maxRoleLevel ?? 100
         }
         // 缓存租户信息到 localStorage
         localStorage.setItem('tenantId', String(user.tenantId))
@@ -216,7 +273,6 @@ export const useUserStore = defineStore('user', {
         }
         return this.userInfo
       } catch (error) {
-        console.error('获取用户信息失败', error)
         throw error
       }
     },
@@ -229,8 +285,9 @@ export const useUserStore = defineStore('user', {
       try {
         const tenantId = this.userInfo.tenantId
         if (!tenantId) {
-          console.warn('用户无租户ID，无法获取授权子系统')
           this.authorizedSubsystems = []
+          this.currentSubsystemId = ''
+          localStorage.removeItem('currentSubsystemId')
           return []
         }
 
@@ -245,15 +302,23 @@ export const useUserStore = defineStore('user', {
           .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
         this.authorizedSubsystems = authorizedSubsystems
 
-        // 设置当前子系统为sort最小的子系统
+        // 设置当前子系统：优先沿用已保存的选择（刷新场景），否则取 sort 最小的子系统
         if (this.authorizedSubsystems.length > 0) {
-          this.currentSubsystemId = this.authorizedSubsystems[0].id
+          const savedId = this.currentSubsystemId
+          const isValid = !!savedId && this.authorizedSubsystems.some(s => String(s.id) === savedId)
+          this.currentSubsystemId = isValid ? savedId : String(this.authorizedSubsystems[0].id)
+          localStorage.setItem('currentSubsystemId', this.currentSubsystemId)
+        } else {
+          // 无授权子系统：清空 currentSubsystemId，避免 getMenus 误用旧值导致菜单泄漏
+          this.currentSubsystemId = ''
+          localStorage.removeItem('currentSubsystemId')
         }
 
         return this.authorizedSubsystems
       } catch (error) {
-        console.error('获取授权子系统失败', error)
         this.authorizedSubsystems = []
+        this.currentSubsystemId = ''
+        localStorage.removeItem('currentSubsystemId')
         return []
       }
     },
@@ -262,22 +327,66 @@ export const useUserStore = defineStore('user', {
      * 切换当前子系统
      * @param subsystemId 子系统ID
      */
-    async switchSubsystem(subsystemId: number) {
-      this.currentSubsystemId = subsystemId
+    async switchSubsystem(subsystemId: number | string) {
+      const id = String(subsystemId)
+      this.currentSubsystemId = id
+      localStorage.setItem('currentSubsystemId', id)
       // 切换子系统后重新获取菜单
       await this.getMenus()
+
+      // 切换到 store 子系统时，加载授权门店列表（用于门店切换器）
+      const target = this.authorizedSubsystems.find(s => String(s.id) === id)
+      if (target?.code === 'StoreManagement') {
+        await this.getAuthorizedStores()
+      }
+    },
+
+    /**
+     * 获取当前租户下授权的门店列表
+     * 仅在进入 store 子系统时调用，用于填充门店切换器
+     */
+    async getAuthorizedStores() {
+      try {
+        const stores = await fetchAuthorizedStores()
+        this.authorizedStores = stores || []
+
+        // 设置当前门店：优先沿用已保存的选择，否则取第一个门店
+        if (this.authorizedStores.length > 0) {
+          const savedId = this.currentStoreId
+          const isValid = !!savedId && this.authorizedStores.some(s => String(s.id) === savedId)
+          this.currentStoreId = isValid ? savedId : String(this.authorizedStores[0].id)
+          localStorage.setItem('currentStoreId', this.currentStoreId)
+        } else {
+          this.currentStoreId = ''
+          localStorage.removeItem('currentStoreId')
+        }
+
+        return this.authorizedStores
+      } catch (error: any) {
+        this.authorizedStores = []
+        return []
+      }
+    },
+
+    /**
+     * 切换当前门店
+     * @param storeId 门店ID
+     */
+    async switchStore(storeId: number | string) {
+      const id = String(storeId)
+      this.currentStoreId = id
+      localStorage.setItem('currentStoreId', id)
     },
 
     /**
      * 根据子系统ID获取该子系统的菜单ID列表
      */
-    async getSubsystemMenuIds(subsystemId: number): Promise<number[]> {
+    async getSubsystemMenuIds(subsystemId: number | string): Promise<number[]> {
       try {
         const { getSubsystemMenus } = await import('@/api/system')
         const menuIds = await getSubsystemMenus(subsystemId)
         return menuIds
       } catch (error) {
-        console.error('获取子系统菜单失败', error)
         return []
       }
     },
@@ -305,7 +414,6 @@ export const useUserStore = defineStore('user', {
 
         return Array.from(roleMenuIdsSet)
       } catch (error) {
-        console.error('获取角色菜单权限失败', error)
         return []
       }
     },
@@ -361,12 +469,6 @@ export const useUserStore = defineStore('user', {
       const result: Menu[] = []
 
       for (const menu of allMenus) {
-        // 首页不过滤，始终显示
-        if (menu.path === '/dashboard') {
-          result.push({ ...menu })
-          continue
-        }
-
         // 如果菜单不在可见集合中，跳过
         if (!visibleIds.has(menu.id)) {
           continue
@@ -397,10 +499,9 @@ export const useUserStore = defineStore('user', {
             result.push({ ...menu })
           }
         } else {
-          // 按钮类型(type=2)：需要在授权列表中
-          if (authorizedMenuIds.has(menu.id)) {
-            result.push({ ...menu })
-          }
+          // 按钮类型(type=2)：不显示在侧边栏菜单中
+          // 按钮权限通过 permissions 列表（hasPermission）控制页面内操作
+          // 菜单可见性由"页面查看"按钮的祖先推导决定，无需将按钮放入菜单树
         }
       }
 
@@ -427,7 +528,13 @@ export const useUserStore = defineStore('user', {
           'HomeFilled': 'HomeFilled',
           'UserFilled': 'UserFilled',
           'Grid': 'Grid',
-          'School': 'School'
+          'School': 'School',
+          // 旧图标名兼容映射（Element Plus Icons 中不存在的名称）
+          'Category': 'Collection',
+          'Time': 'Timer',
+          'Flash': 'Lightning',
+          'Gift': 'Present',
+          'UserPlus': 'Avatar'
         }
         // 处理后端返回的菜单数据，转换为前端需要的格式
         const formatMenus = (items: Menu[]): Menu[] => {
@@ -462,9 +569,10 @@ export const useUserStore = defineStore('user', {
         const formattedMenus = formatMenus(allMenus)
 
         // 根据当前子系统和角色权限过滤菜单
-        let filteredMenus = formattedMenus
+        // 无当前子系统（租户未分配任何子系统）时返回空菜单，避免泄漏全部菜单
+        let filteredMenus: Menu[] = []
 
-        if (this.currentSubsystemId > 0) {
+        if (this.currentSubsystemId) {
           // 获取当前子系统的菜单ID列表
           const subsystemMenuIds = await this.getSubsystemMenuIds(this.currentSubsystemId)
 
@@ -482,7 +590,7 @@ export const useUserStore = defineStore('user', {
             }
           }
 
-          // 如果没有交集（即没有权限），返回空菜单（只保留首页）
+          // 如果没有交集（即没有权限），返回空菜单
           if (authorizedIds.size === 0) {
             filteredMenus = []
           } else {
@@ -491,28 +599,10 @@ export const useUserStore = defineStore('user', {
           }
         }
 
-        // 添加首页在最前面（固定，不受子系统影响）
-        this.menus = [
-          {
-            id: 0,
-            parentId: 0,
-            name: '首页',
-            path: '/dashboard',
-            icon: 'HomeFilled',
-            type: 1,
-            code: 'dashboard',
-            sort: 0,
-            isVisible: 1,
-            isCache: 0,
-            isAffix: 0,
-            createdAt: ''
-          },
-          ...filteredMenus
-        ]
+        this.menus = filteredMenus
         return this.menus
       } catch (error) {
         // 如果API调用失败，返回本地菜单
-        console.warn('获取菜单失败，使用本地菜单', error)
         return this.menus
       }
     }

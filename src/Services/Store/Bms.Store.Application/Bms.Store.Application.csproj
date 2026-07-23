@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="Mapster" Version="7.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\Bms.BuildingBlocks.Core\Bms.BuildingBlocks.Core.csproj" />
+    <ProjectReference Include="..\Bms.Store.Domain\Bms.Store.Domain.csproj" />
+    <ProjectReference Include="..\Bms.Store.Infrastructure\Bms.Store.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

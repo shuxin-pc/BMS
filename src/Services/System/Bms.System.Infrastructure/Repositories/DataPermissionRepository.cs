@@ -43,7 +43,7 @@ public class DataPermissionRepository : IDataPermissionRepository
 
     public async Task UpdateAsync(DataPermission dataPermission)
     {
-        dataPermission.UpdatedTime = DateTime.UtcNow;
+        dataPermission.UpdatedTime = DateTime.Now;
         _context.DataPermissions.Update(dataPermission);
         await _context.SaveChangesAsync();
     }

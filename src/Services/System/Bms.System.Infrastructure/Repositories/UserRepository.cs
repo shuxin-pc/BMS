@@ -58,7 +58,7 @@ public class UserRepository : IUserRepository
             .ToListAsync();
     }
 
-    public async Task<List<User>> GetPagedListAsync(int pageIndex, int pageSize, string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null)
+    public async Task<List<User>> GetPagedListAsync(int pageIndex, int pageSize, string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null, long? creatorTenantId = null)
     {
         var query = _context.Users.Where(u => !u.IsDeleted);
 
@@ -108,6 +108,12 @@ public class UserRepository : IUserRepository
         if (roleId.HasValue)
         {
             query = query.Where(u => u.UserRoles.Any(ur => ur.RoleId == roleId.Value));
+        }
+
+        // 按创建者租户ID筛选（屏蔽平台跨租户创建的用户）
+        if (creatorTenantId.HasValue)
+        {
+            query = query.Where(u => u.CreatorTenantId == creatorTenantId.Value);
         }
 
         return await query
@@ -120,7 +126,7 @@ public class UserRepository : IUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<int> GetCountAsync(string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null)
+    public async Task<int> GetCountAsync(string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null, long? creatorTenantId = null)
     {
         var query = _context.Users.Where(u => !u.IsDeleted);
 
@@ -170,6 +176,12 @@ public class UserRepository : IUserRepository
         if (roleId.HasValue)
         {
             query = query.Where(u => u.UserRoles.Any(ur => ur.RoleId == roleId.Value));
+        }
+
+        // 按创建者租户ID筛选（屏蔽平台跨租户创建的用户）
+        if (creatorTenantId.HasValue)
+        {
+            query = query.Where(u => u.CreatorTenantId == creatorTenantId.Value);
         }
 
         return await query.CountAsync();
@@ -184,7 +196,7 @@ public class UserRepository : IUserRepository
 
     public async Task UpdateAsync(User user)
     {
-        user.UpdatedTime = DateTime.UtcNow;
+        user.UpdatedTime = DateTime.Now;
         _context.Users.Update(user);
         await _context.SaveChangesAsync();
     }
@@ -195,7 +207,7 @@ public class UserRepository : IUserRepository
         if (user != null)
         {
             user.IsDeleted = true;
-            user.UpdatedTime = DateTime.UtcNow;
+            user.UpdatedTime = DateTime.Now;
             await _context.SaveChangesAsync();
         }
     }

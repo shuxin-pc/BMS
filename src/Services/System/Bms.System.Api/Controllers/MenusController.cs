@@ -56,7 +56,7 @@ public class MenusController : ControllerBase
     }
 
     /// <summary>
-    /// 创建菜单
+    /// 创建菜单（支持内部服务调用）
     /// </summary>
     [HttpPost]
     public async Task<ApiResponseDto<MenuDto>> Create([FromBody] MenuCreateDto dto)

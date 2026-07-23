@@ -91,7 +91,7 @@ public class MenuRepository : IMenuRepository
 
     public async Task UpdateAsync(Menu menu)
     {
-        menu.UpdatedTime = DateTime.UtcNow;
+        menu.UpdatedTime = DateTime.Now;
         _context.Menus.Update(menu);
         await _context.SaveChangesAsync();
     }
@@ -102,7 +102,7 @@ public class MenuRepository : IMenuRepository
         if (menu != null)
         {
             menu.IsDeleted = true;
-            menu.UpdatedTime = DateTime.UtcNow;
+            menu.UpdatedTime = DateTime.Now;
             await _context.SaveChangesAsync();
         }
     }

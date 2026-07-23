@@ -8,6 +8,7 @@ using Bms.BuildingBlocks.Core.Extensions;
 using Bms.System.Infrastructure.Interceptors;
 using Bms.System.Infrastructure.Repositories;
 using Bms.System.Infrastructure.Security;
+using Bms.System.Infrastructure.Services;
 using Bms.System.Infrastructure.Filters;
 using Bms.System.Domain.IRepositories;
 using Bms.System.Domain.Interfaces;
@@ -39,6 +40,9 @@ public static class ServiceCollectionExtensions
         // Register data permission filter
         services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
 
+        // Register user permission checker
+        services.AddScoped<IUserPermissionChecker, UserPermissionChecker>();
+
         // Register DbContext with interceptors
         services.AddDbContext<SystemDbContext>((sp, options) =>
         {
@@ -67,6 +71,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITenantSubsystemRepository, TenantSubsystemRepository>();
         services.AddScoped<IRoleMenuAuthRepository, RoleMenuAuthRepository>();
         services.AddScoped<ITenantRepository, TenantRepository>();
+        services.AddScoped<IMessageRepository, MessageRepository>();
+        services.AddScoped<IMessageRecipientRepository, MessageRecipientRepository>();
 
         return services;
     }

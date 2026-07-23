@@ -105,7 +105,7 @@ public class AuditLogMiddleware
             var duration = stopwatch.ElapsedMilliseconds;
             auditLogContext.ResponseStatus = responseStatus;
             auditLogContext.Duration = duration;
-            auditLogContext.RequestTime ??= DateTime.UtcNow.AddMilliseconds(-stopwatch.ElapsedMilliseconds);
+            auditLogContext.RequestTime ??= DateTime.Now.AddMilliseconds(-stopwatch.ElapsedMilliseconds);
 
             // 注册 OnCompleted 回调，在响应完成后写入审计日志
             // 此时 Response.StatusCode 已经确定，能获取到真实值
@@ -175,7 +175,7 @@ public class AuditLogMiddleware
                 ResponseStatus = responseStatus,
                 Duration = duration,
                 EntityChanges = entry.EntityChanges,
-                CreatedTime = entry.CreatedTime ?? DateTime.UtcNow
+                CreatedTime = entry.CreatedTime ?? DateTime.Now
             };
             dbContext.Set<AuditLog>().Add(auditLog);
         }
@@ -198,7 +198,7 @@ public class AuditLogMiddleware
                 ResponseStatus = responseStatus,
                 Duration = duration,
                 EntityChanges = null,
-                CreatedTime = auditLogContext.RequestTime ?? DateTime.UtcNow
+                CreatedTime = auditLogContext.RequestTime ?? DateTime.Now
             };
             dbContext.Set<AuditLog>().Add(customLog);
         }
@@ -227,7 +227,7 @@ public class AuditLogMiddleware
         auditLogContext.RequestMethod = request.Method;
         auditLogContext.RequestIp = GetClientIpAddress(context);
         auditLogContext.UserAgent = request.Headers.UserAgent.ToString();
-        auditLogContext.RequestTime = DateTime.UtcNow;
+        auditLogContext.RequestTime = DateTime.Now;
 
         // 响应信息初始值
         auditLogContext.ResponseStatus = null;

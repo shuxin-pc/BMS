@@ -87,7 +87,7 @@ public class AuditLogAppService : IAuditLogAppService
             ResponseStatus = dto.ResponseStatus,
             Duration = 0,
             EntityChanges = null,
-            CreatedTime = DateTime.UtcNow
+            CreatedTime = DateTime.Now
         };
 
         await _auditLogRepository.AddAsync(auditLog);

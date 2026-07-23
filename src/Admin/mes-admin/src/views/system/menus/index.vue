@@ -22,7 +22,6 @@
         row-key="id"
         :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
         style="width: 100%"
-        default-expand-all
       >
         <el-table-column prop="name" label="菜单名称" min-width="180">
           <template #default="{ row }">

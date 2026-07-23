@@ -34,6 +34,19 @@ public static class AuthenticationExtensions
                 };
                 // 禁用元数据检索，避免需要连接到Identity.Api
                 options.Configuration = new Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration();
+                // 支持 SignalR WebSocket 通过 query string 传递 access_token（浏览器无法自定义 ws header）
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(accessToken))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
         return services;

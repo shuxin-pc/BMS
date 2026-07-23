@@ -5,6 +5,8 @@ using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Application.Services;
+using Bms.System.Domain.Attributes;
+using Bms.System.Domain.Exceptions;
 
 namespace Bms.System.Api.Controllers;
 
@@ -55,6 +57,7 @@ public class RolesController : ControllerBase
 
     /// <summary>
     /// 获取所有角色列表（不过滤租户，用于跨租户场景）
+    /// 下拉查询辅助接口，仅需认证，不校验权限码
     /// </summary>
     [HttpGet("all-without-filter")]
     public async Task<ApiResponseDto<List<RoleDto>>> GetAllWithoutFilter()
@@ -75,6 +78,7 @@ public class RolesController : ControllerBase
     /// 创建角色
     /// </summary>
     [HttpPost]
+    [Permission("system:role:add")]
     public async Task<ApiResponseDto<RoleDto>> Create([FromBody] RoleCreateDto dto)
     {
         try
@@ -87,6 +91,10 @@ public class RolesController : ControllerBase
 
             return await _roleService.CreateAsync(dto, currentTenantId, currentTenantCode);
         }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto<RoleDto>.Fail(ex.Message, 403);
+        }
         catch (InvalidOperationException ex)
         {
             return ApiResponseDto<RoleDto>.Fail(ex.Message, 400);
@@ -97,12 +105,17 @@ public class RolesController : ControllerBase
     /// 更新角色
     /// </summary>
     [HttpPut("{id}")]
+    [Permission("system:role:edit")]
     public async Task<ApiResponseDto<RoleDto>> Update(long id, [FromBody] RoleUpdateDto dto)
     {
         try
         {
             dto.Id = id;
             return await _roleService.UpdateAsync(dto);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto<RoleDto>.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -114,11 +127,16 @@ public class RolesController : ControllerBase
     /// 删除角色
     /// </summary>
     [HttpDelete("{id}")]
+    [Permission("system:role:delete")]
     public async Task<ApiResponseDto> Delete(long id)
     {
         try
         {
             return await _roleService.DeleteAsync(id);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -130,6 +148,7 @@ public class RolesController : ControllerBase
     /// 批量删除角色
     /// </summary>
     [HttpDelete("batch")]
+    [Permission("system:role:delete")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
     {
         if (request?.Ids == null || request.Ids.Count == 0)
@@ -152,11 +171,16 @@ public class RolesController : ControllerBase
     /// 分配权限
     /// </summary>
     [HttpPost("{id}/permissions")]
+    [Permission("system:role:edit")]
     public async Task<ApiResponseDto> AssignPermissions(long id, [FromBody] RoleAssignPermissionsDto dto)
     {
         try
         {
             return await _roleService.AssignPermissionsAsync(id, dto.PermissionIds);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -187,17 +211,16 @@ public class RolesController : ControllerBase
     /// 更新角色的菜单权限（覆盖式，传空数组表示清空）
     /// </summary>
     [HttpPut("{id}/menus/auth")]
+    [Permission("system:role:edit")]
     public async Task<ApiResponseDto> UpdateMenuAuths(long id, [FromBody] RoleMenuAssignDto dto)
     {
         try
         {
-            // 调试：记录接收到的参数
-            Console.WriteLine($"[DEBUG] UpdateMenuAuths called - RoleId: {id}, MenuIds count: {dto.MenuIds?.Count ?? 0}");
-            if (dto.MenuIds != null && dto.MenuIds.Any())
-            {
-                Console.WriteLine($"[DEBUG] MenuIds: {string.Join(",", dto.MenuIds.Take(20))}{(dto.MenuIds.Count > 20 ? "..." : "")}");
-            }
             return await _roleMenuAuthAppService.AssignMenusAsync(id, dto);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -209,11 +232,16 @@ public class RolesController : ControllerBase
     /// 删除角色的单个菜单权限
     /// </summary>
     [HttpDelete("{id}/menus/auth/{menuId}")]
+    [Permission("system:role:delete")]
     public async Task<ApiResponseDto> RemoveMenuAuth(long id, long menuId)
     {
         try
         {
             return await _roleMenuAuthAppService.RemoveMenuAsync(id, menuId);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {

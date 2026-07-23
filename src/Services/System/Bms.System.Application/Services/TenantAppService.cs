@@ -249,7 +249,7 @@ public class TenantAppService : ITenantAppService
             ExpireTime = tenant.ExpireTime,
             AllowedSubsystems = tenant.AllowedSubsystems,
             AllowedSubsystemList = tenant.GetAllowedSubsystemList(),
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             Remark = tenant.Remark
         };
     }

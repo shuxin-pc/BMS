@@ -9,6 +9,7 @@ using Bms.System.Application.Dtos.Tenants;
 using Bms.System.Application.Dtos.AuditLogs;
 using Bms.System.Application.Dtos.SystemConfigs;
 using Bms.System.Application.Dtos.Subsystems;
+using Bms.System.Application.Dtos.Messages;
 using Bms.System.Domain.Entities;
 using Bms.BuildingBlocks.MultiTenant.Models;
 
@@ -65,12 +66,21 @@ public static class EntityMappingConfig
         TypeAdapterConfig<Subsystem, SubsystemDto>
             .NewConfig();
 
+        // Message 实体映射（管理端）
+        TypeAdapterConfig<Message, MessageDto>
+            .NewConfig();
+
+        // MessageRecipient + Message -> MessageInboxDto（收件箱项）
+        TypeAdapterConfig<MessageRecipient, MessageInboxDto>
+            .NewConfig()
+            .Map(dest => dest.Id, src => src.Id);
+
         // TenantInfo 映射到 TenantDto（租户管理使用 TenantInfo）
         TypeAdapterConfig<TenantInfo, TenantDto>
             .NewConfig()
             .Map(dest => dest.IsEnabled, src => src.Status == 1)
             .Map(dest => dest.AllowedSubsystemList, src => src.GetAllowedSubsystemList())
-            .Map(dest => dest.CreatedAt, src => DateTime.UtcNow);
+            .Map(dest => dest.CreatedAt, src => DateTime.Now);
 
         // Tenant 实体映射到 TenantDto
         TypeAdapterConfig<Tenant, TenantDto>

@@ -5,6 +5,8 @@ using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Users;
 using Bms.System.Application.Dtos.Profile;
 using Bms.System.Application.Services;
+using Bms.System.Domain.Attributes;
+using Bms.System.Domain.Exceptions;
 using Bms.System.Domain.Interfaces;
 using Bms.System.Domain.Enums;
 
@@ -36,6 +38,7 @@ public class UsersController : ControllerBase
         // 获取当前用户角色
         var currentUserRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         var isSuperAdmin = currentUserRoles.Contains("super_admin");
+        var isTenantAdmin = currentUserRoles.Contains("tenant_admin");
         var tenantIdClaim = User.FindFirst("tenant_id");
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
 
@@ -47,10 +50,17 @@ public class UsersController : ControllerBase
             {
                 request.TenantId = currentTenantId;
             }
+            // tenant_admin 自身由 super_admin 创建（CreatorTenantId=平台租户），不应被 CreatorTenantId 过滤掉
+            // 普通用户设置 CreatorTenantId 过滤：屏蔽平台跨租户创建的用户（含 tenant_admin）
+            if (!isTenantAdmin)
+            {
+                request.CreatorTenantId = currentTenantId;
+            }
         }
 
-        // 数据权限过滤：非超级管理员需要按组织ID过滤
-        if (!isSuperAdmin && userIdClaim != null && long.TryParse(userIdClaim.Value, out long currentUserId))
+        // 数据权限过滤：仅普通用户需要按组织过滤
+        // tenant_admin 数据权限范围为全租户（DataScopeType=All），无需按组织过滤
+        if (!isSuperAdmin && !isTenantAdmin && userIdClaim != null && long.TryParse(userIdClaim.Value, out long currentUserId))
         {
             // 获取当前用户的数据权限范围
             var scope = await _dataPermissionFilter.GetDataPermissionScopeAsync(currentUserId);
@@ -106,6 +116,7 @@ public class UsersController : ControllerBase
     /// 创建用户
     /// </summary>
     [HttpPost]
+    [Permission("system:user:add")]
     public async Task<ApiResponseDto<UserDto>> Create([FromBody] UserCreateDto dto)
     {
         try
@@ -125,6 +136,10 @@ public class UsersController : ControllerBase
 
             return await _userService.CreateAsync(dto, createContext);
         }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto<UserDto>.Fail(ex.Message, 403);
+        }
         catch (InvalidOperationException ex)
         {
             return ApiResponseDto<UserDto>.Fail(ex.Message, 400);
@@ -135,12 +150,17 @@ public class UsersController : ControllerBase
     /// 更新用户
     /// </summary>
     [HttpPut("{id}")]
+    [Permission("system:user:edit")]
     public async Task<ApiResponseDto<UserDto>> Update(long id, [FromBody] UserUpdateDto dto)
     {
         try
         {
             dto.Id = id;
             return await _userService.UpdateAsync(dto);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto<UserDto>.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -152,33 +172,54 @@ public class UsersController : ControllerBase
     /// 删除用户
     /// </summary>
     [HttpDelete("{id}")]
+    [Permission("system:user:delete")]
     public async Task<ApiResponseDto> Delete(long id)
     {
-        return await _userService.DeleteAsync(id);
+        try
+        {
+            return await _userService.DeleteAsync(id);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
+        }
     }
 
     /// <summary>
     /// 批量删除用户
     /// </summary>
     [HttpDelete("batch")]
+    [Permission("system:user:delete")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
     {
         if (request?.Ids == null || request.Ids.Count == 0)
         {
             return ApiResponseDto.Fail("请选择要删除的用户", 400);
         }
-        return await _userService.BatchDeleteAsync(request.Ids);
+        try
+        {
+            return await _userService.BatchDeleteAsync(request.Ids);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
+        }
     }
 
     /// <summary>
     /// 重置密码
     /// </summary>
     [HttpPost("{id}/reset-password")]
+    [Permission("system:user:resetPwd")]
     public async Task<ApiResponseDto> ResetPassword(long id, [FromBody] UserPasswordDto dto)
     {
         try
         {
             return await _userService.ResetPasswordAsync(id, dto.NewPassword);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
         }
         catch (InvalidOperationException ex)
         {
@@ -187,16 +228,20 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// 修改密码
+    /// 修改密码（当前用户自助，无需权限码，但需登录）
     /// </summary>
     [HttpPost("change-password")]
     public async Task<ApiResponseDto> ChangePassword([FromBody] ChangePasswordDto dto)
     {
         try
         {
-            // 从当前用户获取ID（实际应从Claims获取）
-            // TODO: 从 Claims 获取当前用户ID - shuxin 2026-03-24
-            var userId = 1L;
+            // 从 Claims 获取当前用户ID（修复原 userId = 1L 硬编码漏洞）
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                            ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+            {
+                return ApiResponseDto.Fail("无法识别当前用户身份", 401);
+            }
             return await _userService.ChangePasswordAsync(userId, dto.OldPassword, dto.NewPassword);
         }
         catch (InvalidOperationException ex)
@@ -209,9 +254,17 @@ public class UsersController : ControllerBase
     /// 分配角色
     /// </summary>
     [HttpPost("{id}/assign-roles")]
+    [Permission("system:user:edit")]
     public async Task<ApiResponseDto> AssignRoles(long id, [FromBody] UserAssignRolesDto dto)
     {
-        return await _userService.AssignRolesAsync(id, dto.RoleIds);
+        try
+        {
+            return await _userService.AssignRolesAsync(id, dto.RoleIds);
+        }
+        catch (PermissionDeniedException ex)
+        {
+            return ApiResponseDto.Fail(ex.Message, 403);
+        }
     }
 
     /// <summary>

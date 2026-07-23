@@ -1,7 +1,10 @@
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Domain.Entities;
+using Bms.System.Domain.Exceptions;
+using Bms.System.Domain.Interfaces;
 using Bms.System.Domain.IRepositories;
 
 namespace Bms.System.Application.Services;
@@ -17,6 +20,15 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
     private readonly IMenuRepository _menuRepository;
     private readonly ITenantSubsystemRepository _tenantSubsystemRepository;
     private readonly IRoleRepository _roleRepository;
+    private readonly ICurrentUser _currentUser;
+    private readonly IUserPermissionChecker _userPermissionChecker;
+
+    // 受保护角色 Code：仅 super_admin 可修改其菜单权限
+    private static readonly HashSet<string> ProtectedRoleCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "super_admin",
+        "tenant_admin"
+    };
 
     public RoleMenuAuthAppService(
         IRoleMenuAuthRepository roleMenuAuthRepository,
@@ -24,7 +36,9 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
         ISubsystemRepository subsystemRepository,
         IMenuRepository menuRepository,
         ITenantSubsystemRepository tenantSubsystemRepository,
-        IRoleRepository roleRepository)
+        IRoleRepository roleRepository,
+        ICurrentUser currentUser,
+        IUserPermissionChecker userPermissionChecker)
     {
         _roleMenuAuthRepository = roleMenuAuthRepository;
         _subsystemMenuRepository = subsystemMenuRepository;
@@ -32,6 +46,52 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
         _menuRepository = menuRepository;
         _tenantSubsystemRepository = tenantSubsystemRepository;
         _roleRepository = roleRepository;
+        _currentUser = currentUser;
+        _userPermissionChecker = userPermissionChecker;
+    }
+
+    /// <summary>
+    /// 校验当前用户能否修改目标角色的菜单权限
+    /// 所有非 super_admin 角色一视同仁：Controller 层权限码校验通过后，
+    /// 此处仅校验 ProtectedCode 保护 + Level 约束 + 租户隔离
+    /// </summary>
+    private async Task CheckCanModifyRoleMenuAuthAsync(long roleId)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        var targetRole = await _roleRepository.GetByIdAsync(roleId);
+        if (targetRole == null)
+        {
+            throw new InvalidOperationException("目标角色不存在");
+        }
+
+        // ProtectedCode 保护
+        if (ProtectedRoleCodes.Contains(targetRole.Code))
+        {
+            throw new PermissionDeniedException("无权修改系统保留角色的菜单权限");
+        }
+
+        // Level 约束：目标角色 Level 必须 > 当前用户 MaxRoleLevel
+        if (targetRole.Level <= ctx.MaxRoleLevel)
+        {
+            throw new PermissionDeniedException("无权操作同级或更高级别的角色");
+        }
+
+        // 租户隔离
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        if (targetRole.TenantId != currentTenantId)
+        {
+            throw new PermissionDeniedException("无权修改其他租户角色的菜单权限");
+        }
     }
 
     public async Task<ApiResponseDto<List<long>>> GetByRoleIdAsync(long roleId)
@@ -141,6 +201,9 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
 
     public async Task<ApiResponseDto> AssignMenusAsync(long roleId, RoleMenuAssignDto dto)
     {
+        // 权限校验：目标角色租户隔离 + 系统保留角色保护
+        await CheckCanModifyRoleMenuAuthAsync(roleId);
+
         var existingRoleMenuAuths = await _roleMenuAuthRepository.GetByRoleIdAsync(roleId);
         var existingMenuIds = existingRoleMenuAuths.Select(x => x.MenuId).ToList();
         var newMenuIds = dto.MenuIds.Distinct().ToList();
@@ -172,8 +235,8 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
                 RoleId = roleId,
                 MenuId = menuId,
                 SubsystemId = subsystemId.Value,
-                CreatedTime = DateTime.UtcNow,
-                UpdatedTime = DateTime.UtcNow
+                CreatedTime = DateTime.Now,
+                UpdatedTime = DateTime.Now
             };
             await _roleMenuAuthRepository.AddRangeAsync(new[] { roleMenuAuth });
         }
@@ -254,6 +317,9 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
 
     public async Task<ApiResponseDto> RemoveMenuAsync(long roleId, long menuId)
     {
+        // 权限校验：目标角色租户隔离 + 系统保留角色保护
+        await CheckCanModifyRoleMenuAuthAsync(roleId);
+
         await _roleMenuAuthRepository.DeleteByRoleIdAndMenuIdAsync(roleId, menuId);
         return ApiResponseDto.Success(null, "移除成功");
     }

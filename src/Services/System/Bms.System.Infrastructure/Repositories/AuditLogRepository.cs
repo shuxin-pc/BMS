@@ -41,9 +41,7 @@ public class AuditLogRepository : IAuditLogRepository
 
         if (startDate.HasValue)
         {
-            // 转换为 UTC 时间
-            var utcStartDate = DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc);
-            query = query.Where(a => a.CreatedTime >= utcStartDate);
+            query = query.Where(a => a.CreatedTime >= startDate.Value);
         }
 
         if (endDate.HasValue)
@@ -54,9 +52,7 @@ public class AuditLogRepository : IAuditLogRepository
             {
                 endDateValue = endDateValue.AddDays(1).AddTicks(-1);
             }
-            // 转换为 UTC 时间
-            var utcEndDate = DateTime.SpecifyKind(endDateValue, DateTimeKind.Utc);
-            query = query.Where(a => a.CreatedTime <= utcEndDate);
+            query = query.Where(a => a.CreatedTime <= endDateValue);
         }
 
         if (!string.IsNullOrEmpty(responseStatus))
@@ -102,10 +98,8 @@ public class AuditLogRepository : IAuditLogRepository
 
     public async Task<int> DeleteExpiredAsync(DateTime beforeDate)
     {
-        // 确保使用 UTC 时间进行比较
-        var utcBeforeDate = DateTime.SpecifyKind(beforeDate, DateTimeKind.Utc);
         var expiredLogs = await _context.AuditLogs
-            .Where(a => a.CreatedTime < utcBeforeDate)
+            .Where(a => a.CreatedTime < beforeDate)
             .ToListAsync();
 
         _context.AuditLogs.RemoveRange(expiredLogs);
@@ -129,9 +123,7 @@ public class AuditLogRepository : IAuditLogRepository
 
         if (startDate.HasValue)
         {
-            // 转换为 UTC 时间
-            var utcStartDate = DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc);
-            query = query.Where(a => a.CreatedTime >= utcStartDate);
+            query = query.Where(a => a.CreatedTime >= startDate.Value);
         }
 
         if (endDate.HasValue)
@@ -142,9 +134,7 @@ public class AuditLogRepository : IAuditLogRepository
             {
                 endDateValue = endDateValue.AddDays(1).AddTicks(-1);
             }
-            // 转换为 UTC 时间
-            var utcEndDate = DateTime.SpecifyKind(endDateValue, DateTimeKind.Utc);
-            query = query.Where(a => a.CreatedTime <= utcEndDate);
+            query = query.Where(a => a.CreatedTime <= endDateValue);
         }
 
         if (!string.IsNullOrEmpty(responseStatus))

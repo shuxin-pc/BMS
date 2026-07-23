@@ -122,7 +122,7 @@ public class RoleMenuAuthRepository : IRoleMenuAuthRepository
         foreach (var item in items)
         {
             item.SubsystemId = newSubsystemId;
-            item.UpdatedTime = DateTime.UtcNow;
+            item.UpdatedTime = DateTime.Now;
         }
         await _context.SaveChangesAsync();
     }

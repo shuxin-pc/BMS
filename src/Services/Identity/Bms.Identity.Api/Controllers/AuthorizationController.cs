@@ -88,36 +88,31 @@ public class AuthorizationController : ControllerBase
             _logger.LogInformation("正在调用 System.Api 验证用户...");
             var validationResult = await _systemApiClient.ValidateUserAsync(request.Username, request.Password);
 
-            _logger.LogInformation("验证结果 - 是否成功：{IsValid}，错误信息：{ErrorMessage}",
-                validationResult.IsValid, validationResult.ErrorMessage);
 
             if (!validationResult.IsValid)
             {
-                _logger.LogWarning("出现错误：用户验证失败，用户名：{Username}", request.Username);
+                _logger.LogWarning("出现错误：用户验证失败，用户名：{Username}，错误信息：{Error}", request.Username, validationResult.ErrorMessage);
 
                 // 记录失败的登录审计日志
                 await RecordLoginAuditAsync("Login", 0, request.Username, null, 0, GetClientIpAddress(), Request.Headers.UserAgent.ToString(), 401, "/connect/token");
 
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = validationResult.ErrorMessage ?? "用户名或密码错误"
-                    }));
+
+                // 返回 OpenIddict 响应
+                return BadRequest(new OpenIddictResponse
+                {
+                    Error = OpenIddictConstants.Errors.InvalidGrant,
+                    ErrorDescription = validationResult.ErrorMessage ?? "用户名或密码错误"
+                });
             }
 
             _logger.LogInformation("用户验证成功：用户名={Username}，用户ID={UserId}，租户ID={TenantId}",
                 request.Username, validationResult.UserId, validationResult.TenantId);
 
             // 记录成功的登录审计日志
-            if (long.TryParse(validationResult.UserId, out long userId) && long.TryParse(validationResult.TenantId, out long tenantId))
-            {
-                await RecordLoginAuditAsync("Login", userId, validationResult.UserName, validationResult.RealName, tenantId, GetClientIpAddress(), Request.Headers.UserAgent.ToString(), 200, "/connect/token");
+            await RecordLoginAuditAsync("Login", validationResult.UserId, validationResult.UserName, validationResult.RealName, validationResult.TenantId, GetClientIpAddress(), Request.Headers.UserAgent.ToString(), 200, "/connect/token");
 
-                // 更新用户最后登录信息
-                await UpdateLastLoginAsync(userId, DateTime.UtcNow, GetClientIpAddress());
-            }
+            // 更新用户最后登录信息
+            await UpdateLastLoginAsync(validationResult.UserId, DateTime.Now, GetClientIpAddress());
 
             // 创建身份
             var identity = new ClaimsIdentity(

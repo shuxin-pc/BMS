@@ -48,7 +48,7 @@ public class SoftDeleteInterceptor : SaveChangesInterceptor
             // 将物理删除转换为软删除
             entry.State = EntityState.Modified;
             entry.Entity.IsDeleted = true;
-            entry.Entity.UpdatedTime = DateTime.UtcNow;
+            entry.Entity.UpdatedTime = DateTime.Now;
         }
     }
 }

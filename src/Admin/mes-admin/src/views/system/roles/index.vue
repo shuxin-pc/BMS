@@ -85,6 +85,11 @@
         <el-table-column type="selection" width="50" />
         <el-table-column prop="code" label="角色编码" min-width="120" />
         <el-table-column prop="name" label="角色名称" min-width="120" />
+        <el-table-column prop="level" label="等级" width="80" align="center">
+          <template #default="{ row }">
+            <span :title="'数字越小权限越大'">{{ row.level ?? '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" />
         <el-table-column prop="dataScopeType" label="数据范围" width="120">
           <template #default="{ row }">
@@ -179,6 +184,14 @@
                 <el-radio :value="1">启用</el-radio>
                 <el-radio :value="0">禁用</el-radio>
               </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="角色等级" prop="level">
+              <el-input-number v-model="formData.level" :min="minLevel" :max="99" controls-position="right" style="width: 100%" />
+              <div style="font-size: 12px; color: #909399; line-height: 1.5; margin-top: 4px;">数字越小权限越大（{{ minLevel }}-99）</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -293,10 +306,7 @@
                           :data="group.menus"
                           :props="menuTreeProps"
                           show-checkbox
-                          check-strictly
                           node-key="id"
-                          default-expand-all
-                          :default-checked-keys="group.selectedMenuIds"
                           @check="(data: any, info: any) => handleMenuCheck(group, data, info)"
                         />
                       </div>
@@ -338,7 +348,7 @@ import {
 } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { Role, RoleCreate, RoleUpdate, RoleMenuGrouped, Tenant } from '@/api/system/types'
+import type { Role, RoleCreate, RoleUpdate, RoleMenuGrouped, Tenant, Menu } from '@/api/system/types'
 
 const userStore = useUserStore()
 const systemConfigStore = useSystemConfigStore()
@@ -349,6 +359,10 @@ const isSuperAdmin = computed(() => userStore.isSuperAdmin)
 const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 // 获取当前登录用户的租户ID
 const currentTenantId = computed(() => userStore.currentTenantId)
+// 角色等级下限：普通用户只能创建/编辑比自己最高角色等级更低的角色（level 数字更大）
+// super_admin(MaxRoleLevel=0) -> min=2；tenant_admin(MaxRoleLevel=1) -> min=2；普通用户(MaxRoleLevel=N) -> min=N+1
+// 上限 99：避免 min > max(99) 触发 Element Plus 错误；MaxRoleLevel>=99 时后端兜底拒绝创建
+const minLevel = computed(() => Math.min(Math.max(2, (userStore.maxRoleLevel ?? 100) + 1), 99))
 
 // 判断目标角色是否与当前登录用户属于同一租户
 const isSameTenant = (row: Role | null): boolean => {
@@ -381,7 +395,7 @@ const loadTenants = async () => {
       searchForm.tenantId = '1'
     }
   } catch (error) {
-    console.error('加载租户失败', error)
+    // 加载租户失败
   }
 }
 
@@ -411,6 +425,7 @@ const formData = reactive({
   description: '',
   dataScopeType: 1,
   status: 1,
+  level: undefined as number | undefined,
   customOrganizationIds: [] as string[]
 })
 
@@ -427,8 +442,9 @@ const formRules: FormRules = {
   description: [
     { max: 500, message: '描述最多500个字符', trigger: 'blur' }
   ],
-  sort: [
-    { type: 'number', min: 0, message: '排序值不能小于0', trigger: 'blur' }
+  level: [
+    { required: true, message: '角色等级不能为空', trigger: 'blur' },
+    { type: 'number', min: minLevel.value, max: 99, message: `角色等级必须在 ${minLevel.value}-99 之间（数字越小权限越大）`, trigger: 'blur' }
   ],
   dataScopeType: [
     { required: true, message: '请选择数据范围', trigger: 'change' }
@@ -458,8 +474,38 @@ const activeSubsystemIds = ref<number[]>([])
 const menuTreeRefs = reactive<Record<number, TreeInstance | null>>({})
 const setMenuTreeRef = (subsystemId: number, el: any) => {
   if (el) {
-    menuTreeRefs[subsystemId] = el
+    // 仅在 el 实例变化时初始化选中状态
+    // 内联 ref 函数每次渲染都会生成新实例并触发回调，若不守卫会反复 setCheckedKeys 重置用户勾选
+    if (menuTreeRefs[subsystemId] !== el) {
+      menuTreeRefs[subsystemId] = el
+      const group = groupedMenuData.value.find(g => g.subsystemId === subsystemId)
+      if (group) {
+        const leafIds = collectLeafSelectedIds(group.menus, group.selectedMenuIds)
+        el.setCheckedKeys(leafIds)
+      }
+    }
   }
+}
+
+// 从 selectedMenuIds 中过滤出叶子节点ID
+// 父子联动模式下只需设置叶子节点，父节点会根据子节点状态自动呈现"勾选/半勾选/不勾选"
+const collectLeafSelectedIds = (menus: Menu[], selectedIds: number[]): number[] => {
+  const result: number[] = []
+  const selectedSet = new Set(selectedIds)
+  const traverse = (nodes: Menu[]) => {
+    nodes.forEach(node => {
+      const hasChildren = node.children && node.children.length > 0
+      if (!hasChildren) {
+        if (selectedSet.has(node.id)) {
+          result.push(node.id)
+        }
+      } else {
+        traverse(node.children!)
+      }
+    })
+  }
+  traverse(menus)
+  return result
 }
 
 const menuTreeProps = {
@@ -522,7 +568,7 @@ const loadOrganizationTree = async () => {
     // 后端 /organizations/tree 已返回树形结构，直接使用
     organizationTree.value = res || []
   } catch (error) {
-    console.error('加载组织树失败', error)
+    // 加载组织树失败
   }
 }
 
@@ -575,6 +621,7 @@ const handleEdit = (row: Role) => {
   formData.description = row.description || ''
   formData.dataScopeType = row.dataScopeType
   formData.status = row.status
+  formData.level = row.level
   // 解析自定义组织ID列表（后端返回逗号分隔字符串，需转换为字符串数组以匹配组织树的node-key类型）
   if (row.customOrganizationIds) {
     if (Array.isArray(row.customOrganizationIds)) {
@@ -604,11 +651,15 @@ const loadMenuData = async (roleId: number) => {
   try {
     const res = await getRoleMenuAuthsGrouped(roleId)
     groupedMenuData.value = res
-    // 默认展开第一个子系统
-    if (res.length > 0) {
-      activeSubsystemIds.value = [res[0].subsystemId]
-    }
-    // check-strictly 模式下父子节点不联动，无需手动设置半选中状态
+    // 父子联动模式下，只需设置叶子节点为选中，父节点会根据子节点状态自动呈现"勾选/半勾选/不勾选"
+    await nextTick()
+    groupedMenuData.value.forEach(group => {
+      const treeRef = menuTreeRefs[group.subsystemId]
+      if (treeRef) {
+        const leafIds = collectLeafSelectedIds(group.menus, group.selectedMenuIds)
+        treeRef.setCheckedKeys(leafIds)
+      }
+    })
   } catch (error) {
     ElMessage.error('加载菜单权限失败')
   } finally {
@@ -680,7 +731,7 @@ const handleDelete = async (row: Role) => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(error.message || '删除失败')
     }
   }
 }
@@ -698,7 +749,7 @@ const handleBatchDelete = async () => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(error.message || '删除失败')
     }
   }
 }
@@ -724,6 +775,7 @@ const handleSubmit = async () => {
             description: formData.description,
             dataScopeType: formData.dataScopeType,
             status: formData.status,
+            level: formData.level!,
             customOrganizationIds: formData.customOrganizationIds,
             permissionIds: []
           }
@@ -736,6 +788,7 @@ const handleSubmit = async () => {
             description: formData.description,
             dataScopeType: formData.dataScopeType,
             status: formData.status,
+            level: formData.level!,
             customOrganizationIds: formData.customOrganizationIds,
             permissionIds: []
           }
@@ -766,6 +819,8 @@ const resetForm = () => {
   formData.description = ''
   formData.dataScopeType = 1
   formData.status = 1
+  // 默认设为当前用户可设置的最低权限等级（数字最大），提升体验
+  formData.level = minLevel.value
   formData.customOrganizationIds = []
 }
 

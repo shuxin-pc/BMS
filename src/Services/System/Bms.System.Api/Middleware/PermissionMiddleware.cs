@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Security.Claims;
 using Bms.System.Domain.Attributes;
 using Bms.System.Domain.IRepositories;
 
@@ -10,16 +11,21 @@ namespace Bms.System.Api.Middleware;
 public class PermissionMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly ILogger<PermissionMiddleware> _logger;
 
-    public PermissionMiddleware(RequestDelegate next)
+    public PermissionMiddleware(RequestDelegate next, ILogger<PermissionMiddleware> logger)
     {
         _next = next;
+        _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, IUserRepository userRepository, IRoleRepository roleRepository)
+    public async Task InvokeAsync(HttpContext context, IUserRepository userRepository, IRoleRepository roleRepository, IRoleMenuAuthRepository roleMenuAuthRepository)
     {
         // 获取当前用户ID（从Claims中获取）
-        var userIdClaim = context.User.FindFirst("sub")?.Value;
+        // 兼容 "sub"（OpenIddict 原始 claim）和 ClaimTypes.NameIdentifier（JWT 默认映射后的 claim）
+        // 避免因 JwtBearer 自动映射导致 FindFirst("sub") 返回 null 而跳过权限校验
+        var userIdClaim = context.User.FindFirst("sub")?.Value
+            ?? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
         {
             await _next(context);
@@ -43,11 +49,22 @@ public class PermissionMiddleware
         }
 
         // 检查用户权限
-        var hasPermission = await CheckUserPermissionAsync(userRepository, roleRepository, userId, permissionAttributes);
+        var hasPermission = await CheckUserPermissionAsync(roleRepository, roleMenuAuthRepository, userId, permissionAttributes);
         if (!hasPermission)
         {
+            // 返回路径和所需权限码，便于前端定位是哪个接口、缺什么权限
+            var requiredPermissions = permissionAttributes.Select(a => a.PermissionCode).ToList();
+            _logger.LogWarning(
+                "[PermissionDenied] Path={Path}, UserId={UserId}, RequiredPermissions={Required}",
+                context.Request.Path.Value, userId, string.Join(",", requiredPermissions));
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsJsonAsync(new { Code = 403, Message = "没有权限访问该资源" });
+            await context.Response.WriteAsJsonAsync(new
+            {
+                Code = 403,
+                Message = "没有权限访问该资源",
+                Path = context.Request.Path.Value,
+                RequiredPermissions = requiredPermissions
+            });
             return;
         }
 
@@ -55,25 +72,48 @@ public class PermissionMiddleware
     }
 
     private async Task<bool> CheckUserPermissionAsync(
-        IUserRepository userRepository,
         IRoleRepository roleRepository,
+        IRoleMenuAuthRepository roleMenuAuthRepository,
         long userId,
         IEnumerable<PermissionAttribute> permissionAttributes)
     {
         // 获取用户的角色
         var roles = await roleRepository.GetByUserIdAsync(userId);
+        var roleCodes = roles.Select(r => r.Code).ToList();
         if (!roles.Any())
         {
+            _logger.LogWarning("【权限调试】UserId={UserId} 没有任何角色", userId);
             return false;
         }
 
-        // 获取用户的所有权限
-        var allPermissions = new List<string>();
-        foreach (var role in roles)
+        // super_admin 自动放行所有权限检查
+        // super_admin 通过 RoleMenuAuth 拥有所有菜单，不依赖 RolePermission 显式记录
+        if (roles.Any(r => string.Equals(r.Code, "super_admin", StringComparison.OrdinalIgnoreCase)))
         {
-            var rolePermissions = role.RolePermissions.Select(rp => rp.Permission?.Code).Where(c => !string.IsNullOrEmpty(c)).ToList();
-            allPermissions.AddRange(rolePermissions);
+            return true;
         }
+
+        // tenant_admin 在本租户内等同管理员，自动放行权限检查
+        // 业务层（UserPermissionChecker）会进一步校验 tenant_admin 的操作范围
+        if (roles.Any(r => string.Equals(r.Code, "tenant_admin", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // 系统通过菜单授权（RoleMenuAuths）管理权限，权限码存储在 Menu.PermissionCode 字段
+        // 从 RoleMenuAuths -> Menu -> PermissionCode 获取用户的所有权限码
+        var roleIds = roles.Select(r => r.Id).ToList();
+        var roleMenuAuths = await roleMenuAuthRepository.GetByRoleIdsAsync(roleIds);
+        var allPermissions = roleMenuAuths
+            .Select(rma => rma.Menu?.PermissionCode)
+            .Where(c => !string.IsNullOrEmpty(c))
+            .Select(c => c!)
+            .ToList();
+
+        var requiredCodes = permissionAttributes.Select(a => a.PermissionCode).ToList();
+        _logger.LogWarning(
+            "【权限调试】UserId={UserId}, Roles=[{Roles}], UserPermissions(from RoleMenuAuths)=[{Perms}], Required=[{Required}]",
+            userId, string.Join(",", roleCodes), string.Join(",", allPermissions), string.Join(",", requiredCodes));
 
         // 检查是否满足任一权限要求（OR逻辑）
         foreach (var attr in permissionAttributes)

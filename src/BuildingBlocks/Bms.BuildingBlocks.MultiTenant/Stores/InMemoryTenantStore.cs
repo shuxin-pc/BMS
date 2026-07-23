@@ -17,7 +17,7 @@ public class InMemoryTenantStore : ITenantStore
             Name = "平台租户",
             IsolationLevel = TenantIsolationLevel.Row,
             IsEnabled = true,
-            ExpireTime = DateTime.UtcNow.AddYears(100)
+            ExpireTime = DateTime.Now.AddYears(100)
         },
         new TenantInfo
         {
@@ -26,7 +26,7 @@ public class InMemoryTenantStore : ITenantStore
             Name = "默认租户",
             IsolationLevel = TenantIsolationLevel.Row,
             IsEnabled = true,
-            ExpireTime = DateTime.UtcNow.AddYears(10)
+            ExpireTime = DateTime.Now.AddYears(10)
         },
         new TenantInfo
         {
@@ -35,7 +35,7 @@ public class InMemoryTenantStore : ITenantStore
             Name = "测试租户1",
             IsolationLevel = TenantIsolationLevel.Row,
             IsEnabled = true,
-            ExpireTime = DateTime.UtcNow.AddYears(1)
+            ExpireTime = DateTime.Now.AddYears(1)
         }
     };
 

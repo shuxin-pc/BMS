@@ -350,7 +350,7 @@ const loadAvatarSizeConfig = async () => {
       maxAvatarSize.value = parseFloat(maxSizeConfig.configValue) || 2
     }
   } catch (error) {
-    console.error('加载头像大小配置失败:', error)
+    // 加载头像大小配置失败
   }
 }
 

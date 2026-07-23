@@ -15,7 +15,6 @@ public class SubsystemAppService : ISubsystemAppService
     private readonly ISubsystemMenuRepository _subsystemMenuRepository;
     private readonly ITenantSubsystemRepository _tenantSubsystemRepository;
     private readonly ITenantSubsystemAppService _tenantSubsystemAppService;
-    private readonly IMenuRepository _menuRepository;
 
     /// <summary>
     /// 平台租户ID
@@ -26,14 +25,12 @@ public class SubsystemAppService : ISubsystemAppService
         ISubsystemRepository subsystemRepository,
         ISubsystemMenuRepository subsystemMenuRepository,
         ITenantSubsystemRepository tenantSubsystemRepository,
-        ITenantSubsystemAppService tenantSubsystemAppService,
-        IMenuRepository menuRepository)
+        ITenantSubsystemAppService tenantSubsystemAppService)
     {
         _subsystemRepository = subsystemRepository;
         _subsystemMenuRepository = subsystemMenuRepository;
         _tenantSubsystemRepository = tenantSubsystemRepository;
         _tenantSubsystemAppService = tenantSubsystemAppService;
-        _menuRepository = menuRepository;
     }
 
     public async Task<ApiResponseDto<List<SubsystemDto>>> GetListAsync(SubsystemQueryDto query, bool isSuperAdmin = true, long? tenantId = null)
@@ -138,8 +135,8 @@ public class SubsystemAppService : ISubsystemAppService
             Description = dto.Description,
             Sort = dto.Sort,
             Status = dto.Status,
-            CreatedTime = DateTime.UtcNow,
-            UpdatedTime = DateTime.UtcNow
+            CreatedTime = DateTime.Now,
+            UpdatedTime = DateTime.Now
         };
 
         await _subsystemRepository.AddAsync(entity);
@@ -169,7 +166,7 @@ public class SubsystemAppService : ISubsystemAppService
         entity.Description = dto.Description;
         entity.Sort = dto.Sort;
         entity.Status = dto.Status;
-        entity.UpdatedTime = DateTime.UtcNow;
+        entity.UpdatedTime = DateTime.Now;
 
         await _subsystemRepository.UpdateAsync(entity);
 
@@ -200,39 +197,7 @@ public class SubsystemAppService : ISubsystemAppService
     {
         var subsystemMenus = await _subsystemMenuRepository.GetBySubsystemIdAsync(id);
         var menuIds = subsystemMenus.Select(x => x.MenuId).ToList();
-
-        // 获取所有菜单，用于查找祖先
-        var allMenus = await _menuRepository.GetListAsync();
-        var menuDict = allMenus.ToDictionary(x => x.Id);
-
-        // 收集所有菜单的祖先ID
-        var ancestorIds = new HashSet<long>();
-        foreach (var menuId in menuIds)
-        {
-            CollectAncestorIds(menuId, menuDict, ancestorIds);
-        }
-
-        // 合并：原始菜单ID + 祖先ID
-        var result = menuIds.Concat(ancestorIds).Distinct().ToList();
-
-        return ApiResponseDto<List<long>>.Success(result);
-    }
-
-    /// <summary>
-    /// 收集菜单的所有祖先ID
-    /// </summary>
-    private void CollectAncestorIds(long menuId, Dictionary<long, Menu> menuDict, HashSet<long> ancestorIds)
-    {
-        if (!menuDict.TryGetValue(menuId, out var menu))
-        {
-            return;
-        }
-
-        if (menu.ParentId.HasValue && menu.ParentId != 0)
-        {
-            ancestorIds.Add(menu.ParentId.Value);
-            CollectAncestorIds(menu.ParentId.Value, menuDict, ancestorIds);
-        }
+        return ApiResponseDto<List<long>>.Success(menuIds);
     }
 
     public async Task<ApiResponseDto> AssignMenusAsync(long id, SubsystemMenuAssignDto dto)

@@ -89,7 +89,6 @@ export const useSystemConfigStore = defineStore('systemConfig', {
         this.loaded = true
         return configMap
       } catch (error) {
-        console.error('[SystemConfig] 加载失败', error)
         throw error
       }
     }

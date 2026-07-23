@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\BuildingBlocks\Bms.BuildingBlocks.MultiTenant\Bms.BuildingBlocks.MultiTenant.csproj" />
+    <ProjectReference Include="..\..\BuildingBlocks\Bms.BuildingBlocks.Web\Bms.BuildingBlocks.Web.csproj" />
   </ItemGroup>
 
 </Project>

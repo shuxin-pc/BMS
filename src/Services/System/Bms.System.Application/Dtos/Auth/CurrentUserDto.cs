@@ -16,4 +16,10 @@ public class CurrentUserDto
     public List<string> Roles { get; set; } = new();
     public List<long> RoleIds { get; set; } = new();
     public List<string> Permissions { get; set; } = new();
+
+    /// <summary>
+    /// 当前用户最高角色等级（数字越小权限越大，无角色时为 100）
+    /// 用于前端动态限制可创建/编辑的角色等级范围
+    /// </summary>
+    public int MaxRoleLevel { get; set; }
 }

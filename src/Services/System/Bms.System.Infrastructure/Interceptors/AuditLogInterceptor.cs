@@ -151,7 +151,7 @@ public class AuditLogInterceptor : SaveChangesInterceptor
             EntityChanges = entityChanges,
 
             // 时间戳
-            CreatedTime = DateTime.UtcNow
+            CreatedTime = DateTime.Now
         };
     }
 }

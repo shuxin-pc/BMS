@@ -168,10 +168,11 @@
             placeholder="请选择组织"
             clearable
             style="width: 100%"
+            :disabled="isEditingSelf"
           />
         </el-form-item>
         <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="formData.status">
+          <el-radio-group v-model="formData.status" :disabled="isEditingSelf">
             <el-radio :value="1">启用</el-radio>
             <el-radio :value="0">禁用</el-radio>
           </el-radio-group>
@@ -330,7 +331,17 @@ const showTenantSelect = computed(() => {
 
 // 角色下拉是否禁用
 // 规则：仅非超级管理员账号在编辑模式下，需要防止将管理员降权
+// 是否在编辑自己（编辑自己时禁用角色/组织/状态字段，UX 优化，后端已独立校验）
+const isEditingSelf = computed(() => {
+  return isEdit.value && formData.id === userStore.userInfo.id
+})
+
 const isRoleSelectDisabled = computed(() => {
+  // 编辑自己：禁用角色选择（防止误改自己的角色导致失权）
+  if (isEditingSelf.value) {
+    return true
+  }
+
   // 超级管理员登录：不禁用
   if (isSuperAdmin.value) {
     return false
@@ -451,7 +462,7 @@ const loadTenants = async () => {
       searchForm.tenantId = '1'
     }
   } catch (error) {
-    console.error('加载租户失败', error)
+    // 加载租户失败
   }
 }
 
@@ -466,7 +477,7 @@ const loadOrganizations = async (tenantId?: number | string, targetRef: 'form' |
       searchOrganizations.value = res || []
     }
   } catch (error) {
-    console.error('加载组织失败', error)
+    // 加载组织失败
   }
 }
 
@@ -609,12 +620,18 @@ const loadRoles = async (tenantId?: number | string, targetRef: 'form' | 'search
     } else {
       searchRoles.value = roles || []
     }
-    // 获取不过滤的角色列表（用于跨租户用户显示角色名称）
+  } catch (error: any) {
+    // 加载角色失败
+    ElMessage.error('加载角色失败: ' + (error.message || '未知错误'))
+    return
+  }
+  // 获取不过滤的角色列表（仅 super_admin 跨租户场景需要，失败不阻塞用户管理主流程）
+  try {
     const allRolesData = await getAllRolesWithoutFilter()
     allRolesWithoutFilter.value = allRolesData || []
-  } catch (error: any) {
-    console.error('加载角色失败:', error)
-    ElMessage.error('加载角色失败: ' + (error.message || '未知错误'))
+  } catch (e: any) {
+    // 无 system:role:view 权限时忽略，不影响当前租户角色下拉
+    console.warn('[loadRoles] getAllRolesWithoutFilter 失败（预期行为，已静默处理）:', e?.message)
   }
 }
 
@@ -664,7 +681,7 @@ const handleEdit = async (row: User) => {
       userDetail = detailRes
     }
   } catch (error) {
-    console.error('获取用户详情失败，使用列表数据', error)
+    // 获取用户详情失败，使用列表数据
   }
 
   isEdit.value = true

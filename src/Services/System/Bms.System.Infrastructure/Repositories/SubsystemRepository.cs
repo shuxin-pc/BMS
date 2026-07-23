@@ -52,7 +52,7 @@ public class SubsystemRepository : ISubsystemRepository
 
     public async Task UpdateAsync(Subsystem subsystem)
     {
-        subsystem.UpdatedTime = DateTime.UtcNow;
+        subsystem.UpdatedTime = DateTime.Now;
         var entry = _context.Subsystems.Attach(subsystem);
         entry.State = EntityState.Modified;
         await _context.SaveChangesAsync();
@@ -64,7 +64,7 @@ public class SubsystemRepository : ISubsystemRepository
         if (subsystem != null)
         {
             subsystem.IsDeleted = true;
-            subsystem.UpdatedTime = DateTime.UtcNow;
+            subsystem.UpdatedTime = DateTime.Now;
             await _context.SaveChangesAsync();
         }
     }

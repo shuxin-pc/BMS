@@ -56,7 +56,7 @@ public class SystemConfigRepository : ISystemConfigRepository
 
     public async Task UpdateAsync(SystemConfig config)
     {
-        config.UpdatedTime = DateTime.UtcNow;
+        config.UpdatedTime = DateTime.Now;
         _context.SystemConfigs.Update(config);
         await _context.SaveChangesAsync();
     }

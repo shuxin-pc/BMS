@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Users;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Domain.Entities;
+using Bms.System.Domain.Exceptions;
 using Bms.System.Domain.IRepositories;
 using Bms.System.Domain.Interfaces;
+using Bms.System.Domain.Security;
 using Bms.System.Infrastructure;
 
 namespace Bms.System.Application.Services;
@@ -15,6 +18,8 @@ public class UserAppService : IUserAppService
     private readonly IRoleRepository _roleRepository;
     private readonly IOrganizationRepository _organizationRepository;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IUserPermissionChecker _permissionChecker;
+    private readonly ICurrentUser _currentUser;
     private readonly SystemDbContext _context;
 
     public UserAppService(
@@ -22,12 +27,16 @@ public class UserAppService : IUserAppService
         IRoleRepository roleRepository,
         IOrganizationRepository organizationRepository,
         IPasswordHasher passwordHasher,
+        IUserPermissionChecker permissionChecker,
+        ICurrentUser currentUser,
         SystemDbContext context)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _organizationRepository = organizationRepository;
         _passwordHasher = passwordHasher;
+        _permissionChecker = permissionChecker;
+        _currentUser = currentUser;
         _context = context;
     }
 
@@ -54,9 +63,10 @@ public class UserAppService : IUserAppService
             request.OrganizationId,
             request.UserId,
             request.OrganizationIds,
-            request.RoleId);
+            request.RoleId,
+            request.CreatorTenantId);
 
-        var totalCount = await _userRepository.GetCountAsync(userName, realName, request.Status, request.TenantId, request.OrganizationId, request.UserId, request.OrganizationIds, request.RoleId);
+        var totalCount = await _userRepository.GetCountAsync(userName, realName, request.Status, request.TenantId, request.OrganizationId, request.UserId, request.OrganizationIds, request.RoleId, request.CreatorTenantId);
 
         var userDtos = new List<UserDto>();
         foreach (var user in users)
@@ -155,6 +165,24 @@ public class UserAppService : IUserAppService
 
     public async Task<ApiResponseDto<UserDto>> CreateAsync(UserCreateDto dto, UserCreateContext context)
     {
+        // 权限校验：角色分配 + 组织归属
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        await _permissionChecker.CheckCanAssignRolesAsync(permCtx, dto.RoleIds);
+        await _permissionChecker.CheckCanMoveToOrganizationAsync(permCtx, dto.OrganizationId);
+
+        // 非 super_admin 强制使用当前租户（不允许通过 dto 指定其他租户）
+        if (!permCtx.IsSuperAdmin)
+        {
+            // 重写 context 中的租户信息，防止前端伪造
+            context.CurrentTenantId = permCtx.TenantId;
+            // 由 UserCreateContext 的 IsSuperAdmin/IsTenantAdmin 决定下面的分支
+            // 这里强制走非 super_admin 分支
+            context.CurrentUserRoles = permCtx.IsTenantAdmin
+                ? new List<string> { "tenant_admin" }
+                : new List<string>();
+        }
+
         // 验证用户名唯一性
         if (await _userRepository.ExistsUserNameAsync(dto.UserName))
         {
@@ -182,7 +210,9 @@ public class UserAppService : IUserAppService
             PasswordHash = _passwordHasher.HashPassword(dto.Password),
             Avatar = dto.Avatar,
             Status = dto.Status,
-            OrganizationId = dto.OrganizationId
+            OrganizationId = dto.OrganizationId,
+            // 记录创建者所属租户，用于后续区分平台跨租户创建的用户
+            CreatorTenantId = context.CurrentTenantId
         };
 
         // 根据当前用户角色设置租户ID
@@ -247,6 +277,40 @@ public class UserAppService : IUserAppService
                 throw new InvalidOperationException("用户不存在");
             }
 
+            // 权限校验
+            var currentUserId = GetCurrentUserId();
+            var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+            var isSelfEdit = dto.Id == currentUserId;
+
+            if (isSelfEdit && !permCtx.IsSuperAdmin)
+            {
+                // 非超级管理员编辑自己：仅允许修改基本信息（姓名/邮箱/手机号/头像），
+                // 敏感字段（状态/组织/角色/租户）强制保留原值，防止越权篡改
+                dto.Status = user.Status;
+                dto.OrganizationId = user.OrganizationId;
+                dto.RoleIds = await _context.UserRoles
+                    .Where(ur => ur.UserId == dto.Id)
+                    .Select(ur => ur.RoleId)
+                    .ToListAsync();
+                dto.TenantId = user.TenantId.ToString();
+            }
+            else
+            {
+                // 编辑他人 或 超级管理员编辑自己：完整权限校验（目标用户 + 角色分配 + 组织变更 + 租户字段）
+                await _permissionChecker.CheckCanOperateUserAsync(permCtx, dto.Id, allowSelf: isSelfEdit);
+                await _permissionChecker.CheckCanAssignRolesAsync(permCtx, dto.RoleIds);
+                await _permissionChecker.CheckCanMoveToOrganizationAsync(permCtx, dto.OrganizationId);
+
+                // 租户字段变更校验：若 dto.TenantId 与当前用户租户不一致，需 super_admin 权限
+                if (!string.IsNullOrEmpty(dto.TenantId) && long.TryParse(dto.TenantId, out long parsedTenantForCheck))
+                {
+                    if (parsedTenantForCheck != user.TenantId)
+                    {
+                        await _permissionChecker.CheckCanChangeTenantAsync(permCtx);
+                    }
+                }
+            }
+
             // 验证用户名唯一性
             if (await _userRepository.ExistsUserNameAsync(dto.UserName, dto.Id))
             {
@@ -300,7 +364,9 @@ public class UserAppService : IUserAppService
                 TenantCode = newTenantCode ?? user.TenantCode,
                 PasswordHash = user.PasswordHash,
                 CreatedTime = user.CreatedTime,
-                UpdatedTime = DateTime.UtcNow
+                // 保留原创建者租户，创建后不可变更
+                CreatorTenantId = user.CreatorTenantId,
+                UpdatedTime = DateTime.Now
             };
 
             // 使用 Attach 更新用户，手动控制哪些字段可以修改
@@ -322,6 +388,8 @@ public class UserAppService : IUserAppService
             entry.Property(e => e.UserName).IsModified = false;
             entry.Property(e => e.PasswordHash).IsModified = false;
             entry.Property(e => e.CreatedTime).IsModified = false;
+            // 创建者租户不允许通过编辑修改
+            entry.Property(e => e.CreatorTenantId).IsModified = false;
 
             // 先保存用户基本信息
             await _context.SaveChangesAsync();
@@ -370,6 +438,11 @@ public class UserAppService : IUserAppService
 
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
+        // 权限校验：目标用户（禁自己）
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        await _permissionChecker.CheckCanOperateUserAsync(permCtx, id, allowSelf: false);
+
         await _userRepository.DeleteAsync(id);
         return ApiResponseDto.Success(null, "删除成功");
     }
@@ -379,6 +452,14 @@ public class UserAppService : IUserAppService
         if (ids == null || ids.Count == 0)
         {
             return ApiResponseDto.Fail("请选择要删除的用户", 400);
+        }
+
+        // 权限校验：遍历所有目标用户（禁自己）
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        foreach (var id in ids)
+        {
+            await _permissionChecker.CheckCanOperateUserAsync(permCtx, id, allowSelf: false);
         }
 
         var deletedCount = 0;
@@ -393,6 +474,11 @@ public class UserAppService : IUserAppService
 
     public async Task<ApiResponseDto> ResetPasswordAsync(long id, string newPassword)
     {
+        // 权限校验：目标用户（禁自己）
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        await _permissionChecker.CheckCanOperateUserAsync(permCtx, id, allowSelf: false);
+
         var user = await _userRepository.GetByIdAsync(id);
         if (user == null)
         {
@@ -424,6 +510,12 @@ public class UserAppService : IUserAppService
 
     public async Task<ApiResponseDto> AssignRolesAsync(long userId, List<long> roleIds)
     {
+        // 权限校验：目标用户（禁自己）+ 角色分配
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        await _permissionChecker.CheckCanOperateUserAsync(permCtx, userId, allowSelf: false);
+        await _permissionChecker.CheckCanAssignRolesAsync(permCtx, roleIds);
+
         var user = await _userRepository.GetByIdAsync(userId);
         if (user == null)
         {
@@ -477,5 +569,19 @@ public class UserAppService : IUserAppService
             CreatedTime = user.CreatedTime,
             UpdatedTime = user.UpdatedTime
         };
+    }
+
+    /// <summary>
+    /// 获取当前登录用户ID
+    /// </summary>
+    /// <exception cref="PermissionDeniedException">未登录或用户ID无效</exception>
+    private long GetCurrentUserId()
+    {
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value <= 0)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+        return userId.Value;
     }
 }

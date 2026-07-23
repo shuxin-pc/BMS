@@ -136,7 +136,7 @@ public class SqlTenantStore : ITenantStore
 
         // 软删除
         tenant.IsDeleted = true;
-        tenant.UpdatedTime = DateTime.UtcNow;
+        tenant.UpdatedTime = DateTime.Now;
         await context.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -159,7 +159,7 @@ public class SqlTenantStore : ITenantStore
         foreach (var tenant in tenants)
         {
             tenant.IsDeleted = true;
-            tenant.UpdatedTime = DateTime.UtcNow;
+            tenant.UpdatedTime = DateTime.Now;
         }
         await context.SaveChangesAsync(cancellationToken);
         return tenants.Count;

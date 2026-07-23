@@ -45,8 +45,7 @@ public class ConsulServiceRegistration : IServiceRegistration
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to register service {ServiceName} ({ServiceId})", serviceName, serviceId);
-            throw;
+            _logger.LogWarning(ex, "Failed to register service {ServiceName} ({ServiceId}), service will continue without Consul", serviceName, serviceId);
         }
     }
 

@@ -46,9 +46,25 @@ public class CurrentUser : ICurrentUser
 
     public string? TenantCode => User?.FindFirst("tenant_code")?.Value;
 
+    /// <summary>
+    /// 当前门店ID（从 X-Store-Id 请求头解析，由 MultiTenantMiddleware 写入 HttpContext.Items）
+    /// </summary>
+    public long? StoreId
+    {
+        get
+        {
+            var storeId = _httpContextAccessor.HttpContext?.Items["StoreId"];
+            return storeId is long id ? id : null;
+        }
+    }
+
     public bool IsSuperAdmin => User?.FindAll(ClaimTypes.Role)
         .Select(c => c.Value)
         .Contains("super_admin") ?? false;
+
+    public bool IsTenantAdmin => User?.FindAll(ClaimTypes.Role)
+        .Select(c => c.Value)
+        .Contains("tenant_admin") ?? false;
 
     public IReadOnlyList<string> Roles =>
         User?.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList()

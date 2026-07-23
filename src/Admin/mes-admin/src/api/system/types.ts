@@ -24,6 +24,8 @@ export interface CurrentUser {
   roles: string[]
   roleIds: number[]
   permissions: string[]
+  /** 当前用户最高角色等级（数字越小权限越大，无角色时为 100） */
+  maxRoleLevel?: number
 }
 
 /**
@@ -300,6 +302,8 @@ export interface Role {
   customOrganizationIds?: string | number[]
   /** 状态：0-禁用，1-启用 */
   status: UserStatus
+  /** 角色等级（2-99，数字越小权限越大；0/1 为系统保留角色） */
+  level: number
   /** 权限列表 */
   permissions?: Permission[]
   /** 创建时间 */
@@ -342,6 +346,8 @@ export interface RoleCreate {
   customOrganizationIds?: string[]
   /** 状态：0-禁用，1-启用 */
   status: UserStatus
+  /** 角色等级（2-99，数字越小权限越大；0/1 为系统保留角色） */
+  level: number
   /** 权限ID列表 */
   permissionIds: number[]
 }
@@ -364,6 +370,8 @@ export interface RoleUpdate {
   customOrganizationIds?: string[]
   /** 状态：0-禁用，1-启用 */
   status: UserStatus
+  /** 角色等级（2-99，数字越小权限越大；0/1 为系统保留角色） */
+  level: number
   /** 权限ID列表 */
   permissionIds: number[]
 }

@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITenantSubsystemAppService, TenantSubsystemAppService>();
         services.AddScoped<IRoleMenuAuthAppService, RoleMenuAuthAppService>();
         services.AddScoped<ISubsystemMigrationService, SubsystemMigrationService>();
+        services.AddScoped<IMessageAppService, MessageAppService>();
 
         // 注册 FluentValidation 验证器
         services.AddFluentValidationServices();

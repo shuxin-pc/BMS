@@ -129,7 +129,7 @@ public class AuditLogsController : ControllerBase
         // 通过配置服务获取审计日志保留天数，支持缓存，默认30天
         var daysToKeep = await _systemConfigService.GetIntAsync("AuditLogRetentionDays", DefaultRetentionDays);
 
-        var beforeDate = DateTime.UtcNow.AddDays(-daysToKeep).Date;
+        var beforeDate = DateTime.Now.AddDays(-daysToKeep).Date;
         return await _auditLogService.DeleteExpiredAsync(beforeDate);
     }
 }

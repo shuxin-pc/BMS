@@ -75,7 +75,7 @@ public class SubsystemsController : ControllerBase
     }
 
     /// <summary>
-    /// 创建子系统（仅超级管理员可创建）
+    /// 创建子系统（支持内部服务调用）
     /// </summary>
     [HttpPost]
     public async Task<ApiResponseDto<SubsystemDto>> Create([FromBody] SubsystemCreateDto dto)
@@ -154,7 +154,7 @@ public class SubsystemsController : ControllerBase
     }
 
     /// <summary>
-    /// 批量设置子系统关联的菜单（覆盖式，仅超级管理员）
+    /// 批量设置子系统关联的菜单（覆盖式，支持内部服务调用）
     /// </summary>
     [HttpPut("{id}/menus")]
     public async Task<ApiResponseDto> AssignMenus(long id, [FromBody] SubsystemMenuAssignDto dto)

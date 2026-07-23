@@ -46,12 +46,13 @@ public interface IUserRepository
     /// <param name="userId">用户ID筛选（仅本人模式）</param>
     /// <param name="organizationIds">组织ID列表筛选（部门及以下/自定义模式）</param>
     /// <param name="roleId">角色ID筛选</param>
-    Task<List<User>> GetPagedListAsync(int pageIndex, int pageSize, string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null);
+    /// <param name="creatorTenantId">创建者租户ID筛选（屏蔽平台跨租户创建的用户）</param>
+    Task<List<User>> GetPagedListAsync(int pageIndex, int pageSize, string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null, long? creatorTenantId = null);
 
     /// <summary>
     /// 获取分页查询的总数量
     /// </summary>
-    Task<int> GetCountAsync(string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null);
+    Task<int> GetCountAsync(string? userName = null, string? realName = null, int? status = null, long? tenantId = null, long? organizationId = null, long? userId = null, List<long>? organizationIds = null, long? roleId = null, long? creatorTenantId = null);
 
     /// <summary>
     /// 添加用户

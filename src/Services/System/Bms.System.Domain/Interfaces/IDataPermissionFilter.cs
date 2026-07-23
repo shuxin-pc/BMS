@@ -20,8 +20,9 @@ public interface IDataPermissionFilter
     /// <param name="userId">用户ID</param>
     /// <param name="targetUserId">目标数据的用户ID</param>
     /// <param name="targetOrganizationId">目标数据的组织ID</param>
+    /// <param name="allowSelf">是否允许操作自己。Update/AssignRoles 等场景传 false，避免"自己永远有权限"绕过禁改自己规则</param>
     /// <returns>是否有权限</returns>
-    Task<bool> HasDataPermissionAsync(long userId, long? targetUserId = null, long? targetOrganizationId = null);
+    Task<bool> HasDataPermissionAsync(long userId, long? targetUserId = null, long? targetOrganizationId = null, bool allowSelf = true);
 
     /// <summary>
     /// 获取用户的数据权限范围

@@ -61,8 +61,8 @@ public class SubsystemMigrationService : ISubsystemMigrationService
                     Description = $"系统自动创建的 {code} 子系统",
                     Sort = 0,
                     Status = 1,
-                    CreatedTime = DateTime.UtcNow,
-                    UpdatedTime = DateTime.UtcNow
+                    CreatedTime = DateTime.Now,
+                    UpdatedTime = DateTime.Now
                 };
                 await _subsystemRepository.AddAsync(subsystem);
                 existingSubsystems.Add(subsystem);
@@ -102,8 +102,8 @@ public class SubsystemMigrationService : ISubsystemMigrationService
                         {
                             TenantId = tenant.Id,
                             SubsystemId = subsystem.Id,
-                            CreatedTime = DateTime.UtcNow,
-                            UpdatedTime = DateTime.UtcNow
+                            CreatedTime = DateTime.Now,
+                            UpdatedTime = DateTime.Now
                         });
                     }
                 }

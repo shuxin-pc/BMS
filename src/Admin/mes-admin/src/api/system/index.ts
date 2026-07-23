@@ -30,9 +30,9 @@ export type {
   CurrentUser
 }
 
-// 开发环境直接访问服务端口，生产环境通过网关
-const API_BASE = import.meta.env.DEV ? 'http://localhost:5000/api/system' : '/api/system'
-const IDENTITY_BASE = import.meta.env.DEV ? 'http://localhost:5010' : '/api/identity'
+// 通过网关访问后端服务
+const API_BASE = '/api/system'
+const IDENTITY_BASE = '/api/identity'
 
 // 获取token
 const getToken = () => localStorage.getItem('token')
@@ -66,7 +66,14 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     }
     // 兼容 code 为字符串或数字的情况
     if (result.code != 200) {
-      throw new Error(errorMessage || '请求失败')
+      // 403 时附带后端返回的路径和所需权限，便于定位是哪个接口、缺什么权限
+      const extra: string[] = []
+      const anyResult = result as any
+      if (anyResult.path) extra.push(`接口: ${anyResult.path}`)
+      if (anyResult.requiredPermissions?.length) {
+        extra.push(`需要权限: ${anyResult.requiredPermissions.join(', ')}`)
+      }
+      throw new Error(extra.length ? `${errorMessage}（${extra.join('；')}）` : (errorMessage || '请求失败'))
     }
     return result.data
   } catch (err: any) {
@@ -75,11 +82,6 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
       throw new Error(errorMessage)
     }
     // 处理非 JSON 响应
-    console.error('请求失败', {
-      url,
-      status: response.status,
-      statusText: response.statusText
-    })
     throw new Error(`请求失败: ${response.status}`)
   }
 }
@@ -631,8 +633,21 @@ export async function login(username: string, password: string): Promise<LoginRe
   })
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.error_description || '登录失败')
+    // 先读取响应文本
+    const responseText = await response.text()
+
+    // 尝试解析为 JSON
+    let errorData: any = {}
+    try {
+      errorData = JSON.parse(responseText)
+    } catch (e) {
+      // 响应不是 JSON，使用默认错误
+    }
+
+    // 尝试各种可能的字段名
+    const msg = errorData.error_description || errorData.errorDescription || errorData.message || errorData.msg || '登录失败'
+
+    throw new Error(msg)
   }
 
   return response.json()
@@ -759,7 +774,7 @@ export async function deleteSubsystem(id: number): Promise<void> {
  * @param id 子系统ID
  * @returns 菜单ID列表
  */
-export async function getSubsystemMenus(id: number): Promise<number[]> {
+export async function getSubsystemMenus(id: number | string): Promise<number[]> {
   return request<number[]>(`${API_BASE}/subsystems/${id}/menus`)
 }
 

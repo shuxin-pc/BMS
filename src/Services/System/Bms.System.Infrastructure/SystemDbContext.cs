@@ -27,6 +27,8 @@ public class SystemDbContext : TenantDbContext
     public DbSet<SubsystemMenu> SubsystemMenus => Set<SubsystemMenu>();
     public DbSet<TenantSubsystem> TenantSubsystems => Set<TenantSubsystem>();
     public DbSet<RoleMenuAuth> RoleMenuAuths => Set<RoleMenuAuth>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<MessageRecipient> MessageRecipients => Set<MessageRecipient>();
 
     /// <summary>
     /// 租户表（不使用多租户隔离，存储所有租户信息）
@@ -39,6 +41,15 @@ public class SystemDbContext : TenantDbContext
 
         // Configure multi-tenant schema
         modelBuilder.HasDefaultSchema("bms_system");
+
+        // 全局配置：所有 DateTime 属性默认使用 timestamp without time zone
+        // 这样可以避免 PostgreSQL 自动使用 timestamp with time zone 导致时区转换问题
+        foreach (var property in modelBuilder.Model.GetEntityTypes()
+            .SelectMany(t => t.GetProperties())
+            .Where(p => p.ClrType == typeof(DateTime) || p.ClrType == typeof(DateTime?)))
+        {
+            property.SetColumnType("timestamp without time zone");
+        }
 
         // Configure entities
         ConfigureUser(modelBuilder);
@@ -56,6 +67,8 @@ public class SystemDbContext : TenantDbContext
         ConfigureSubsystemMenu(modelBuilder);
         ConfigureTenantSubsystem(modelBuilder);
         ConfigureRoleMenuAuth(modelBuilder);
+        ConfigureMessage(modelBuilder);
+        ConfigureMessageRecipient(modelBuilder);
     }
 
     private void ConfigureTenant(ModelBuilder modelBuilder)
@@ -110,6 +123,8 @@ public class SystemDbContext : TenantDbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(500);
+            // 角色等级，默认 100（普通角色），super_admin=0, tenant_admin=1
+            entity.Property(e => e.Level).HasDefaultValue(100);
 
             entity.HasIndex(e => e.Code);
 
@@ -359,6 +374,40 @@ public class SystemDbContext : TenantDbContext
                 .WithMany(s => s.RoleMenuAuths)
                 .HasForeignKey(e => e.SubsystemId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private void ConfigureMessage(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Message>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Content).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.SourceSubsystemCode).HasMaxLength(50);
+            entity.Property(e => e.TargetIds).HasColumnType("text");
+            entity.Property(e => e.TargetDesc).HasMaxLength(1000);
+            entity.Property(e => e.SenderName).HasMaxLength(50);
+            entity.Property(e => e.TargetUrl).HasMaxLength(500);
+            entity.Property(e => e.TenantCode).HasMaxLength(20);
+
+            // 支撑管理端按租户分页查询
+            entity.HasIndex(e => new { e.TenantId, e.CreatedTime });
+        });
+    }
+
+    private void ConfigureMessageRecipient(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MessageRecipient>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserName).HasMaxLength(50);
+            entity.Property(e => e.TenantCode).HasMaxLength(20);
+
+            // 支撑用户收件箱查询（按用户+已读+删除状态+时间倒序）
+            entity.HasIndex(e => new { e.UserId, e.IsRead, e.IsDeleted, e.CreatedTime });
+            // 支撑按消息ID查询接收记录（撤回时使用）
+            entity.HasIndex(e => e.MessageId);
         });
     }
 }

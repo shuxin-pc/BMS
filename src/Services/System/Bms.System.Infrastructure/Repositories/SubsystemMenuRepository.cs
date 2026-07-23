@@ -76,8 +76,8 @@ public class SubsystemMenuRepository : ISubsystemMenuRepository
                 {
                     SubsystemId = subsystemId,
                     MenuId = menuId,
-                    CreatedTime = DateTime.UtcNow,
-                    UpdatedTime = DateTime.UtcNow
+                    CreatedTime = DateTime.Now,
+                    UpdatedTime = DateTime.Now
                 });
             }
             await _context.SaveChangesAsync();

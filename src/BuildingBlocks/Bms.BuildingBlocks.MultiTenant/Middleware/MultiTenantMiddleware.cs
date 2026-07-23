@@ -26,42 +26,56 @@ public class MultiTenantMiddleware
     {
         try
         {
-            // 跳过认证接口的租户检查
+            // 跳过非 API 路径的租户检查（如 Swagger、根路径、favicon 等）
             var path = context.Request.Path.Value ?? string.Empty;
-            if (path.StartsWith("/api/internal/auth", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/api/system/auth", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/api/system/SystemConfigs/system", StringComparison.OrdinalIgnoreCase))
+            var method = context.Request.Method;
+            _logger.LogInformation("调试：MultiTenant 收到请求 {Method} {Path}", method, path);
+
+            if (!path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogDebug("Skipping tenant check for auth endpoint: {Url}", context.Request.GetDisplayUrl());
+                _logger.LogDebug("Skipping tenant check for non-API path: {Url}", context.Request.GetDisplayUrl());
                 await _next(context);
                 return;
             }
 
-            // 调试：输出所有 Claims
-            _logger.LogInformation("=== Tenant Debug: All Claims ===");
-            foreach (var claim in context.User.Claims)
+            // 跳过认证接口的租户检查
+            if (path.StartsWith("/api/internal/auth", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/internal/messages", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/system/auth", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/system/SystemConfigs/system", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/identity/connect", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
+                _logger.LogInformation("调试：MultiTenant 白名单放行 {Method} {Path}", method, path);
+                await _next(context);
+                return;
             }
 
-            // 获取用户名（从Claims中获取），尝试多种可能的 claim 类型
+            // 获取用户名（从Claims中获取）
             var userNameClaim = context.User.FindFirst("name")?.Value
                               ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name")?.Value
                               ?? context.User.FindFirst("preferred_username")?.Value;
 
-            _logger.LogInformation("=== Tenant Debug: UserName claim = {UserName} ===", userNameClaim);
+            // 解析门店ID（仅 store 子系统 API 需要，从 X-Store-Id 请求头获取）
+            // 注意：必须在 admin 跳过分支之前执行，否则超级管理员用户无法获取 StoreId，
+            // 导致 store 子系统的 API（如 DashboardAppService）返回"请选择门店"
+            if (path.StartsWith("/api/store", StringComparison.OrdinalIgnoreCase))
+            {
+                var storeIdHeader = context.Request.Headers["X-Store-Id"].FirstOrDefault();
+                if (long.TryParse(storeIdHeader, out var storeId))
+                {
+                    context.Items["StoreId"] = storeId;
+                    context.Response.Headers["X-Store-Id"] = storeId.ToString();
+                }
+            }
 
             if (userNameClaim == "admin")
             {
-                _logger.LogInformation("Skipping tenant check for system admin user: {UserName}", userNameClaim);
                 await _next(context);
                 return;
             }
 
             var tenant = await tenantProvider.GetCurrentTenantAsync(context.RequestAborted);
-            _logger.LogInformation("=== Tenant Debug: Tenant resolved: {TenantId}, {TenantName} ===",
-                tenant?.Id, tenant?.Name);
 
             if (tenant == null)
             {
@@ -79,7 +93,7 @@ public class MultiTenantMiddleware
                 return;
             }
 
-            if (tenant.ExpireTime.HasValue && tenant.ExpireTime < DateTime.UtcNow)
+            if (tenant.ExpireTime.HasValue && tenant.ExpireTime.Value.Date < DateTime.Now.Date)
             {
                 _logger.LogWarning("出现错误：租户已过期，租户ID：{TenantId}，过期时间：{ExpireTime}", tenant.Id, tenant.ExpireTime);
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -115,7 +129,7 @@ public class MultiTenantMiddleware
             code,
             message,
             requestId = context.TraceIdentifier,
-            timestamp = DateTime.UtcNow
+            timestamp = DateTime.Now
         };
         await JsonSerializer.SerializeAsync(context.Response.Body, response);
     }

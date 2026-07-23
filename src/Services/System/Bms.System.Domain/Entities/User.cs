@@ -56,6 +56,13 @@ public class User : TenantEntity
     public long? OrganizationId { get; set; }
 
     /// <summary>
+    /// 创建者所属租户ID
+    /// 用于区分平台租户跨租户创建的用户：当本字段不等于用户 TenantId 时，
+    /// 表示该用户由其他租户（通常是平台租户）创建，本租户管理员不可见。
+    /// </summary>
+    public long CreatorTenantId { get; set; }
+
+    /// <summary>
     /// 导航属性：用户角色关联
     /// </summary>
     public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();

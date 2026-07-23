@@ -222,7 +222,7 @@ public class TenantsController : ControllerBase
     }
 
     /// <summary>
-    /// 为租户分配单个子系统（仅超级管理员可访问）
+    /// 为租户分配单个子系统（支持内部服务调用）
     /// </summary>
     [HttpPost("{id:long}/subsystems/{subsystemId:long}")]
     public async Task<ApiResponseDto> AddSubsystem(long id, long subsystemId)

@@ -309,7 +309,7 @@ const loadTenants = async () => {
       searchForm.tenantId = '1'
     }
   } catch (error) {
-    console.error('加载租户失败', error)
+    // 加载租户失败
   }
 }
 
