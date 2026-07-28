@@ -16,6 +16,9 @@ public class StoreDbContext : TenantDbContext
 
     // DbSets - 门店管理
     public DbSet<Bms.Store.Domain.Entities.Store> Stores => Set<Bms.Store.Domain.Entities.Store>();
+    public DbSet<UserStore> UserStores => Set<UserStore>();
+    public DbSet<StoreTenantSetting> StoreTenantSettings => Set<StoreTenantSetting>();
+    public DbSet<CrossStoreOperationLog> CrossStoreOperationLogs => Set<CrossStoreOperationLog>();
 
     // DbSets - 商品管理
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
@@ -113,6 +116,9 @@ public class StoreDbContext : TenantDbContext
         }
 
         ConfigureStore(modelBuilder);
+        ConfigureUserStore(modelBuilder);
+        ConfigureStoreTenantSetting(modelBuilder);
+        ConfigureCrossStoreOperationLog(modelBuilder);
         ConfigureProductCategory(modelBuilder);
         ConfigureProduct(modelBuilder);
         ConfigureSupplier(modelBuilder);
@@ -197,6 +203,63 @@ public class StoreDbContext : TenantDbContext
         });
     }
 
+    private void ConfigureUserStore(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<UserStore>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserName).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.RealName).HasMaxLength(50);
+            // 唯一索引：同一用户对同一门店仅允许一条未删除记录，防止重复分配
+            // 使用 PostgreSQL 过滤索引语法（项目使用 PostgreSQL）
+            entity.HasIndex(e => new { e.UserId, e.StoreId })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false")
+                .HasDatabaseName("UX_UserStores_UserId_StoreId");
+
+            entity.HasIndex(e => new { e.TenantId, e.StoreId }).HasDatabaseName("IX_UserStores_Tenant_Store");
+            entity.HasIndex(e => new { e.TenantId, e.UserId }).HasDatabaseName("IX_UserStores_Tenant_User");
+        });
+    }
+
+    private void ConfigureStoreTenantSetting(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<StoreTenantSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // 每租户仅一条配置记录，使用过滤索引保证未删除记录唯一
+            entity.HasIndex(e => e.TenantId)
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false")
+                .HasDatabaseName("UX_StoreTenantSettings_Tenant");
+        });
+    }
+
+    private void ConfigureCrossStoreOperationLog(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CrossStoreOperationLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.OperationType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.OperatorName).HasMaxLength(50);
+            entity.Property(e => e.RequestIp).HasMaxLength(50);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.CustomerName).HasMaxLength(50);
+            entity.Property(e => e.CustomerPhoneTail).HasMaxLength(10);
+            entity.Property(e => e.HomeStoreName).HasMaxLength(100);
+            entity.Property(e => e.Remark).HasMaxLength(500);
+
+            // 审计日志按 (租户, 操作时间) 索引，便于按时间范围查询审计记录
+            entity.HasIndex(e => new { e.TenantId, e.OperationTime })
+                .HasDatabaseName("IX_CrossStoreOperationLogs_TenantId_OperationTime");
+
+            // 按操作类型筛选索引，便于按操作类型审计
+            entity.HasIndex(e => new { e.TenantId, e.OperationType, e.OperationTime })
+                .HasDatabaseName("IX_CrossStoreOperationLogs_TenantId_OperationType_OperationTime");
+        });
+    }
+
     private void ConfigureProductCategory(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ProductCategory>(entity =>
@@ -259,6 +322,11 @@ public class StoreDbContext : TenantDbContext
             entity.HasIndex(e => e.Code);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 唯一约束：(Code, TenantId, StoreId, IsDeleted) 唯一，按门店隔离避免编码重复
+            // 含 IsDeleted 是为了让软删除记录不阻止相同 Code 重新创建
+            entity.HasIndex(e => new { e.Code, e.TenantId, e.StoreId, e.IsDeleted })
+                .IsUnique()
+                .HasDatabaseName("UX_Suppliers_Code_Tenant_Store_Deleted");
         });
     }
 
@@ -270,13 +338,13 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.ReferencePrice).HasPrecision(18, 2);
             entity.Property(e => e.LeadTimeDays).HasDefaultValue(0);
 
-            // 唯一约束：(ProductId, SupplierId, TenantId) 唯一，避免重复绑定
-            entity.HasIndex(e => new { e.ProductId, e.SupplierId, e.TenantId })
+            // 唯一约束：(ProductId, SupplierId, TenantId, StoreId) 唯一，按门店隔离避免重复绑定
+            entity.HasIndex(e => new { e.ProductId, e.SupplierId, e.TenantId, e.StoreId })
                 .IsUnique()
-                .HasDatabaseName("UX_ProductSuppliers_Product_Supplier_Tenant");
+                .HasDatabaseName("UX_ProductSuppliers_Product_Supplier_Tenant_Store");
             entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => e.SupplierId);
-            entity.HasIndex(e => new { e.TenantId, e.IsDefault });
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.IsDefault });
 
             entity.HasOne(e => e.Product)
                 .WithMany()
@@ -329,6 +397,13 @@ public class StoreDbContext : TenantDbContext
                 .WithMany()
                 .HasForeignKey(e => e.ProductId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Supplier 导航属性外键
+            entity.HasOne(l => l.Supplier)
+                  .WithMany()
+                  .HasForeignKey(l => l.SupplierId)
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .IsRequired(false);
         });
     }
 
@@ -454,6 +529,7 @@ public class StoreDbContext : TenantDbContext
 
             entity.HasIndex(e => e.CustomerId).IsUnique();
             entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
 
             entity.HasOne(e => e.Customer)
                 .WithMany()
@@ -711,6 +787,7 @@ public class StoreDbContext : TenantDbContext
             entity.HasIndex(e => e.SaleId);
             entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => new { e.TenantId, e.SaleId });
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
 
             entity.HasOne(e => e.Sale)
                 .WithMany(s => s.Items)
@@ -755,6 +832,7 @@ public class StoreDbContext : TenantDbContext
             entity.HasIndex(e => e.VerifyId);
             entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => new { e.TenantId, e.VerifyId });
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
 
             entity.HasOne(e => e.Verify)
                 .WithMany(v => v.Items)
@@ -1516,8 +1594,8 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.Reason).HasMaxLength(500);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
-            // 审计日志按租户隔离 + 删除时间索引，便于按时间范围查询
-            entity.HasIndex(e => e.TenantId);
+            // 审计日志按租户+门店隔离 + 删除时间索引，便于按时间范围查询
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
             entity.HasIndex(e => e.DeleteTime);
             entity.HasIndex(e => e.OriginalCustomerId);
         });
