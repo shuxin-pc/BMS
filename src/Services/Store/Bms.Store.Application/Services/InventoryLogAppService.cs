@@ -34,6 +34,7 @@ public class InventoryLogAppService : IInventoryLogAppService
 
     /// <summary>
     /// 获取库存流水分页列表
+    /// 查询时 Include Product 与 Supplier 导航属性，内存中填充显示字段
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<InventoryLogDto>>> GetPagedListAsync(InventoryLogQueryDto query)
     {
@@ -43,6 +44,8 @@ public class InventoryLogAppService : IInventoryLogAppService
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
         var queryable = _dbContext.InventoryLogs
+            .Include(l => l.Product)
+            .Include(l => l.Supplier)
             .Where(l => l.TenantId == tenantId && l.StoreId == storeId);
 
         if (query.ProductId.HasValue)
@@ -51,6 +54,13 @@ public class InventoryLogAppService : IInventoryLogAppService
             queryable = queryable.Where(l => l.Type == query.Type.Value);
         if (query.SourceType.HasValue)
             queryable = queryable.Where(l => l.SourceType == query.SourceType.Value);
+        if (!string.IsNullOrWhiteSpace(query.ProductName))
+            queryable = queryable.Where(l => l.Product != null && l.Product.Name.Contains(query.ProductName));
+        if (query.StartDate.HasValue)
+            queryable = queryable.Where(l => l.CreatedTime >= query.StartDate.Value);
+        if (query.EndDate.HasValue)
+            // EndDate 含当日：过滤条件为 CreatedTime <= EndDate 当天 23:59:59
+            queryable = queryable.Where(l => l.CreatedTime <= query.EndDate.Value.Date.AddDays(1).AddTicks(-1));
 
         var total = await queryable.CountAsync();
         var items = await queryable
@@ -59,9 +69,33 @@ public class InventoryLogAppService : IInventoryLogAppService
             .Take(query.PageSize)
             .ToListAsync();
 
+        // 内存中投影到 DTO，填充显示字段（Adapt 会自动映射同名字段，手工补齐关联字段）
+        var dtoList = items.Select(l => new InventoryLogDto
+        {
+            Id = l.Id,
+            ProductId = l.ProductId,
+            Type = l.Type,
+            SourceType = l.SourceType,
+            SupplierId = l.SupplierId,
+            UnitPrice = l.UnitPrice,
+            Quantity = l.Quantity,
+            BeforeQuantity = l.BeforeQuantity,
+            AfterQuantity = l.AfterQuantity,
+            BatchNo = l.BatchNo,
+            ExpirationDate = l.ExpirationDate,
+            RelatedId = l.RelatedId,
+            Remark = l.Remark,
+            CreatedAt = l.CreatedTime,
+            UpdatedAt = l.UpdatedTime,
+            ProductName = l.Product?.Name,
+            ProductCode = l.Product?.Code,
+            SupplierName = l.Supplier?.Name,
+            OperatorName = l.OperatorName
+        }).ToList();
+
         var result = new PagedResponseDto<InventoryLogDto>
         {
-            List = items.Adapt<List<InventoryLogDto>>(),
+            List = dtoList,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
