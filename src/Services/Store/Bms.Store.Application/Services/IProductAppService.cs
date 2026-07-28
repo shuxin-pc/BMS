@@ -22,6 +22,11 @@ public interface IProductAppService
     /// 查询品项关联的供应商列表（按 IsDefault 倒序，默认供应商排在首位）
     /// </summary>
     Task<ApiResponseDto<List<ProductSupplierDto>>> GetSuppliersByProductAsync(long productId);
+
+    /// <summary>
+    /// 获取商品轻量选项列表（不分页，仅返回 Id/Name/Code/Unit，用于下拉选择场景）
+    /// </summary>
+    Task<ApiResponseDto<List<ProductOptionDto>>> GetOptionsAsync();
 }
 
 /// <summary>

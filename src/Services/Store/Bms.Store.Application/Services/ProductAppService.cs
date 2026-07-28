@@ -47,9 +47,10 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.Products
             .Include(p => p.Category)
-            .Where(p => !p.IsDeleted && p.TenantId == tenantId);
+            .Where(p => !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
@@ -62,10 +63,6 @@ public class ProductAppService : IProductAppService
         if (query.CategoryId.HasValue)
         {
             queryable = queryable.Where(p => p.CategoryId == query.CategoryId.Value);
-        }
-        if (query.SupplierId.HasValue)
-        {
-            queryable = queryable.Where(p => p.SupplierId == query.SupplierId.Value);
         }
         if (query.Status.HasValue)
         {
@@ -108,9 +105,10 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var product = await _dbContext.Products
             .Include(p => p.Category)
-            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
         {
             return ApiResponseDto<ProductDto?>.Fail("商品不存在", 404);
@@ -131,6 +129,11 @@ public class ProductAppService : IProductAppService
             return ApiResponseDto<ProductDto>.Fail("无法确定当前租户", 401);
         }
 
+        if (!_currentUser.StoreId.HasValue)
+        {
+            return ApiResponseDto<ProductDto>.Fail("无法确定当前门店", 401);
+        }
+
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
         {
@@ -138,8 +141,9 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var codeExists = await _dbContext.Products
-            .AnyAsync(p => p.Code == dto.Code && p.TenantId == tenantId && !p.IsDeleted);
+            .AnyAsync(p => p.Code == dto.Code && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted);
         if (codeExists)
         {
             return ApiResponseDto<ProductDto>.Fail($"商品编码 {dto.Code} 已存在", 400);
@@ -148,6 +152,8 @@ public class ProductAppService : IProductAppService
         var product = dto.Adapt<ProductEntity>();
         product.TenantId = tenantId;
         product.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        product.StoreId = storeId;
+        product.StoreCode = _currentUser.StoreCode ?? string.Empty;
         product.CreatedTime = DateTime.Now;
         // 样品/赠品（Type=4/5）强制不可销售，其他类型默认可销售（B6.1 "不可销售"标识）
         product.IsSalable = dto.Type != 4 && dto.Type != 5;
@@ -183,9 +189,10 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var product = await _dbContext.Products
             .Include(p => p.Category)
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
         {
             return ApiResponseDto<ProductDto>.Fail("商品不存在", 404);
@@ -195,7 +202,7 @@ public class ProductAppService : IProductAppService
         if (product.Code != dto.Code)
         {
             var codeExists = await _dbContext.Products
-                .AnyAsync(p => p.Code == dto.Code && p.TenantId == tenantId && !p.IsDeleted && p.Id != dto.Id);
+                .AnyAsync(p => p.Code == dto.Code && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted && p.Id != dto.Id);
             if (codeExists)
             {
                 return ApiResponseDto<ProductDto>.Fail($"商品编码 {dto.Code} 已存在", 400);
@@ -208,6 +215,7 @@ public class ProductAppService : IProductAppService
         var oldPrice = product.Price;
 
         // 手动更新主表字段（避免覆盖审计字段）
+        // 注意：SupplierId 不再由商品编辑维护，仅由 SupplierAppService 的 Bind/Unbind/SetDefault 维护，确保双写一致
         product.Name = dto.Name;
         product.Code = dto.Code;
         product.CategoryId = dto.CategoryId;
@@ -215,7 +223,6 @@ public class ProductAppService : IProductAppService
         product.Specification = dto.Spec;
         product.Unit = dto.Unit;
         product.Brand = dto.Brand;
-        product.SupplierId = dto.SupplierId;
         product.Price = dto.Price;
         product.CostPrice = dto.CostPrice;
         product.LowStockThreshold = dto.LowStockThreshold;
@@ -273,8 +280,9 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
         {
             return ApiResponseDto.Fail("商品不存在", 404);
@@ -307,8 +315,9 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var products = await _dbContext.Products
-            .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == tenantId)
+            .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId)
             .ToListAsync();
 
         foreach (var product in products)
@@ -336,15 +345,16 @@ public class ProductAppService : IProductAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var productExists = await _dbContext.Products
-            .AnyAsync(p => p.Id == productId && !p.IsDeleted && p.TenantId == tenantId);
+            .AnyAsync(p => p.Id == productId && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (!productExists)
         {
             return ApiResponseDto<List<ProductSupplierDto>>.Fail("商品不存在", 404);
         }
 
         var relations = await _dbContext.ProductSuppliers
-            .Where(ps => ps.ProductId == productId && ps.TenantId == tenantId)
+            .Where(ps => ps.ProductId == productId && ps.TenantId == tenantId && ps.StoreId == storeId)
             .OrderByDescending(ps => ps.IsDefault)
             .ThenByDescending(ps => ps.CreatedTime)
             .ToListAsync();
@@ -356,7 +366,7 @@ public class ProductAppService : IProductAppService
         var supplierIds = relations.Select(ps => ps.SupplierId).ToList();
         // 过滤已软删除供应商，避免展示无效关联；按租户隔离查询
         var suppliersInfo = await _dbContext.Suppliers
-            .Where(s => supplierIds.Contains(s.Id) && s.TenantId == tenantId && !s.IsDeleted)
+            .Where(s => supplierIds.Contains(s.Id) && s.TenantId == tenantId && s.StoreId == storeId && !s.IsDeleted)
             .Select(s => new { s.Id, s.Code, s.Name })
             .ToListAsync();
 
@@ -380,10 +390,38 @@ public class ProductAppService : IProductAppService
         return ApiResponseDto<List<ProductSupplierDto>>.Ok(result);
     }
 
+    /// <summary>
+    /// 获取商品轻量选项列表（不分页，仅返回 Id/Name/Code/Unit）
+    /// 仅按 TenantId + StoreId 过滤，排除已软删除商品
+    /// </summary>
+    public async Task<ApiResponseDto<List<ProductOptionDto>>> GetOptionsAsync()
+    {
+        if (!_currentUser.TenantId.HasValue)
+            return ApiResponseDto<List<ProductOptionDto>>.Fail("无法确定当前租户", 401);
+
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
+
+        var options = await _dbContext.Products
+            .Where(p => !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId)
+            .OrderBy(p => p.Name)
+            .Select(p => new ProductOptionDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Code = p.Code,
+                Unit = p.Unit
+            })
+            .ToListAsync();
+
+        return ApiResponseDto<List<ProductOptionDto>>.Ok(options);
+    }
+
     // ========== 子表辅助方法 ==========
 
     /// <summary>
     /// 批量填充子表字段到商品 DTO 列表
+    /// 包括：服务项目子表字段、默认供应商（从 ProductSupplier.IsDefault=true 派生）
     /// </summary>
     private async Task FillSubTableFieldsAsync(List<ProductDto> dtos, long tenantId)
     {
@@ -428,10 +466,38 @@ public class ProductAppService : IProductAppService
                 }
             }
         }
+
+        // 批量填充默认供应商（从 ProductSupplier.IsDefault=true 派生）
+        var productIds = dtos.Select(d => d.Id).ToList();
+        var defaultRelations = await _dbContext.ProductSuppliers
+            .Where(ps => productIds.Contains(ps.ProductId) && ps.IsDefault
+                && ps.TenantId == tenantId)
+            .ToListAsync();
+        if (defaultRelations.Any())
+        {
+            var defaultSupplierIds = defaultRelations.Select(ps => ps.SupplierId).Distinct().ToList();
+            var suppliersInfo = await _dbContext.Suppliers
+                .Where(s => defaultSupplierIds.Contains(s.Id) && !s.IsDeleted
+                    && s.TenantId == tenantId)
+                .Select(s => new { s.Id, s.Name })
+                .ToListAsync();
+            var supplierDict = suppliersInfo.ToDictionary(s => s.Id);
+
+            foreach (var dto in dtos)
+            {
+                var relation = defaultRelations.FirstOrDefault(ps => ps.ProductId == dto.Id);
+                if (relation != null)
+                {
+                    dto.DefaultSupplierId = relation.SupplierId;
+                    dto.DefaultSupplierName = supplierDict.TryGetValue(relation.SupplierId, out var s) ? s.Name : null;
+                }
+            }
+        }
     }
 
     /// <summary>
     /// 填充单个商品的子表字段
+    /// 包括：服务项目子表字段、默认供应商（从 ProductSupplier.IsDefault=true 派生）
     /// </summary>
     private async Task FillSubTableFieldsForProductAsync(ProductDto dto, long productId, long tenantId)
     {
@@ -459,6 +525,20 @@ public class ProductAppService : IProductAppService
                 }
                 break;
         }
+
+        // 填充默认供应商（从 ProductSupplier.IsDefault=true 派生）
+        var defaultRelation = await _dbContext.ProductSuppliers
+            .Where(ps => ps.ProductId == productId && ps.IsDefault && ps.TenantId == tenantId)
+            .FirstOrDefaultAsync();
+        if (defaultRelation != null)
+        {
+            dto.DefaultSupplierId = defaultRelation.SupplierId;
+            var supplierInfo = await _dbContext.Suppliers
+                .Where(s => s.Id == defaultRelation.SupplierId && !s.IsDeleted && s.TenantId == tenantId)
+                .Select(s => new { s.Name })
+                .FirstOrDefaultAsync();
+            dto.DefaultSupplierName = supplierInfo?.Name;
+        }
     }
 
     /// <summary>
@@ -468,7 +548,7 @@ public class ProductAppService : IProductAppService
     {
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
         var storeId = _currentUser.StoreId ?? 0;
-        var storeCode = ""; // StoreCode 由前端 X-Store-Id 上下文确定，这里留空（用于审计）
+        var storeCode = _currentUser.StoreCode ?? string.Empty;
         switch (dto.Type)
         {
             case 2: // 服务项目
@@ -540,6 +620,7 @@ public class ProductAppService : IProductAppService
                     {
                         var tenantCode = _currentUser.TenantCode ?? string.Empty;
                         var storeId = _currentUser.StoreId ?? 0;
+                        var storeCode = _currentUser.StoreCode ?? string.Empty;
                         foreach (var equipmentTypeId in dto.EquipmentTypeIds.Distinct())
                         {
                             _dbContext.ServiceProductEquipments.Add(new ServiceProductEquipment
@@ -549,7 +630,7 @@ public class ProductAppService : IProductAppService
                                 TenantId = tenantId,
                                 TenantCode = tenantCode,
                                 StoreId = storeId,
-                                StoreCode = "",
+                                StoreCode = storeCode,
                                 CreatedTime = DateTime.Now
                             });
                         }
