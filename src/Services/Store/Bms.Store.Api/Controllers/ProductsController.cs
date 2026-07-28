@@ -11,7 +11,7 @@ namespace Bms.Store.Api.Controllers;
 /// 商品档案管理控制器
 /// </summary>
 [ApiController]
-[Route("api/product/[controller]")]
+[Route("api/store/product/[controller]")]
 [Authorize]
 public class ProductsController : ControllerBase
 {
@@ -88,4 +88,11 @@ public class ProductsController : ControllerBase
     {
         return await _productAppService.GetSuppliersByProductAsync(productId);
     }
+
+    /// <summary>
+    /// 获取商品轻量选项列表（不分页，用于下拉选择场景）
+    /// </summary>
+    [HttpGet("options")]
+    public async Task<ApiResponseDto<List<ProductOptionDto>>> GetOptions()
+        => await _productAppService.GetOptionsAsync();
 }
