@@ -20,4 +20,16 @@ public class InventoryLogDto
     public string? Remark { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>商品名称（查询时 JOIN 填充）</summary>
+    public string? ProductName { get; set; }
+
+    /// <summary>商品编码（查询时 JOIN 填充）</summary>
+    public string? ProductCode { get; set; }
+
+    /// <summary>供应商名称（查询时 JOIN 填充）</summary>
+    public string? SupplierName { get; set; }
+
+    /// <summary>操作人姓名（写入时冗余存储）</summary>
+    public string? OperatorName { get; set; }
 }
