@@ -62,10 +62,6 @@ export interface InventoryLog {
   afterQuantity: number
   /** 批次号 */
   batchNo?: string
-  /** 生产日期 */
-  productionDate?: string
-  /** 保质期天数 */
-  shelfLifeDays?: number
   /** 过期日期 */
   expirationDate?: string
   /** 关联单据ID */
