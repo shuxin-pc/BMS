@@ -52,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IInventoryAlertAppService, InventoryAlertAppService>();
         services.AddScoped<IInventoryCheckAppService, InventoryCheckAppService>();
         services.AddScoped<IInventoryLogAppService, InventoryLogAppService>();
+        services.AddScoped<IInboundAppService, InboundAppService>();
         services.AddScoped<IPurchaseReturnAppService, PurchaseReturnAppService>();
 
         // 储值、积分与疗程卡模块
@@ -72,6 +73,13 @@ public static class ServiceCollectionExtensions
         // 资源冲突检测与可用性查询（技师/房间/设备）
         services.AddScoped<IResourceConflictCheckService, ResourceConflictCheckService>();
         services.AddScoped<IResourceAvailabilityService, ResourceAvailabilityService>();
+
+        // 跨店权益操作审计日志（文档 6.1 节）
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICrossStoreOperationAuditService, CrossStoreOperationAuditService>();
+
+        // 租户级跨店权益配置（规则2：AllowCrossStoreVerify 开关）
+        services.AddScoped<IStoreTenantSettingAppService, StoreTenantSettingAppService>();
 
         // 统计、营销与样品赠品模块
         services.AddScoped<ITechnicianStatisticAppService, TechnicianStatisticAppService>();
