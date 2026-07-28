@@ -23,12 +23,12 @@ public interface ISupplierAppService
     Task<ApiResponseDto<List<ProductSupplierDto>>> BindProductsAsync(BindProductsDto dto);
 
     /// <summary>
-    /// 解除品项与供应商的关联（若解除的是默认供应商，同步清空 Product.SupplierId 冗余字段）
+    /// 解除品项与供应商的关联（若解除的是默认供应商，自动将下一个关联设为新默认）
     /// </summary>
     Task<ApiResponseDto> UnbindProductAsync(long productId, long supplierId);
 
     /// <summary>
-    /// 设置品项的默认供应商（自动取消旧默认，同步写入 Product.SupplierId 冗余字段）
+    /// 设置品项的默认供应商（自动取消旧默认，可选更新参考价与供货周期）
     /// </summary>
     Task<ApiResponseDto<ProductSupplierDto>> SetDefaultSupplierAsync(SetDefaultSupplierDto dto);
 
@@ -36,4 +36,9 @@ public interface ISupplierAppService
     /// 查询供应商关联的品项列表
     /// </summary>
     Task<ApiResponseDto<List<ProductSupplierDto>>> GetProductsBySupplierAsync(long supplierId);
+
+    /// <summary>
+    /// 获取供应商轻量选项列表（不分页，仅返回 Id/Name，用于下拉选择场景）
+    /// </summary>
+    Task<ApiResponseDto<List<SupplierOptionDto>>> GetOptionsAsync();
 }

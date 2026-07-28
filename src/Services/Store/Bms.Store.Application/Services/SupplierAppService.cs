@@ -43,12 +43,13 @@ public class SupplierAppService : ISupplierAppService
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<SupplierDto>>> GetPagedListAsync(SupplierQueryDto query)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<SupplierDto>>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<PagedResponseDto<SupplierDto>>.Fail("无法确定当前门店", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var queryable = _dbContext.Suppliers
-            .Where(s => !s.IsDeleted && s.TenantId == tenantId);
+            .Where(s => !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.Name))
             queryable = queryable.Where(s => s.Name.Contains(query.Name));
@@ -94,11 +95,13 @@ public class SupplierAppService : ISupplierAppService
     /// </summary>
     public async Task<ApiResponseDto<SupplierDto?>> GetByIdAsync(long id)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SupplierDto?>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<SupplierDto?>.Fail("无法确定当前门店", 401);
 
         var entity = await _dbContext.Suppliers
-            .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted && s.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted
+                && s.TenantId == _currentUser.TenantId.Value
+                && s.StoreId == _currentUser.StoreId.Value);
         if (entity == null)
             return ApiResponseDto<SupplierDto?>.Fail("供应商不存在", 404);
 
@@ -115,22 +118,25 @@ public class SupplierAppService : ISupplierAppService
     /// </summary>
     public async Task<ApiResponseDto<SupplierDto>> CreateAsync(SupplierCreateDto dto)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SupplierDto>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<SupplierDto>.Fail("无法确定当前门店", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<SupplierDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var codeExists = await _dbContext.Suppliers
-            .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && !s.IsDeleted);
+            .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && s.StoreId == storeId && !s.IsDeleted);
         if (codeExists)
-            return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 已存在", 400);
+            return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 在当前门店已存在", 400);
 
         var entity = dto.Adapt<SupplierEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = storeId;
+        entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.Suppliers.Add(entity);
@@ -143,26 +149,28 @@ public class SupplierAppService : ISupplierAppService
     /// </summary>
     public async Task<ApiResponseDto<SupplierDto>> UpdateAsync(SupplierUpdateDto dto)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SupplierDto>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<SupplierDto>.Fail("无法确定当前门店", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<SupplierDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var entity = await _dbContext.Suppliers
-            .FirstOrDefaultAsync(s => s.Id == dto.Id && !s.IsDeleted && s.TenantId == tenantId);
+            .FirstOrDefaultAsync(s => s.Id == dto.Id && !s.IsDeleted
+                && s.TenantId == tenantId && s.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<SupplierDto>.Fail("供应商不存在", 404);
 
-        // 编码变更时检查唯一性
+        // 编码变更时检查唯一性（门店内）
         if (entity.Code != dto.Code)
         {
             var codeExists = await _dbContext.Suppliers
-                .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && !s.IsDeleted && s.Id != dto.Id);
+                .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && s.StoreId == storeId && !s.IsDeleted && s.Id != dto.Id);
             if (codeExists)
-                return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 已存在", 400);
+                return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 在当前门店已存在", 400);
         }
 
         entity.Name = dto.Name;
@@ -181,35 +189,50 @@ public class SupplierAppService : ISupplierAppService
 
     /// <summary>
     /// 删除供应商（软删除）
+    /// 级联清理：物理删除该供应商在当前门店的所有 ProductSupplier 关联；
+    /// 若被删关联中含默认供应商，自动将剩余关联中最早创建的设为新默认
     /// </summary>
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto.Fail("无法确定当前门店", 401);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var entity = await _dbContext.Suppliers
-            .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted && s.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted
+                && s.TenantId == tenantId
+                && s.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto.Fail("供应商不存在", 404);
 
         entity.IsDeleted = true;
         entity.UpdatedTime = DateTime.Now;
+
+        // 级联清理该供应商的所有 ProductSupplier 关联，并迁移受影响商品的默认供应商
+        await CleanupSupplierRelationsAsync(new List<long> { id }, tenantId, storeId);
+
         await _dbContext.SaveChangesAsync();
         return ApiResponseDto.Success(null, "删除成功");
     }
 
     /// <summary>
     /// 批量删除供应商（软删除）
+    /// 级联清理：物理删除这些供应商的所有 ProductSupplier 关联，并迁移受影响商品的默认供应商
     /// </summary>
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto.Fail("无法确定当前门店", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var entities = await _dbContext.Suppliers
-            .Where(s => ids.Contains(s.Id) && !s.IsDeleted && s.TenantId == _currentUser.TenantId.Value)
+            .Where(s => ids.Contains(s.Id) && !s.IsDeleted
+                && s.TenantId == tenantId
+                && s.StoreId == storeId)
             .ToListAsync();
 
         foreach (var entity in entities)
@@ -217,20 +240,76 @@ public class SupplierAppService : ISupplierAppService
             entity.IsDeleted = true;
             entity.UpdatedTime = DateTime.Now;
         }
+
+        // 级联清理这些供应商的所有 ProductSupplier 关联，并迁移受影响商品的默认供应商
+        var deletedSupplierIds = entities.Select(s => s.Id).ToList();
+        await CleanupSupplierRelationsAsync(deletedSupplierIds, tenantId, storeId);
+
         await _dbContext.SaveChangesAsync();
         return ApiResponseDto.Success(null, $"成功删除 {entities.Count} 条数据");
+    }
+
+    /// <summary>
+    /// 级联清理供应商-品项关联并迁移默认供应商
+    /// 1. 查询这些供应商在当前门店的所有 ProductSupplier 关联
+    /// 2. 物理删除这些关联
+    /// 3. 对每个受影响商品：若被删关联中含默认供应商，查剩余关联（按 CreatedTime 升序）取首个设为新默认
+    /// </summary>
+    private async Task CleanupSupplierRelationsAsync(List<long> supplierIds, long tenantId, long storeId)
+    {
+        if (supplierIds == null || !supplierIds.Any()) return;
+
+        // 一次性查询所有受影响的 ProductSupplier 关联
+        var relationsToRemove = await _dbContext.ProductSuppliers
+            .Where(ps => supplierIds.Contains(ps.SupplierId)
+                && ps.TenantId == tenantId
+                && ps.StoreId == storeId)
+            .ToListAsync();
+        if (!relationsToRemove.Any()) return;
+
+        // 被删除默认供应商的商品需要迁移默认
+        var productsNeedMigration = relationsToRemove
+            .Where(ps => ps.IsDefault)
+            .Select(ps => ps.ProductId)
+            .Distinct()
+            .ToList();
+        _dbContext.ProductSuppliers.RemoveRange(relationsToRemove);
+
+        if (!productsNeedMigration.Any()) return;
+
+        // 查询这些商品的剩余关联（排除本次删除的供应商），按 CreatedTime 升序取首个设为默认
+        var remainingRelations = await _dbContext.ProductSuppliers
+            .Where(ps => productsNeedMigration.Contains(ps.ProductId)
+                && !supplierIds.Contains(ps.SupplierId)
+                && ps.TenantId == tenantId
+                && ps.StoreId == storeId)
+            .ToListAsync();
+        var now = DateTime.Now;
+
+        foreach (var productId in productsNeedMigration)
+        {
+            var nextRelation = remainingRelations
+                .Where(r => r.ProductId == productId)
+                .OrderBy(r => r.CreatedTime)
+                .FirstOrDefault();
+            if (nextRelation != null)
+            {
+                nextRelation.IsDefault = true;
+                nextRelation.UpdatedTime = now;
+            }
+        }
     }
 
     // ========== 供应商-品项关联（G2.6.2）==========
 
     /// <summary>
     /// 批量绑定品项到供应商
-    /// 业务规则：已存在的关联跳过；品项无默认供应商时将首个绑定设为默认，同步写入 Product.SupplierId 冗余字段
+    /// 业务规则：已存在的关联跳过；品项无默认供应商时将首个绑定设为默认
     /// </summary>
     public async Task<ApiResponseDto<List<ProductSupplierDto>>> BindProductsAsync(BindProductsDto dto)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<ProductSupplierDto>>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<List<ProductSupplierDto>>.Fail("无法确定当前门店", 401);
 
         var validation = await _bindProductsValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -241,29 +320,32 @@ public class SupplierAppService : ISupplierAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
+        var storeId = _currentUser.StoreId.Value;
+        var storeCode = _currentUser.StoreCode ?? string.Empty;
         var now = DateTime.Now;
 
-        // 校验供应商存在
+        // 校验供应商存在（门店内）
         var supplierExists = await _dbContext.Suppliers
-            .AnyAsync(s => s.Id == dto.SupplierId && !s.IsDeleted && s.TenantId == tenantId);
+            .AnyAsync(s => s.Id == dto.SupplierId && !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId);
         if (!supplierExists)
             return ApiResponseDto<List<ProductSupplierDto>>.Fail("供应商不存在", 404);
 
-        // 校验所有品项存在（去重后查询）
+        // 校验所有品项存在（去重后查询，门店内）
         var productIds = dto.ProductIds.Distinct().ToList();
         var existingProductIds = await _dbContext.Products
-            .Where(p => productIds.Contains(p.Id) && !p.IsDeleted && p.TenantId == tenantId)
+            .Where(p => productIds.Contains(p.Id) && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId)
             .Select(p => p.Id)
             .ToListAsync();
         var invalidProductIds = productIds.Except(existingProductIds).ToList();
         if (invalidProductIds.Any())
             return ApiResponseDto<List<ProductSupplierDto>>.Fail($"以下品项不存在：{string.Join(",", invalidProductIds)}", 404);
 
-        // 查询已存在的关联（避免重复绑定）
+        // 查询已存在的关联（避免重复绑定，门店内）
         var existingRelations = await _dbContext.ProductSuppliers
             .Where(ps => ps.SupplierId == dto.SupplierId
                 && productIds.Contains(ps.ProductId)
-                && ps.TenantId == tenantId)
+                && ps.TenantId == tenantId
+                && ps.StoreId == storeId)
             .ToListAsync();
         var existingProductIdsBound = existingRelations.Select(ps => ps.ProductId).ToHashSet();
 
@@ -271,9 +353,9 @@ public class SupplierAppService : ISupplierAppService
         var createdEntities = new List<ProductSupplier>();
         foreach (var productId in toCreate)
         {
-            // 品项当前是否已有默认供应商（决定本次绑定是否设为默认）
+            // 品项当前是否已有默认供应商（决定本次绑定是否设为默认，门店内）
             var hasDefault = await _dbContext.ProductSuppliers
-                .AnyAsync(ps => ps.ProductId == productId && ps.IsDefault && ps.TenantId == tenantId);
+                .AnyAsync(ps => ps.ProductId == productId && ps.IsDefault && ps.TenantId == tenantId && ps.StoreId == storeId);
             var isDefault = !hasDefault;
 
             var relation = new ProductSupplier
@@ -285,35 +367,25 @@ public class SupplierAppService : ISupplierAppService
                 LeadTimeDays = 0,
                 TenantId = tenantId,
                 TenantCode = tenantCode,
+                StoreId = storeId,
+                StoreCode = storeCode,
                 CreatedTime = now
             };
             _dbContext.ProductSuppliers.Add(relation);
             createdEntities.Add(relation);
-
-            // 设为默认时同步写入 Product.SupplierId 冗余字段
-            if (isDefault)
-            {
-                var product = await _dbContext.Products
-                    .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId);
-                if (product != null)
-                {
-                    product.SupplierId = dto.SupplierId;
-                    product.UpdatedTime = now;
-                }
-            }
         }
 
         if (createdEntities.Any())
             await _dbContext.SaveChangesAsync();
 
-        // 返回本次绑定的关联记录（含品项编码/名称），按租户隔离查询
+        // 返回本次绑定的关联记录（含品项编码/名称），按门店隔离查询
         var boundProductIds = createdEntities.Select(ps => ps.ProductId).ToList();
         var productsInfo = await _dbContext.Products
-            .Where(p => boundProductIds.Contains(p.Id) && p.TenantId == tenantId)
+            .Where(p => boundProductIds.Contains(p.Id) && p.TenantId == tenantId && p.StoreId == storeId)
             .Select(p => new { p.Id, p.Code, p.Name })
             .ToListAsync();
         var supplierInfo = await _dbContext.Suppliers
-            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId)
+            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId && s.StoreId == storeId)
             .Select(s => new { s.Code, s.Name })
             .FirstOrDefaultAsync();
         if (supplierInfo == null)
@@ -348,18 +420,20 @@ public class SupplierAppService : ISupplierAppService
 
     /// <summary>
     /// 解除品项与供应商的关联
-    /// 业务规则：物理删除关联记录；若解除的是默认供应商，自动将下一个关联设为新默认并同步 Product.SupplierId
+    /// 业务规则：物理删除关联记录；若解除的是默认供应商，自动将下一个关联设为新默认
     /// </summary>
     public async Task<ApiResponseDto> UnbindProductAsync(long productId, long supplierId)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto.Fail("无法确定当前门店", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var relation = await _dbContext.ProductSuppliers
             .FirstOrDefaultAsync(ps => ps.ProductId == productId
                 && ps.SupplierId == supplierId
-                && ps.TenantId == tenantId);
+                && ps.TenantId == tenantId
+                && ps.StoreId == storeId);
         if (relation == null)
             return ApiResponseDto.Fail("品项与供应商未建立关联", 404);
 
@@ -370,16 +444,9 @@ public class SupplierAppService : ISupplierAppService
         if (wasDefault)
         {
             var nextRelation = await _dbContext.ProductSuppliers
-                .Where(ps => ps.ProductId == productId && ps.TenantId == tenantId && ps.SupplierId != supplierId)
+                .Where(ps => ps.ProductId == productId && ps.TenantId == tenantId && ps.StoreId == storeId && ps.SupplierId != supplierId)
                 .OrderBy(ps => ps.CreatedTime)
                 .FirstOrDefaultAsync();
-            var product = await _dbContext.Products
-                .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId);
-            if (product != null)
-            {
-                product.SupplierId = nextRelation?.SupplierId;
-                product.UpdatedTime = DateTime.Now;
-            }
             if (nextRelation != null)
             {
                 nextRelation.IsDefault = true;
@@ -393,30 +460,32 @@ public class SupplierAppService : ISupplierAppService
 
     /// <summary>
     /// 设置品项的默认供应商
-    /// 业务规则：自动取消旧默认，同步写入 Product.SupplierId 冗余字段；可选更新参考价与供货周期
+    /// 业务规则：自动取消旧默认；可选更新参考价与供货周期
     /// </summary>
     public async Task<ApiResponseDto<ProductSupplierDto>> SetDefaultSupplierAsync(SetDefaultSupplierDto dto)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ProductSupplierDto>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<ProductSupplierDto>.Fail("无法确定当前门店", 401);
 
         var validation = await _setDefaultSupplierValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<ProductSupplierDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var relation = await _dbContext.ProductSuppliers
             .FirstOrDefaultAsync(ps => ps.ProductId == dto.ProductId
                 && ps.SupplierId == dto.SupplierId
-                && ps.TenantId == tenantId);
+                && ps.TenantId == tenantId
+                && ps.StoreId == storeId);
         if (relation == null)
             return ApiResponseDto<ProductSupplierDto>.Fail("品项与供应商未建立关联，请先绑定", 404);
 
         var now = DateTime.Now;
 
-        // 取消旧默认（一个品项仅一个默认供应商）
+        // 取消旧默认（一个品项仅一个默认供应商，门店内）
         var oldDefaults = await _dbContext.ProductSuppliers
-            .Where(ps => ps.ProductId == dto.ProductId && ps.IsDefault && ps.SupplierId != dto.SupplierId && ps.TenantId == tenantId)
+            .Where(ps => ps.ProductId == dto.ProductId && ps.IsDefault && ps.SupplierId != dto.SupplierId && ps.TenantId == tenantId && ps.StoreId == storeId)
             .ToListAsync();
         foreach (var old in oldDefaults)
         {
@@ -431,24 +500,15 @@ public class SupplierAppService : ISupplierAppService
             relation.LeadTimeDays = dto.LeadTimeDays.Value;
         relation.UpdatedTime = now;
 
-        // 同步 Product.SupplierId 冗余字段，保证采购下单时按 Product.SupplierId 过滤与默认供应商一致
-        var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == dto.ProductId && p.TenantId == tenantId);
-        if (product != null)
-        {
-            product.SupplierId = dto.SupplierId;
-            product.UpdatedTime = now;
-        }
-
         await _dbContext.SaveChangesAsync();
 
-        // 组装返回 DTO（含品项与供应商编码/名称），按租户隔离查询
+        // 组装返回 DTO（含品项与供应商编码/名称），按门店隔离查询
         var productInfo = await _dbContext.Products
-            .Where(p => p.Id == dto.ProductId && p.TenantId == tenantId)
+            .Where(p => p.Id == dto.ProductId && p.TenantId == tenantId && p.StoreId == storeId)
             .Select(p => new { p.Code, p.Name })
             .FirstOrDefaultAsync();
         var supplierInfo = await _dbContext.Suppliers
-            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId)
+            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId && s.StoreId == storeId)
             .Select(s => new { s.Code, s.Name })
             .FirstOrDefaultAsync();
 
@@ -475,17 +535,18 @@ public class SupplierAppService : ISupplierAppService
     /// </summary>
     public async Task<ApiResponseDto<List<ProductSupplierDto>>> GetProductsBySupplierAsync(long supplierId)
     {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<ProductSupplierDto>>.Fail("无法确定当前租户", 401);
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<List<ProductSupplierDto>>.Fail("无法确定当前门店", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var supplierExists = await _dbContext.Suppliers
-            .AnyAsync(s => s.Id == supplierId && !s.IsDeleted && s.TenantId == tenantId);
+            .AnyAsync(s => s.Id == supplierId && !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId);
         if (!supplierExists)
             return ApiResponseDto<List<ProductSupplierDto>>.Fail("供应商不存在", 404);
 
         var relations = await _dbContext.ProductSuppliers
-            .Where(ps => ps.SupplierId == supplierId && ps.TenantId == tenantId)
+            .Where(ps => ps.SupplierId == supplierId && ps.TenantId == tenantId && ps.StoreId == storeId)
             .OrderByDescending(ps => ps.IsDefault)
             .ThenByDescending(ps => ps.CreatedTime)
             .ToListAsync();
@@ -493,9 +554,9 @@ public class SupplierAppService : ISupplierAppService
             return ApiResponseDto<List<ProductSupplierDto>>.Ok(new List<ProductSupplierDto>());
 
         var productIds = relations.Select(ps => ps.ProductId).ToList();
-        // 过滤已软删除品项，避免展示无效关联；按租户隔离查询
+        // 过滤已软删除品项，避免展示无效关联；按门店隔离查询
         var productsInfo = await _dbContext.Products
-            .Where(p => productIds.Contains(p.Id) && p.TenantId == tenantId && !p.IsDeleted)
+            .Where(p => productIds.Contains(p.Id) && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted)
             .Select(p => new { p.Id, p.Code, p.Name })
             .ToListAsync();
 
@@ -517,5 +578,30 @@ public class SupplierAppService : ISupplierAppService
             };
         }).ToList();
         return ApiResponseDto<List<ProductSupplierDto>>.Ok(result);
+    }
+
+    /// <summary>
+    /// 获取供应商轻量选项列表（不分页，仅返回 Id/Name）
+    /// 仅按 TenantId + StoreId 过滤，排除已软删除供应商
+    /// </summary>
+    public async Task<ApiResponseDto<List<SupplierOptionDto>>> GetOptionsAsync()
+    {
+        if (!_currentUser.TenantId.HasValue)
+            return ApiResponseDto<List<SupplierOptionDto>>.Fail("无法确定当前租户", 401);
+
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
+
+        var options = await _dbContext.Suppliers
+            .Where(s => !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId)
+            .OrderBy(s => s.Name)
+            .Select(s => new SupplierOptionDto
+            {
+                Id = s.Id,
+                Name = s.Name
+            })
+            .ToListAsync();
+
+        return ApiResponseDto<List<SupplierOptionDto>>.Ok(options);
     }
 }
