@@ -83,8 +83,8 @@ export async function createOutbound(data: OutboundRequest): Promise<InventoryLo
  * 注意：ProductsController 路由前缀为 api/store/product/[controller]，与其他控制器不同
  * @returns 商品选项数组
  */
-export async function getProductOptions(): Promise<{ id: number; name: string; code: string; unit: string }[]> {
-  return request<{ id: number; name: string; code: string; unit: string }[]>('/product/products/options')
+export async function getProductOptions(): Promise<{ id: number; name: string; code: string; unit?: string }[]> {
+  return request<{ id: number; name: string; code: string; unit?: string }[]>('/product/products/options')
 }
 
 /**
