@@ -16,6 +16,44 @@ namespace Bms.Store.Infrastructure.Migrations
                 name: "bms_store");
 
             migrationBuilder.CreateTable(
+                name: "CrossStoreOperationLogs",
+                schema: "bms_store",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    OperationType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    OperatorId = table.Column<long>(type: "bigint", nullable: false),
+                    OperatorName = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    RequestIp = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    UserAgent = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OperationTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    CustomerId = table.Column<long>(type: "bigint", nullable: false),
+                    CustomerName = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    CustomerPhoneTail = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: true),
+                    HomeStoreId = table.Column<long>(type: "bigint", nullable: true),
+                    HomeStoreName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    IsCrossStore = table.Column<bool>(type: "boolean", nullable: false),
+                    RelatedEntityId = table.Column<long>(type: "bigint", nullable: true),
+                    RelatedEntitySnapshot = table.Column<string>(type: "text", nullable: true),
+                    FromCustomerId = table.Column<long>(type: "bigint", nullable: true),
+                    ToCustomerId = table.Column<long>(type: "bigint", nullable: true),
+                    Remark = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CreatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    UpdatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    CreatedBy = table.Column<long>(type: "bigint", nullable: true),
+                    UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
+                    TenantId = table.Column<long>(type: "bigint", nullable: false),
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CrossStoreOperationLogs", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "CustomerDeleteLogs",
                 schema: "bms_store",
                 columns: table => new
@@ -34,7 +72,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -442,6 +482,27 @@ namespace Bms.Store.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "StoreTenantSettings",
+                schema: "bms_store",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AllowCrossStoreVerify = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    UpdatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedBy = table.Column<long>(type: "bigint", nullable: true),
+                    UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
+                    TenantId = table.Column<long>(type: "bigint", nullable: false),
+                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_StoreTenantSettings", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Suppliers",
                 schema: "bms_store",
                 columns: table => new
@@ -507,8 +568,6 @@ namespace Bms.Store.Infrastructure.Migrations
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    StoreId = table.Column<long>(type: "bigint", nullable: true),
-                    StoreCode = table.Column<string>(type: "text", nullable: true),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     ServiceItems = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
@@ -523,11 +582,37 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_TreatmentCards", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserStores",
+                schema: "bms_store",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    UserName = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    RealName = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    CreatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    UpdatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedBy = table.Column<long>(type: "bigint", nullable: true),
+                    UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
+                    TenantId = table.Column<long>(type: "bigint", nullable: false),
+                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserStores", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -635,7 +720,6 @@ namespace Bms.Store.Infrastructure.Migrations
                     OverstockThreshold = table.Column<decimal>(type: "numeric(18,4)", precision: 18, scale: 4, nullable: true),
                     Specification = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Brand = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    SupplierId = table.Column<long>(type: "bigint", nullable: true),
                     Status = table.Column<int>(type: "integer", nullable: false),
                     IsSalable = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     ImageUrl = table.Column<string>(type: "text", nullable: true),
@@ -1126,7 +1210,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1192,8 +1278,6 @@ namespace Bms.Store.Infrastructure.Migrations
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    StoreId = table.Column<long>(type: "bigint", nullable: true),
-                    StoreCode = table.Column<string>(type: "text", nullable: true),
                     CardId = table.Column<long>(type: "bigint", nullable: false),
                     CustomerId = table.Column<long>(type: "bigint", nullable: false),
                     PurchaseDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -1205,10 +1289,13 @@ namespace Bms.Store.Infrastructure.Migrations
                     Remark = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CreatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     UpdatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1669,7 +1756,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1920,7 +2009,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1948,8 +2039,6 @@ namespace Bms.Store.Infrastructure.Migrations
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    StoreId = table.Column<long>(type: "bigint", nullable: true),
-                    StoreCode = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     CardSaleId = table.Column<long>(type: "bigint", nullable: false),
                     FromCustomerId = table.Column<long>(type: "bigint", nullable: false),
                     ToCustomerId = table.Column<long>(type: "bigint", nullable: false),
@@ -1963,7 +2052,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1998,21 +2089,23 @@ namespace Bms.Store.Infrastructure.Migrations
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    StoreId = table.Column<long>(type: "bigint", nullable: true),
-                    StoreCode = table.Column<string>(type: "text", nullable: true),
                     CardSaleId = table.Column<long>(type: "bigint", nullable: false),
                     VerifyAmount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     VerifyTimes = table.Column<int>(type: "integer", nullable: false),
                     OrderId = table.Column<long>(type: "bigint", nullable: true),
                     VerifyTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     OperatorId = table.Column<long>(type: "bigint", nullable: true),
+                    IsCrossStore = table.Column<bool>(type: "boolean", nullable: false),
+                    ReverseStatus = table.Column<int>(type: "integer", nullable: false),
                     Remark = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CreatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     UpdatedTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2312,7 +2405,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     CreatedBy = table.Column<long>(type: "bigint", nullable: true),
                     UpdatedBy = table.Column<long>(type: "bigint", nullable: true),
                     TenantId = table.Column<long>(type: "bigint", nullable: false),
-                    TenantCode = table.Column<string>(type: "text", nullable: false)
+                    TenantCode = table.Column<string>(type: "text", nullable: false),
+                    StoreId = table.Column<long>(type: "bigint", nullable: false),
+                    StoreCode = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2449,6 +2544,18 @@ namespace Bms.Store.Infrastructure.Migrations
                 columns: new[] { "TenantId", "StoreId" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_CrossStoreOperationLogs_TenantId_OperationTime",
+                schema: "bms_store",
+                table: "CrossStoreOperationLogs",
+                columns: new[] { "TenantId", "OperationTime" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CrossStoreOperationLogs_TenantId_OperationType_OperationTime",
+                schema: "bms_store",
+                table: "CrossStoreOperationLogs",
+                columns: new[] { "TenantId", "OperationType", "OperationTime" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_CustomerBeautyProfiles_CustomerId",
                 schema: "bms_store",
                 table: "CustomerBeautyProfiles",
@@ -2473,10 +2580,10 @@ namespace Bms.Store.Infrastructure.Migrations
                 column: "OriginalCustomerId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_CustomerDeleteLogs_TenantId",
+                name: "IX_CustomerDeleteLogs_TenantId_StoreId",
                 schema: "bms_store",
                 table: "CustomerDeleteLogs",
-                column: "TenantId");
+                columns: new[] { "TenantId", "StoreId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_CustomerLevels_Code",
@@ -3042,16 +3149,16 @@ namespace Bms.Store.Infrastructure.Migrations
                 column: "SupplierId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ProductSuppliers_TenantId_IsDefault",
+                name: "IX_ProductSuppliers_TenantId_StoreId_IsDefault",
                 schema: "bms_store",
                 table: "ProductSuppliers",
-                columns: new[] { "TenantId", "IsDefault" });
+                columns: new[] { "TenantId", "StoreId", "IsDefault" });
 
             migrationBuilder.CreateIndex(
-                name: "UX_ProductSuppliers_Product_Supplier_Tenant",
+                name: "UX_ProductSuppliers_Product_Supplier_Tenant_Store",
                 schema: "bms_store",
                 table: "ProductSuppliers",
-                columns: new[] { "ProductId", "SupplierId", "TenantId" },
+                columns: new[] { "ProductId", "SupplierId", "TenantId", "StoreId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -3438,6 +3545,12 @@ namespace Bms.Store.Infrastructure.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_StoredValueAccounts_TenantId_StoreId",
+                schema: "bms_store",
+                table: "StoredValueAccounts",
+                columns: new[] { "TenantId", "StoreId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_StoredValueLogs_CustomerId",
                 schema: "bms_store",
                 table: "StoredValueLogs",
@@ -3486,6 +3599,14 @@ namespace Bms.Store.Infrastructure.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
+                name: "UX_StoreTenantSettings_Tenant",
+                schema: "bms_store",
+                table: "StoreTenantSettings",
+                column: "TenantId",
+                unique: true,
+                filter: "\"IsDeleted\" = false");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Suppliers_Code",
                 schema: "bms_store",
                 table: "Suppliers",
@@ -3502,6 +3623,13 @@ namespace Bms.Store.Infrastructure.Migrations
                 schema: "bms_store",
                 table: "Suppliers",
                 columns: new[] { "TenantId", "StoreId" });
+
+            migrationBuilder.CreateIndex(
+                name: "UX_Suppliers_Code_Tenant_Store_Deleted",
+                schema: "bms_store",
+                table: "Suppliers",
+                columns: new[] { "Code", "TenantId", "StoreId", "IsDeleted" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Technicians_Phone",
@@ -3595,6 +3723,12 @@ namespace Bms.Store.Infrastructure.Migrations
                 columns: new[] { "TenantId", "SaleId" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_TreatmentCardSaleItems_TenantId_StoreId",
+                schema: "bms_store",
+                table: "TreatmentCardSaleItems",
+                columns: new[] { "TenantId", "StoreId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_TreatmentCardSales_CardId",
                 schema: "bms_store",
                 table: "TreatmentCardSales",
@@ -3679,6 +3813,12 @@ namespace Bms.Store.Infrastructure.Migrations
                 column: "ProductId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_TreatmentCardVerifyItems_TenantId_StoreId",
+                schema: "bms_store",
+                table: "TreatmentCardVerifyItems",
+                columns: new[] { "TenantId", "StoreId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_TreatmentCardVerifyItems_TenantId_VerifyId",
                 schema: "bms_store",
                 table: "TreatmentCardVerifyItems",
@@ -3689,6 +3829,26 @@ namespace Bms.Store.Infrastructure.Migrations
                 schema: "bms_store",
                 table: "TreatmentCardVerifyItems",
                 column: "VerifyId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserStores_Tenant_Store",
+                schema: "bms_store",
+                table: "UserStores",
+                columns: new[] { "TenantId", "StoreId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserStores_Tenant_User",
+                schema: "bms_store",
+                table: "UserStores",
+                columns: new[] { "TenantId", "UserId" });
+
+            migrationBuilder.CreateIndex(
+                name: "UX_UserStores_UserId_StoreId",
+                schema: "bms_store",
+                table: "UserStores",
+                columns: new[] { "UserId", "StoreId" },
+                unique: true,
+                filter: "\"IsDeleted\" = false");
         }
 
         /// <inheritdoc />
@@ -3708,6 +3868,10 @@ namespace Bms.Store.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "CourseCardItems",
+                schema: "bms_store");
+
+            migrationBuilder.DropTable(
+                name: "CrossStoreOperationLogs",
                 schema: "bms_store");
 
             migrationBuilder.DropTable(
@@ -3843,6 +4007,10 @@ namespace Bms.Store.Infrastructure.Migrations
                 schema: "bms_store");
 
             migrationBuilder.DropTable(
+                name: "StoreTenantSettings",
+                schema: "bms_store");
+
+            migrationBuilder.DropTable(
                 name: "TechnicianSkills",
                 schema: "bms_store");
 
@@ -3860,6 +4028,10 @@ namespace Bms.Store.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "TreatmentCardVerifyItems",
+                schema: "bms_store");
+
+            migrationBuilder.DropTable(
+                name: "UserStores",
                 schema: "bms_store");
 
             migrationBuilder.DropTable(
