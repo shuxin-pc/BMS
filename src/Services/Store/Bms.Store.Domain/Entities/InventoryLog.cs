@@ -67,7 +67,17 @@ public class InventoryLog : StoreBusinessEntityBase
     public string? Remark { get; set; }
 
     /// <summary>
+    /// 操作人姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 导航属性：商品
     /// </summary>
     public Product? Product { get; set; }
+
+    /// <summary>
+    /// 导航属性：供应商
+    /// </summary>
+    public Supplier? Supplier { get; set; }
 }
