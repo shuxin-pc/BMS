@@ -167,33 +167,62 @@ public class InboundAppService : IInboundAppService
 
         // 事务已提交，重新查询填充显示字段（移出 try 块：若此查询失败，数据已落库，
         // 不应回滚已提交事务或返回 500 让用户误重试导致重复入库）
-        var logWithNav = await _dbContext.InventoryLogs
-            .Include(l => l.Product)
-            .Include(l => l.Supplier)
-            .FirstAsync(l => l.Id == log.Id);
-
-        var result = new InventoryLogDto
+        try
         {
-            Id = logWithNav.Id,
-            ProductId = logWithNav.ProductId,
-            Type = logWithNav.Type,
-            SourceType = logWithNav.SourceType,
-            SupplierId = logWithNav.SupplierId,
-            UnitPrice = logWithNav.UnitPrice,
-            Quantity = logWithNav.Quantity,
-            BeforeQuantity = logWithNav.BeforeQuantity,
-            AfterQuantity = logWithNav.AfterQuantity,
-            BatchNo = logWithNav.BatchNo,
-            ExpirationDate = logWithNav.ExpirationDate,
-            RelatedId = logWithNav.RelatedId,
-            Remark = logWithNav.Remark,
-            CreatedAt = logWithNav.CreatedTime,
-            UpdatedAt = logWithNav.UpdatedTime,
-            ProductName = logWithNav.Product?.Name,
-            ProductCode = logWithNav.Product?.Code,
-            SupplierName = logWithNav.Supplier?.Name,
-            OperatorName = logWithNav.OperatorName
-        };
-        return ApiResponseDto<InventoryLogDto>.Ok(result, "入库成功");
+            var logWithNav = await _dbContext.InventoryLogs
+                .Include(l => l.Product)
+                .Include(l => l.Supplier)
+                .FirstAsync(l => l.Id == log.Id);
+
+            var result = new InventoryLogDto
+            {
+                Id = logWithNav.Id,
+                ProductId = logWithNav.ProductId,
+                Type = logWithNav.Type,
+                SourceType = logWithNav.SourceType,
+                SupplierId = logWithNav.SupplierId,
+                UnitPrice = logWithNav.UnitPrice,
+                Quantity = logWithNav.Quantity,
+                BeforeQuantity = logWithNav.BeforeQuantity,
+                AfterQuantity = logWithNav.AfterQuantity,
+                BatchNo = logWithNav.BatchNo,
+                ExpirationDate = logWithNav.ExpirationDate,
+                RelatedId = logWithNav.RelatedId,
+                Remark = logWithNav.Remark,
+                CreatedAt = logWithNav.CreatedTime,
+                UpdatedAt = logWithNav.UpdatedTime,
+                ProductName = logWithNav.Product?.Name,
+                ProductCode = logWithNav.Product?.Code,
+                SupplierName = logWithNav.Supplier?.Name,
+                OperatorName = logWithNav.OperatorName
+            };
+            return ApiResponseDto<InventoryLogDto>.Ok(result, "入库成功");
+        }
+        catch (Exception ex)
+        {
+            // 重查询失败但数据已落库：从已提交的 log 对象构建基本 DTO（缺少显示字段），
+            // 返回成功避免用户误重试导致重复入库
+            _logger.LogWarning(ex, "入库已成功但显示字段查询失败：LogId={LogId}", log.Id);
+            var fallback = new InventoryLogDto
+            {
+                Id = log.Id,
+                ProductId = log.ProductId,
+                Type = log.Type,
+                SourceType = log.SourceType,
+                SupplierId = log.SupplierId,
+                UnitPrice = log.UnitPrice,
+                Quantity = log.Quantity,
+                BeforeQuantity = log.BeforeQuantity,
+                AfterQuantity = log.AfterQuantity,
+                BatchNo = log.BatchNo,
+                ExpirationDate = log.ExpirationDate,
+                RelatedId = log.RelatedId,
+                Remark = log.Remark,
+                CreatedAt = log.CreatedTime,
+                UpdatedAt = log.UpdatedTime,
+                OperatorName = log.OperatorName
+            };
+            return ApiResponseDto<InventoryLogDto>.Ok(fallback, "入库成功");
+        }
     }
 }
