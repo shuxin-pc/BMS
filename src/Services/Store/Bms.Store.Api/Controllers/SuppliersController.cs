@@ -95,4 +95,11 @@ public class SuppliersController : ControllerBase
     [HttpGet("{supplierId:long}/products")]
     public async Task<ApiResponseDto<List<ProductSupplierDto>>> GetProductsBySupplier(long supplierId)
         => await _appService.GetProductsBySupplierAsync(supplierId);
+
+    /// <summary>
+    /// 获取供应商轻量选项列表（不分页，用于下拉选择场景）
+    /// </summary>
+    [HttpGet("options")]
+    public async Task<ApiResponseDto<List<SupplierOptionDto>>> GetOptions()
+        => await _appService.GetOptionsAsync();
 }
