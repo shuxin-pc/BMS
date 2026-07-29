@@ -66,6 +66,11 @@
             <span class="quantity-negative">{{ formatNumber(row.quantity) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="出库来源" width="100" align="center">
+          <template #default="{ row }">
+            {{ row.sourceType ? (outboundSourceTypeMap[row.sourceType as OutboundSourceType] || '-') : '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作前库存" width="100" align="center">
           <template #default="{ row }">
             {{ formatNumber(row.beforeQuantity) }}
@@ -128,23 +133,77 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="出库来源" prop="sourceType">
+          <el-select
+            v-model="formData.sourceType"
+            placeholder="请选择出库来源"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="(label, value) in outboundSourceTypeMap"
+              :key="value"
+              :label="label"
+              :value="Number(value)"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="当前库存">
           <span class="current-stock">{{ currentStock }}</span>
         </el-form-item>
-        <el-form-item label="出库数量" prop="quantity">
-          <el-input-number
-            v-model="formData.quantity"
-            :min="0.01"
-            :max="typeof currentStock === 'number' ? currentStock : undefined"
-            :precision="2"
-            :step="1"
-            placeholder="请输入出库数量"
-            style="width: 100%"
-          />
+        <el-form-item label="扣减方式">
+          <el-radio-group v-model="deductMode">
+            <el-radio value="fefo">FEFO 自动</el-radio>
+            <el-radio value="manual">手动指定批次</el-radio>
+          </el-radio-group>
         </el-form-item>
-        <el-form-item label="出库后库存">
-          <span class="after-stock">{{ afterStockPreview }}</span>
-        </el-form-item>
+        <!-- FEFO 自动模式 -->
+        <template v-if="deductMode === 'fefo'">
+          <el-form-item label="出库数量" prop="quantity">
+            <el-input-number
+              v-model="formData.quantity"
+              :min="0.01"
+              :max="typeof currentStock === 'number' ? currentStock : undefined"
+              :precision="2"
+              :step="1"
+              placeholder="请输入出库数量"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item label="出库后库存">
+            <span class="after-stock">{{ afterStockPreview }}</span>
+          </el-form-item>
+        </template>
+        <!-- 手动指定模式 -->
+        <template v-else>
+          <el-form-item label="批次扣减">
+            <el-table :data="batchOptions" border size="small" style="width: 100%">
+              <el-table-column prop="batchNo" label="批次号" width="120" />
+              <el-table-column label="过期日期" width="120">
+                <template #default="{ row }">
+                  {{ row.expirationDate ? row.expirationDate.split('T')[0] : '无效期' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="quantity" label="可用数量" width="100" align="center" />
+              <el-table-column label="扣减数量" width="150">
+                <template #default="{ row }">
+                  <el-input-number
+                    :model-value="getBatchDeductQty(row.id)"
+                    :min="0"
+                    :max="row.quantity"
+                    :precision="2"
+                    :step="1"
+                    size="small"
+                    style="width: 130px"
+                    @update:model-value="(val: number) => setBatchDeductQty(row.id, val)"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="batch-summary">
+              合计扣减：{{ totalBatchDeduct }} / 可用 {{ currentStock }}
+            </div>
+          </el-form-item>
+        </template>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入出库原因/备注信息" />
         </el-form-item>
@@ -167,10 +226,12 @@ import {
   getInventoryLogList,
   createOutbound,
   getProductOptions,
-  getProductStock
+  getProductStock,
+  getProductBatches,
+  outboundSourceTypeMap
 } from '@/api/inventory-ops'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { InventoryLog } from '@/api/inventory-ops/types'
+import type { InventoryLog, OutboundSourceType, InventoryBatchOption } from '@/api/inventory-ops/types'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -243,21 +304,40 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 const currentStock = ref<number | string>('--')
 
+// 扣减方式：FEFO 自动 / 手动指定
+type DeductMode = 'fefo' | 'manual'
+const deductMode = ref<DeductMode>('fefo')
+
+// 出库来源
 const formData = reactive({
   productId: undefined as number | undefined,
+  sourceType: 6 as OutboundSourceType, // 默认"其他"
   quantity: 0,
-  remark: ''
+  remark: '',
+  batchItems: [] as { batchId: number; quantity: number }[]
 })
 
-const formRules: FormRules = {
-  productId: [
-    { required: true, message: '请选择商品', trigger: 'change' }
-  ],
-  quantity: [
-    { required: true, message: '请输入出库数量', trigger: 'blur' },
-    { type: 'number', min: 0.01, message: '出库数量必须大于0', trigger: 'blur' }
-  ]
-}
+// 在库批次列表（手动模式使用）
+const batchOptions = ref<InventoryBatchOption[]>([])
+
+const formRules = computed<FormRules>(() => {
+  const rules: FormRules = {
+    productId: [
+      { required: true, message: '请选择商品', trigger: 'change' }
+    ],
+    sourceType: [
+      { required: true, message: '请选择出库来源', trigger: 'change' }
+    ]
+  }
+  // FEFO 模式才校验出库数量
+  if (deductMode.value === 'fefo') {
+    rules.quantity = [
+      { required: true, message: '请输入出库数量', trigger: 'blur' },
+      { type: 'number', min: 0.01, message: '出库数量必须大于0', trigger: 'blur' }
+    ]
+  }
+  return rules
+})
 
 // 出库后库存预览
 const afterStockPreview = computed(() => {
@@ -271,22 +351,55 @@ const afterStockPreview = computed(() => {
   return '--'
 })
 
+// 获取指定批次的扣减数量
+const getBatchDeductQty = (batchId: number): number => {
+  const item = formData.batchItems.find(i => i.batchId === batchId)
+  return item?.quantity || 0
+}
+
+// 设置指定批次的扣减数量
+const setBatchDeductQty = (batchId: number, qty: number) => {
+  const idx = formData.batchItems.findIndex(i => i.batchId === batchId)
+  if (qty > 0) {
+    if (idx >= 0) {
+      formData.batchItems[idx].quantity = qty
+    } else {
+      formData.batchItems.push({ batchId, quantity: qty })
+    }
+  } else {
+    if (idx >= 0) formData.batchItems.splice(idx, 1)
+  }
+}
+
+// 手动模式合计扣减数量
+const totalBatchDeduct = computed(() => {
+  return formData.batchItems.reduce((sum, i) => sum + i.quantity, 0)
+})
+
 // 商品选择变化时加载当前库存
 const handleProductChange = async (productId: number) => {
   try {
     const stock = await getProductStock(productId)
     currentStock.value = stock
+    // 加载在库批次列表（手动模式使用）
+    batchOptions.value = await getProductBatches(productId)
+    formData.batchItems = []
   } catch (error) {
     currentStock.value = '--'
+    batchOptions.value = []
   }
 }
 
 // 重置表单
 const resetFormData = () => {
   formData.productId = undefined
+  formData.sourceType = 6
   formData.quantity = 0
   formData.remark = ''
+  formData.batchItems = []
   currentStock.value = '--'
+  batchOptions.value = []
+  deductMode.value = 'fefo'
 }
 
 // 新增
@@ -301,17 +414,38 @@ const handleSubmit = async () => {
   await formRef.value.validate(async (valid) => {
     if (valid) {
       // 二次校验库存是否充足
-      if (typeof currentStock.value === 'number' && formData.quantity > currentStock.value) {
-        ElMessage.error('出库数量不能超过当前库存')
-        return
+      if (deductMode.value === 'fefo') {
+        if (typeof currentStock.value === 'number' && formData.quantity > currentStock.value) {
+          ElMessage.error('出库数量不能超过当前库存')
+          return
+        }
+      } else {
+        // 手动模式：校验是否选择了批次
+        const validItems = formData.batchItems.filter(i => i.quantity > 0)
+        if (validItems.length === 0) {
+          ElMessage.error('请至少选择一个批次并填写扣减数量')
+          return
+        }
       }
+
       submitLoading.value = true
       try {
-        await createOutbound({
-          productId: formData.productId!,
-          quantity: formData.quantity,
-          remark: formData.remark || undefined
-        })
+        if (deductMode.value === 'fefo') {
+          await createOutbound({
+            productId: formData.productId!,
+            sourceType: formData.sourceType,
+            quantity: formData.quantity,
+            remark: formData.remark || undefined
+          })
+        } else {
+          const validItems = formData.batchItems.filter(i => i.quantity > 0)
+          await createOutbound({
+            productId: formData.productId!,
+            sourceType: formData.sourceType,
+            batchItems: validItems,
+            remark: formData.remark || undefined
+          })
+        }
         ElMessage.success('出库成功')
         dialogVisible.value = false
         loadData()
@@ -449,5 +583,13 @@ onMounted(async () => {
 .after-stock {
   font-weight: 600;
   color: var(--el-color-warning);
+}
+
+/* 批次扣减汇总 */
+.batch-summary {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-align: right;
 }
 </style>
