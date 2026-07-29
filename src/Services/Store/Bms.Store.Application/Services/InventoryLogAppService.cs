@@ -112,10 +112,35 @@ public class InventoryLogAppService : IInventoryLogAppService
             return ApiResponseDto<InventoryLogDto?>.Fail("无法确定当前租户或门店", 401);
 
         var entity = await _dbContext.InventoryLogs
+            .Include(l => l.Product)
+            .Include(l => l.Supplier)
             .FirstOrDefaultAsync(l => l.Id == id && l.TenantId == _currentUser.TenantId.Value && l.StoreId == _currentUser.StoreId.Value);
         if (entity == null)
             return ApiResponseDto<InventoryLogDto?>.Fail("库存流水不存在", 404);
-        return ApiResponseDto<InventoryLogDto?>.Ok(entity.Adapt<InventoryLogDto>());
+
+        var dto = new InventoryLogDto
+        {
+            Id = entity.Id,
+            ProductId = entity.ProductId,
+            Type = entity.Type,
+            SourceType = entity.SourceType,
+            SupplierId = entity.SupplierId,
+            UnitPrice = entity.UnitPrice,
+            Quantity = entity.Quantity,
+            BeforeQuantity = entity.BeforeQuantity,
+            AfterQuantity = entity.AfterQuantity,
+            BatchNo = entity.BatchNo,
+            ExpirationDate = entity.ExpirationDate,
+            RelatedId = entity.RelatedId,
+            Remark = entity.Remark,
+            CreatedAt = entity.CreatedTime,
+            UpdatedAt = entity.UpdatedTime,
+            ProductName = entity.Product?.Name,
+            ProductCode = entity.Product?.Code,
+            SupplierName = entity.Supplier?.Name,
+            OperatorName = entity.OperatorName
+        };
+        return ApiResponseDto<InventoryLogDto?>.Ok(dto);
     }
 
     /// <summary>
