@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IInventoryCheckAppService, InventoryCheckAppService>();
         services.AddScoped<IInventoryLogAppService, InventoryLogAppService>();
         services.AddScoped<IInboundAppService, InboundAppService>();
+        services.AddScoped<IOutboundAppService, OutboundAppService>();
         services.AddScoped<IPurchaseReturnAppService, PurchaseReturnAppService>();
 
         // 储值、积分与疗程卡模块

@@ -16,11 +16,16 @@ public class InventoryLogsController : ControllerBase
 {
     private readonly IInventoryLogAppService _appService;
     private readonly IInboundAppService _inboundAppService;
+    private readonly IOutboundAppService _outboundAppService;
 
-    public InventoryLogsController(IInventoryLogAppService appService, IInboundAppService inboundAppService)
+    public InventoryLogsController(
+        IInventoryLogAppService appService,
+        IInboundAppService inboundAppService,
+        IOutboundAppService outboundAppService)
     {
         _appService = appService;
         _inboundAppService = inboundAppService;
+        _outboundAppService = outboundAppService;
     }
 
     /// <summary>
@@ -74,4 +79,11 @@ public class InventoryLogsController : ControllerBase
     [HttpPost("inbound")]
     public async Task<ApiResponseDto<InventoryLogDto>> Inbound([FromBody] InboundCreateDto dto)
         => await _inboundAppService.CreateAsync(dto);
+
+    /// <summary>
+    /// 出库（语义化端点，事务内按 FEFO 或手动指定扣减批次，写多条流水，更新汇总表）
+    /// </summary>
+    [HttpPost("outbound")]
+    public async Task<ApiResponseDto<OutboundResultDto>> Outbound([FromBody] OutboundCreateDto dto)
+        => await _outboundAppService.CreateAsync(dto);
 }
