@@ -1,12 +1,15 @@
 // 入库/出库操作 - API 服务
-// 入库相关函数对接后端真实端点；出库暂保留 Mock，下一期替换
+// 入库/出库相关函数均对接后端真实端点
 import type {
   InventoryLog,
   InventoryLogQuery,
   InboundRequest,
   OutboundRequest,
+  OutboundResult,
+  InventoryBatchOption,
   InventoryOpType,
   InboundSourceType,
+  OutboundSourceType,
   PagedResponse
 } from './types'
 import { request } from '../shared/storeRequest'
@@ -17,8 +20,11 @@ export type {
   InventoryLogQuery,
   InboundRequest,
   OutboundRequest,
+  OutboundResult,
+  InventoryBatchOption,
   InventoryOpType,
   InboundSourceType,
+  OutboundSourceType,
   PagedResponse
 }
 
@@ -56,25 +62,16 @@ export async function createInbound(data: InboundRequest): Promise<InventoryLog>
 }
 
 /**
- * 出库操作（Mock 实现，下一期做出库时替换为 POST /inventorylogs/outbound）
- * @param data 出库请求
- * @returns 创建后的库存日志
+ * 出库操作（事务内按 FEFO 或手动指定扣减批次，写多条流水，更新汇总表）
+ * 对接后端：POST /api/store/inventorylogs/outbound
+ * @param data 出库请求（quantity FEFO 模式 / batchItems 手动模式二选一）
+ * @returns 出库结果汇总（含批次扣减明细）
  */
-export async function createOutbound(data: OutboundRequest): Promise<InventoryLog> {
-  // Mock 实现：出库功能下一期对接后端
-  // 不依赖共享 Mock 状态，仅返回合成的日志对象
-  return {
-    id: 0,
-    productId: data.productId,
-    productName: '',
-    type: 2,
-    quantity: -data.quantity,
-    beforeQuantity: 0,
-    afterQuantity: 0,
-    remark: data.remark,
-    createdAt: new Date().toISOString(),
-    operatorName: '当前用户'
-  }
+export async function createOutbound(data: OutboundRequest): Promise<OutboundResult> {
+  return request<OutboundResult>('/inventorylogs/outbound', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
 }
 
 /**
@@ -113,6 +110,22 @@ export async function getProductStock(productId: number): Promise<number> {
 }
 
 /**
+ * 获取商品在库批次列表（用于手动指定批次模式的批次选择）
+ * 对接后端：GET /api/store/inventorybatches?productId={id}&status=1
+ * @param productId 商品ID
+ * @returns 在库批次列表（含批次号、过期日期、可用数量等）
+ */
+export async function getProductBatches(productId: number): Promise<InventoryBatchOption[]> {
+  const params = new URLSearchParams()
+  params.append('productId', String(productId))
+  params.append('status', '1')
+  params.append('pageSize', '100')
+  const result = await request<PagedResponse<InventoryBatchOption> | null>(`/inventorybatches?${params}`)
+  if (!result || !result.list) return []
+  return result.list
+}
+
+/**
  * 入库来源类型标签映射
  */
 export const inboundSourceTypeMap: Record<InboundSourceType, string> = {
@@ -120,6 +133,16 @@ export const inboundSourceTypeMap: Record<InboundSourceType, string> = {
   2: '退货入库',
   3: '盘点入库',
   4: '调拨入库'
+}
+
+/**
+ * 出库来源类型标签映射
+ */
+export const outboundSourceTypeMap: Record<OutboundSourceType, string> = {
+  3: '盘点盘亏',
+  6: '其他',
+  10: '样品领用',
+  11: '赠品活动'
 }
 
 /**
