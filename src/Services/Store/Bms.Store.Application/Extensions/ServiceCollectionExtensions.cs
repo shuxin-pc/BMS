@@ -52,7 +52,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IInventoryAlertAppService, InventoryAlertAppService>();
         services.AddScoped<IInventoryCheckAppService, InventoryCheckAppService>();
         services.AddScoped<IInventoryLogAppService, InventoryLogAppService>();
-        services.AddScoped<IInboundAppService, InboundAppService>();
         services.AddScoped<IOutboundAppService, OutboundAppService>();
         services.AddScoped<IPurchaseReturnAppService, PurchaseReturnAppService>();
 
@@ -83,16 +82,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoreTenantSettingAppService, StoreTenantSettingAppService>();
 
         // 统计、营销与样品赠品模块
+        services.AddScoped<IActivityAppService, ActivityAppService>();
         services.AddScoped<ITechnicianStatisticAppService, TechnicianStatisticAppService>();
         services.AddScoped<IDailyStatAppService, DailyStatAppService>();
         services.AddScoped<IMonthlyStatAppService, MonthlyStatAppService>();
         services.AddScoped<IDashboardAppService, DashboardAppService>();
         services.AddScoped<IProductExpirySalesStatAppService, ProductExpirySalesStatAppService>();
 
-        // 样品赠品档案、出库/领用模块
+        // 样品赠品档案、领用模块
         services.AddScoped<ISampleGiftAppService, SampleGiftAppService>();
-        services.AddScoped<ISampleGiftOutAppService, SampleGiftOutAppService>();
         services.AddScoped<ISampleGiftReceiveAppService, SampleGiftReceiveAppService>();
+        services.AddScoped<ISampleGiftTransferAppService, SampleGiftTransferAppService>();
         services.AddScoped<IServiceProductAppService, ServiceProductAppService>();
 
         // 注册 FluentValidation
