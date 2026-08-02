@@ -36,7 +36,7 @@ export type {
 
 /**
  * 获取样品赠品调拨单分页列表
- * 对接后端：GET /api/store/sample-gift-transfers
+ * 对接后端：GET /api/store/samplegifttransfers
  * @param query 查询参数
  * @returns 分页调拨单列表
  */
@@ -52,28 +52,28 @@ export async function getSampleGiftTransferList(query?: SampleGiftTransferQuery)
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })
-  return request<PagedResponse<SampleGiftTransfer>>(`/sample-gift-transfers${qs}`)
+  return request<PagedResponse<SampleGiftTransfer>>(`/samplegifttransfers${qs}`)
 }
 
 /**
  * 获取样品赠品调拨单详情（含明细列表）
- * 对接后端：GET /api/store/sample-gift-transfers/{id}
+ * 对接后端：GET /api/store/samplegifttransfers/{id}
  * @param id 调拨单ID
  * @returns 调拨单详情
  */
 export async function getSampleGiftTransferDetail(id: string): Promise<SampleGiftTransfer> {
-  return request<SampleGiftTransfer>(`/sample-gift-transfers/${id}`)
+  return request<SampleGiftTransfer>(`/samplegifttransfers/${id}`)
 }
 
 /**
  * 创建样品赠品调拨单（待调出状态，不调整库存）
- * 对接后端：POST /api/store/sample-gift-transfers
+ * 对接后端：POST /api/store/samplegifttransfers
  * 调拨单号由后端自动生成
  * @param data 创建请求
  * @returns 创建后的调拨单
  */
 export async function createSampleGiftTransfer(data: SampleGiftTransferCreate): Promise<SampleGiftTransfer> {
-  return request<SampleGiftTransfer>('/sample-gift-transfers', {
+  return request<SampleGiftTransfer>('/samplegifttransfers', {
     method: 'POST',
     body: JSON.stringify(data)
   })
@@ -81,20 +81,20 @@ export async function createSampleGiftTransfer(data: SampleGiftTransferCreate): 
 
 /**
  * 执行调拨（事务内调出门店扣减库存+调入门店增加库存，状态转为已调入）
- * 对接后端：POST /api/store/sample-gift-transfers/{id}/execute
+ * 对接后端：POST /api/store/samplegifttransfers/{id}/execute
  * @param id 调拨单ID
  */
 export async function executeSampleGiftTransfer(id: string): Promise<void> {
-  await request<void>(`/sample-gift-transfers/${id}/execute`, { method: 'POST' })
+  await request<void>(`/samplegifttransfers/${id}/execute`, { method: 'POST' })
 }
 
 /**
  * 取消调拨单（仅待调出状态可取消，已调入需走反向调拨单）
- * 对接后端：POST /api/store/sample-gift-transfers/{id}/cancel
+ * 对接后端：POST /api/store/samplegifttransfers/{id}/cancel
  * @param id 调拨单ID
  */
 export async function cancelSampleGiftTransfer(id: string): Promise<void> {
-  await request<void>(`/sample-gift-transfers/${id}/cancel`, { method: 'POST' })
+  await request<void>(`/samplegifttransfers/${id}/cancel`, { method: 'POST' })
 }
 
 /**
@@ -109,25 +109,25 @@ export async function getStoreOptions(): Promise<{ id: string; code: string; nam
 
 /**
  * 获取调出门店的样品/赠品商品选项（仅返回 Type∈{4,5} 且 Stock > 0 的商品）
- * 对接后端：GET /api/store/sample-gift-transfers/from-store-products?fromStoreId=xxx
+ * 对接后端：GET /api/store/samplegifttransfers/from-store-products?fromStoreId=xxx
  * @param fromStoreId 调出门店ID
  * @returns 商品选项数组（含库存量与商品类型）
  */
 export async function getFromStoreProducts(fromStoreId: string): Promise<SampleGiftTransferProductOption[]> {
   const qs = buildQuery({ fromStoreId })
-  return request<SampleGiftTransferProductOption[]>(`/sample-gift-transfers/from-store-products${qs}`)
+  return request<SampleGiftTransferProductOption[]>(`/samplegifttransfers/from-store-products${qs}`)
 }
 
 /**
  * 获取调出门店指定商品的在库批次列表（按过期日期升序，FEFO）
- * 对接后端：GET /api/store/sample-gift-transfers/from-store-products/{productId}/batches?fromStoreId=xxx
+ * 对接后端：GET /api/store/samplegifttransfers/from-store-products/{productId}/batches?fromStoreId=xxx
  * @param fromStoreId 调出门店ID
  * @param productId 商品ID
  * @returns 批次选项数组
  */
 export async function getFromStoreProductBatches(fromStoreId: string, productId: number): Promise<SampleGiftTransferBatchOption[]> {
   const qs = buildQuery({ fromStoreId })
-  return request<SampleGiftTransferBatchOption[]>(`/sample-gift-transfers/from-store-products/${productId}/batches${qs}`)
+  return request<SampleGiftTransferBatchOption[]>(`/samplegifttransfers/from-store-products/${productId}/batches${qs}`)
 }
 
 /**
