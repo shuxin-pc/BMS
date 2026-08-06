@@ -47,4 +47,18 @@ public class ServiceBomsController : ControllerBase
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
+
+    /// <summary>
+    /// 获取服务项目选项列表（用于BOM下拉选择）
+    /// </summary>
+    [HttpGet("service-product-options")]
+    public async Task<ApiResponseDto<List<ServiceProductOptionDto>>> GetServiceProductOptions()
+        => await _appService.GetServiceProductOptionsAsync();
+
+    /// <summary>
+    /// 获取耗材商品选项列表（用于BOM下拉选择，仅 type=3 耗材）
+    /// </summary>
+    [HttpGet("consumable-options")]
+    public async Task<ApiResponseDto<List<ConsumableOptionDto>>> GetConsumableOptions()
+        => await _appService.GetConsumableOptionsAsync();
 }
