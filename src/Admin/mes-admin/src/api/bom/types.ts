@@ -3,19 +3,11 @@
 // 需求 G2.3：耗材与服务项目通过 BOM 关联，服务完成时按 BOM 自动扣减耗材库存
 // ==========================================
 
-/**
- * 通用分页响应
- */
-export interface PagedResponse<T> {
-  list: T[]
-  total: number
-  pageIndex: number
-  pageSize: number
-}
+import type { PagedResponse } from '../shared/storeRequest'
 
 /**
  * BOM 项（服务项目-耗材关联）
- * 对应后端实体 ServiceBom
+ * 对应后端实体 ServiceBom / DTO ServiceBomDto
  */
 export interface BomItem {
   /** BOM 记录ID */
@@ -24,7 +16,7 @@ export interface BomItem {
   serviceProductId: number
   /** 服务项目名称（冗余字段，便于展示） */
   serviceProductName: string
-  /** 耗材商品ID（对应 Consumable.Id） */
+  /** 耗材商品ID（对应 Product.Id） */
   consumableProductId: number
   /** 耗材商品名称（冗余字段，便于展示） */
   consumableProductName: string
@@ -41,7 +33,7 @@ export interface BomItem {
 }
 
 /**
- * BOM 查询参数（按服务项目名称筛选）
+ * BOM 查询参数（按服务项目名称/耗材商品名称筛选）
  */
 export interface BomQuery {
   /** 服务项目名称（模糊匹配） */
@@ -73,3 +65,6 @@ export interface BomUpdate extends BomCreate {
   /** BOM 记录ID */
   id: number
 }
+
+// 复用 shared/storeRequest 的 PagedResponse，re-export 供外部使用
+export type { PagedResponse }
