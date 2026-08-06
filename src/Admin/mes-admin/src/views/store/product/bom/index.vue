@@ -55,6 +55,9 @@
         v-loading="tableLoading"
         :data="tableData"
         :span-method="handleSpanMethod"
+        :row-class-name="rowClassName"
+        @cell-mouse-enter="handleCellMouseEnter"
+        @cell-mouse-leave="handleCellMouseLeave"
         style="width: 100%"
       >
         <el-table-column prop="serviceProductName" label="服务项目" min-width="160" />
@@ -246,6 +249,25 @@ const handleReset = () => {
   searchForm.serviceProductName = ''
   searchForm.consumableProductName = ''
   handleSearch()
+}
+
+// 同组高亮：hover 某行时，同一服务项目的所有行一起高亮
+// 解决合并单元格后，hover 非首行时第一列 td（属于首行 tr）不高亮的视觉断层
+const hoveredServiceProductId = ref<number | null>(null)
+
+const handleCellMouseEnter = (row: BomItem) => {
+  hoveredServiceProductId.value = row.serviceProductId
+}
+
+const handleCellMouseLeave = () => {
+  hoveredServiceProductId.value = null
+}
+
+const rowClassName = ({ row }: { row: BomItem }) => {
+  if (hoveredServiceProductId.value !== null && row.serviceProductId === hoveredServiceProductId.value) {
+    return 'group-hover-row'
+  }
+  return ''
 }
 
 // 合并相同服务项目的单元格（视觉上按服务项目分组）
@@ -449,6 +471,11 @@ onMounted(async () => {
 }
 
 :deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--bg-hover) !important;
+}
+
+/* 同组高亮：hover 某行时，同组所有行的单元格一起高亮 */
+:deep(.el-table__body tr.group-hover-row > td.el-table__cell) {
   background-color: var(--bg-hover) !important;
 }
 
