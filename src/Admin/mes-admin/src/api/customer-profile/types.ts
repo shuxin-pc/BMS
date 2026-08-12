@@ -54,14 +54,26 @@ export interface CustomerBeautyProfile {
  * 肤质档案查询参数
  */
 export interface BeautyProfileQuery {
+  /** 客户ID（精确匹配，用于服务档案页按当前客户过滤） */
+  customerId?: number
   /** 客户名称（模糊匹配） */
   customerName?: string
+  /** 客户手机号（模糊匹配） */
+  customerPhone?: string
   /** 肤质类型 */
   skinType?: SkinType
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
   pageSize?: number
+}
+
+/**
+ * 更新肤质档案请求（需要携带档案 ID）
+ */
+export interface BeautyProfileUpdate extends BeautyProfileSave {
+  /** 档案ID */
+  id: number
 }
 
 /**
@@ -111,7 +123,11 @@ export interface ServiceReaction {
   orderId?: number
   /** 关联订单号（展示用） */
   orderNo?: string
-  /** 服务项目 */
+  /** 服务项目商品ID */
+  productId?: number
+  /** 服务项目商品当前名称（展示用，随商品改名变化） */
+  productName?: string
+  /** 服务项目名称快照（登记时固化，商品改名后不变） */
   serviceItem?: string
   /** 反应日期 */
   reactionDate: string
@@ -129,8 +145,12 @@ export interface ServiceReaction {
  * 服务反应查询参数
  */
 export interface ServiceReactionQuery {
+  /** 客户ID（精确匹配，用于服务档案页按当前客户过滤） */
+  customerId?: number
   /** 客户名称（模糊匹配） */
   customerName?: string
+  /** 客户手机号（模糊匹配） */
+  customerPhone?: string
   /** 开始日期 */
   startDate?: string
   /** 结束日期 */
@@ -147,11 +167,13 @@ export interface ServiceReactionQuery {
  * 创建服务反应记录请求
  */
 export interface ServiceReactionCreate {
-  /** 客户ID */
-  customerId: number
-  /** 关联订单ID */
+  /** 客户ID（表单初始化时为 undefined，提交前由表单校验保证必填） */
+  customerId?: number
+  /** 关联订单ID（选填） */
   orderId?: number
-  /** 服务项目 */
+  /** 服务项目商品ID（传值时后端以商品主档名称覆盖 serviceItem） */
+  productId?: number
+  /** 服务项目（未选商品时的文字描述） */
   serviceItem?: string
   /** 反应日期 */
   reactionDate: string
@@ -185,11 +207,17 @@ export interface ServiceComparisonPhoto {
   customerId: number
   /** 客户名称（展示用） */
   customerName?: string
-  /** 关联订单ID */
+  /** 客户手机号（展示用） */
+  customerPhone?: string
+  /** 关联订单ID（选填） */
   orderId?: number
   /** 关联订单号（展示用） */
   orderNo?: string
-  /** 服务项目 */
+  /** 服务项目商品ID */
+  productId?: number
+  /** 服务项目商品当前名称（展示用，随商品改名变化） */
+  productName?: string
+  /** 服务项目名称快照（拍照时固化，商品改名后不变） */
   serviceItem?: string
   /** 拍照日期 */
   photoDate: string
@@ -211,6 +239,8 @@ export interface ComparisonPhotoQuery {
   customerId?: number
   /** 客户名称（模糊匹配） */
   customerName?: string
+  /** 客户手机号（模糊匹配） */
+  customerPhone?: string
   /** 服务项目（模糊匹配） */
   serviceItem?: string
   /** 页码 */
@@ -223,17 +253,19 @@ export interface ComparisonPhotoQuery {
  * 创建对比照片请求
  */
 export interface ComparisonPhotoCreate {
-  /** 客户ID */
-  customerId: number
-  /** 关联订单ID */
+  /** 客户ID（表单初始化时为 undefined，提交前由表单校验保证必填） */
+  customerId?: number
+  /** 关联订单ID（选填，补录历史照片时可能无法对应到订单） */
   orderId?: number
-  /** 服务项目 */
+  /** 服务项目商品ID（传值时后端以商品主档名称覆盖 serviceItem） */
+  productId?: number
+  /** 服务项目（未选商品时的文字描述） */
   serviceItem?: string
   /** 拍照日期 */
   photoDate: string
   /** 照片类型：1-服务前，2-服务后 */
   photoType: PhotoType
-  /** 照片URL */
+  /** 照片URL（支持手输 URL 或 base64 DataURL） */
   photoUrl: string
   /** 备注 */
   remark?: string
@@ -296,6 +328,8 @@ export interface BodyDataQuery {
   customerId?: number
   /** 客户名称（模糊匹配） */
   customerName?: string
+  /** 客户手机号（模糊匹配） */
+  customerPhone?: string
   /** 开始日期 */
   startDate?: string
   /** 结束日期 */
@@ -310,8 +344,8 @@ export interface BodyDataQuery {
  * 创建身体数据记录请求
  */
 export interface BodyDataCreate {
-  /** 客户ID */
-  customerId: number
+  /** 客户ID（表单初始化时为 undefined，提交前由表单校验保证必填） */
+  customerId?: number
   /** 记录日期 */
   recordDate: string
   /** 体重(kg) */
