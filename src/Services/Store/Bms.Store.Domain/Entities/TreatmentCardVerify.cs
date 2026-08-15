@@ -3,18 +3,8 @@ namespace Bms.Store.Domain.Entities;
 /// <summary>
 /// 疗程卡核销记录
 /// </summary>
-public class TreatmentCardVerify : StoreTenantEntityBase
+public class TreatmentCardVerify : StoreBusinessEntityBase
 {
-    /// <summary>
-    /// 核销门店ID（记录在哪家门店核销，疗程卡跨店通用）
-    /// </summary>
-    public long? StoreId { get; set; }
-
-    /// <summary>
-    /// 核销门店编码
-    /// </summary>
-    public string? StoreCode { get; set; }
-
     /// <summary>
     /// 疗程卡销售ID
     /// </summary>
@@ -44,6 +34,23 @@ public class TreatmentCardVerify : StoreTenantEntityBase
     /// 操作员ID
     /// </summary>
     public long? OperatorId { get; set; }
+
+    /// <summary>
+    /// 操作员姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
+    /// 冗余原因：Store 与 System 为独立服务，且用户可能改名/离职，历史核销记录需保留操作当时的姓名快照
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
+    /// 是否跨店核销（核销门店 ≠ 发卡门店时为 true，便于报表过滤）
+    /// </summary>
+    public bool IsCrossStore { get; set; }
+
+    /// <summary>
+    /// 冲正状态（0-正常，1-已冲正）
+    /// 冲正时不物理删除，仅更新状态，冲正金额冲减原核销门店服务业绩
+    /// </summary>
+    public int ReverseStatus { get; set; }
 
     /// <summary>
     /// 备注

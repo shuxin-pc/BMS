@@ -24,7 +24,6 @@ public class OrderItemUpdateDtoValidator : AbstractValidator<OrderItemUpdateDto>
 {
     public OrderItemUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new OrderItemCreateDtoValidator());
     }
 }

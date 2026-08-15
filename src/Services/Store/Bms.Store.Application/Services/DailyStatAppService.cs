@@ -37,7 +37,7 @@ public class DailyStatAppService : IDailyStatAppService
     public async Task<ApiResponseDto<PagedResponseDto<DailyStatDto>>> GetPagedListAsync(DailyStatQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<DailyStatDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<DailyStatDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.DailyStats
@@ -71,7 +71,7 @@ public class DailyStatAppService : IDailyStatAppService
     public async Task<ApiResponseDto<DailyStatDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<DailyStatDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<DailyStatDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.DailyStats
             .FirstOrDefaultAsync(s => s.Id == id && s.TenantId == _currentUser.TenantId.Value);
@@ -86,7 +86,7 @@ public class DailyStatAppService : IDailyStatAppService
     public async Task<ApiResponseDto<DailyStatDto>> CreateAsync(DailyStatCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<DailyStatDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<DailyStatDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -109,7 +109,7 @@ public class DailyStatAppService : IDailyStatAppService
     public async Task<ApiResponseDto<DailyStatDto>> UpdateAsync(DailyStatUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<DailyStatDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<DailyStatDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -145,7 +145,7 @@ public class DailyStatAppService : IDailyStatAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.DailyStats
             .FirstOrDefaultAsync(s => s.Id == id && s.TenantId == _currentUser.TenantId.Value);
@@ -163,7 +163,7 @@ public class DailyStatAppService : IDailyStatAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

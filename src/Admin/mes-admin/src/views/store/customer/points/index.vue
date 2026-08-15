@@ -4,12 +4,25 @@
     <el-tabs v-model="activeTab" class="points-tabs">
       <!-- ==================== 积分规则 ==================== -->
       <el-tab-pane label="积分规则" name="rule">
+        <!-- 未配置提示：库中无规则时表单展示的是建议默认值，必须明确告知未生效，避免误以为规则已存在 -->
+        <el-alert
+          v-if="!ruleLoading && ruleForm.id === 0"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="rule-unsaved-alert"
+        >
+          <template #title>
+            <span class="alert-title">当前门店尚未配置积分规则，下方为建议默认值，尚未保存生效</span>
+          </template>
+          <div class="alert-content">
+            未点击「保存配置」前，<strong>消费下单、储值充值、疗程卡购买均不会发放任何积分</strong>。积分规则按门店独立配置，每个门店需各自保存一次。
+          </div>
+        </el-alert>
+
         <!-- 操作栏 -->
         <div class="table-toolbar">
           <div class="toolbar-left">
-            <span class="toolbar-title">积分规则配置</span>
-          </div>
-          <div class="toolbar-right">
             <el-button type="primary" @click="handleSaveRule" :loading="ruleSaving">
               <el-icon><Check /></el-icon>
               保存配置
@@ -27,51 +40,73 @@
             v-loading="ruleLoading"
             style="max-width: 640px; padding: 24px;"
           >
-            <el-form-item label="规则名称" prop="name">
-              <el-input v-model="ruleForm.name" placeholder="请输入规则名称" />
-            </el-form-item>
-            <el-form-item label="消费1元获得积分" prop="pointsPerYuan">
+            <el-form-item label="消费1元获得积分" prop="pointsRate">
               <el-input-number
-                v-model="ruleForm.pointsPerYuan"
-                :min="0"
+                v-model="ruleForm.pointsRate"
+                :min="1"
                 :step="1"
-                :precision="2"
+                :precision="0"
                 controls-position="right"
                 style="width: 200px"
               />
               <span class="form-tip-suffix">积分</span>
             </el-form-item>
-            <el-form-item label="积分抵扣比例" prop="pointsToYuan">
+            <el-form-item label="积分抵扣1元所需积分" prop="deductPointsPerYuan">
               <el-input-number
-                v-model="ruleForm.pointsToYuan"
-                :min="0"
-                :step="0.001"
-                :precision="3"
+                v-model="ruleForm.deductPointsPerYuan"
+                :min="1"
+                :step="1"
+                :precision="0"
                 controls-position="right"
                 style="width: 200px"
               />
-              <span class="form-tip-suffix">元/积分</span>
-              <div class="form-tip">如 0.01 表示 100 积分 = 1 元</div>
+              <span class="form-tip-suffix">积分</span>
+              <div class="form-tip">消费/录入 {{ ruleForm.deductPointsPerYuan }} 积分可抵扣 1 元</div>
+            </el-form-item>
+            <el-form-item label="单笔最高抵扣金额" prop="maxDeductAmount">
+              <el-input-number
+                v-model="ruleForm.maxDeductAmount"
+                :min="0"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+                style="width: 200px"
+              />
+              <span class="form-tip-suffix">元</span>
+              <div class="form-tip">0 表示不限</div>
+            </el-form-item>
+            <el-form-item label="最低获取门槛" prop="minAmountThreshold">
+              <el-input-number
+                v-model="ruleForm.minAmountThreshold"
+                :min="0"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+                style="width: 200px"
+              />
+              <span class="form-tip-suffix">元</span>
+              <div class="form-tip">单笔金额低于此值不发放积分，0 表示无门槛；对消费下单、储值充值、疗程卡购买均生效</div>
+            </el-form-item>
+            <el-form-item label="积分有效期" prop="pointsValidityDays">
+              <el-input-number
+                v-model="ruleForm.pointsValidityDays"
+                :min="1"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+                style="width: 200px"
+              />
+              <span class="form-tip-suffix">天</span>
+              <div class="form-tip">留空表示永久</div>
             </el-form-item>
             <el-form-item label="生日双倍积分" prop="birthdayDouble">
               <el-switch v-model="ruleForm.birthdayDouble" />
               <span class="form-tip-suffix">生日当天消费获取双倍积分</span>
             </el-form-item>
-            <el-form-item label="最低获取门槛" prop="minPointsThreshold">
-              <el-input-number
-                v-model="ruleForm.minPointsThreshold"
-                :min="0"
-                :step="1"
-                controls-position="right"
-                style="width: 200px"
-              />
-              <span class="form-tip-suffix">积分</span>
-              <div class="form-tip">单笔消费低于此值不获取积分</div>
-            </el-form-item>
             <el-form-item label="生效状态" prop="status">
               <el-radio-group v-model="ruleForm.status">
                 <el-radio :value="1">启用</el-radio>
-                <el-radio :value="2">停用</el-radio>
+                <el-radio :value="0">停用</el-radio>
               </el-radio-group>
             </el-form-item>
             <el-form-item label="备注" prop="remark">
@@ -95,12 +130,23 @@
                   style="width: 180px"
                 />
               </el-form-item>
+              <el-form-item label="手机号">
+                <el-input
+                  v-model="recordSearchForm.phone"
+                  placeholder="请输入手机号"
+                  clearable
+                  style="width: 180px"
+                />
+              </el-form-item>
               <el-form-item label="变动类型">
                 <el-select v-model="recordSearchForm.changeType" placeholder="全部" clearable style="width: 130px">
                   <el-option label="消费获取" :value="1" />
-                  <el-option label="兑换扣减" :value="2" />
-                  <el-option label="活动赠送" :value="3" />
-                  <el-option label="退款扣减" :value="4" />
+                  <el-option label="积分抵扣" :value="2" />
+                  <el-option label="退款扣减" :value="3" />
+                  <el-option label="充值获得" :value="5" />
+                  <el-option label="疗程卡购买" :value="6" />
+                  <el-option label="过期清零" :value="7" />
+                  <el-option label="手动调整" :value="8" />
                 </el-select>
               </el-form-item>
               <el-form-item>
@@ -119,14 +165,7 @@
 
         <!-- 操作栏 -->
         <div class="table-toolbar">
-          <div class="toolbar-left">
-            <span class="toolbar-title">积分流水列表</span>
-          </div>
           <div class="toolbar-right">
-            <el-button type="warning" @click="openExchangeDialog">
-              <el-icon><Exchange /></el-icon>
-              积分兑换
-            </el-button>
             <el-button circle @click="loadRecords">
               <el-icon><Refresh /></el-icon>
             </el-button>
@@ -144,8 +183,8 @@
             <el-table-column prop="phone" label="手机号" width="140" />
             <el-table-column label="积分变动" width="110" align="right">
               <template #default="{ row }">
-                <span :class="row.changePoints > 0 ? 'points-add' : 'points-sub'">
-                  {{ row.changePoints > 0 ? '+' : '' }}{{ row.changePoints }}
+                <span :class="row.points > 0 ? 'points-add' : 'points-sub'">
+                  {{ row.points > 0 ? '+' : '' }}{{ row.points }}
                 </span>
               </template>
             </el-table-column>
@@ -157,12 +196,16 @@
             </el-table-column>
             <el-table-column label="变动类型" width="110" align="center">
               <template #default="{ row }">
-                <el-tag :type="changeTypeTagType(row.changeType)" size="small" effect="plain">
-                  {{ changeTypeText(row.changeType) }}
+                <el-tag :type="changeTypeTagType(row.type)" size="small" effect="plain">
+                  {{ changeTypeText(row.type) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="changeTime" label="变动时间" width="170" />
+            <el-table-column label="变动时间" width="170">
+              <template #default="{ row }">
+                <span>{{ formatDateTime(row.changeTime) }}</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="orderNo" label="关联订单" width="160" show-overflow-tooltip>
               <template #default="{ row }">
                 <span v-if="row.orderNo">{{ row.orderNo }}</span>
@@ -186,38 +229,6 @@
           </div>
         </div>
 
-        <!-- 积分兑换对话框 -->
-        <el-dialog v-model="exchangeDialogVisible" title="积分兑换" width="480px">
-          <el-form :model="exchangeForm" label-width="100px">
-            <el-form-item label="客户" required>
-              <el-select v-model="exchangeForm.customerId" placeholder="请选择客户" style="width: 100%" filterable>
-                <el-option
-                  v-for="item in exchangeCustomerList"
-                  :key="item.customerId"
-                  :label="`${item.customerName}（${item.phone}）- 当前积分：${item.currentPoints}`"
-                  :value="item.customerId"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="兑换积分" required>
-              <el-input-number
-                v-model="exchangeForm.points"
-                :min="1"
-                :step="10"
-                controls-position="right"
-                style="width: 200px"
-              />
-              <span class="form-tip-suffix">积分</span>
-            </el-form-item>
-            <el-form-item label="备注">
-              <el-input v-model="exchangeForm.remark" type="textarea" :rows="2" placeholder="请输入备注（选填）" />
-            </el-form-item>
-          </el-form>
-          <template #footer>
-            <el-button @click="exchangeDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="handleExchange" :loading="exchangeSubmitting">确认兑换</el-button>
-          </template>
-        </el-dialog>
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -226,8 +237,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Check, Exchange } from '@element-plus/icons-vue'
-import { getPointsRule, savePointsRule, getPointsRecords, exchangePoints, getCustomersForPointsExchange } from '@/api/customer'
+import { Search, Refresh, Check } from '@element-plus/icons-vue'
+import { getPointsRule, savePointsRule, getPointsRecords } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { PointsRecord, PointsChangeType } from '@/api/customer/types'
 
@@ -241,28 +252,25 @@ const ruleSaving = ref(false)
 const ruleFormRef = ref<FormInstance>()
 
 const ruleForm = reactive({
-  id: 1,
-  name: '',
-  pointsPerYuan: 1,
-  pointsToYuan: 0.01,
+  id: 0,                          // 0 表示新建
+  pointsRate: 1,                  // 消费1元获得积分
+  deductPointsPerYuan: 100,       // UI 整数字段：X 积分 = 1 元（1~10000）
+  maxDeductAmount: 0,             // 单笔最高抵扣金额（0=不限）
+  pointsValidityDays: null as number | null,  // null=永久
   birthdayDouble: true,
-  minPointsThreshold: 0,
-  status: 1,
+  minAmountThreshold: 0,
+  status: 1,                      // 0:禁用 1:启用
   remark: ''
 })
 
 const ruleFormRules: FormRules = {
-  name: [
-    { required: true, message: '规则名称不能为空', trigger: 'blur' },
-    { max: 100, message: '规则名称最多100个字符', trigger: 'blur' }
-  ],
-  pointsPerYuan: [
+  pointsRate: [
     { required: true, message: '消费积分不能为空', trigger: 'blur' },
-    { type: 'number', min: 0, message: '不能小于0', trigger: 'blur' }
+    { type: 'number', min: 1, message: '不能小于1', trigger: 'blur' }
   ],
-  pointsToYuan: [
-    { required: true, message: '抵扣比例不能为空', trigger: 'blur' },
-    { type: 'number', min: 0, message: '不能小于0', trigger: 'blur' }
+  deductPointsPerYuan: [
+    { required: true, message: '抵扣积分不能为空', trigger: 'blur' },
+    { type: 'number', min: 1, message: '不能小于1', trigger: 'blur' }
   ]
 }
 
@@ -270,14 +278,23 @@ const loadRule = async () => {
   ruleLoading.value = true
   try {
     const data = await getPointsRule()
-    ruleForm.id = data.id
-    ruleForm.name = data.name
-    ruleForm.pointsPerYuan = data.pointsPerYuan
-    ruleForm.pointsToYuan = data.pointsToYuan
-    ruleForm.birthdayDouble = data.birthdayDouble
-    ruleForm.minPointsThreshold = data.minPointsThreshold
-    ruleForm.status = data.status
-    ruleForm.remark = data.remark || ''
+    if (data) {
+      ruleForm.id = data.id
+      ruleForm.pointsRate = data.pointsRate
+      // 后端 deductRate（小数）-> 前端整数 X = round(1/deductRate)
+      ruleForm.deductPointsPerYuan = data.deductRate > 0
+        ? Math.round(1 / data.deductRate)
+        : 100
+      ruleForm.maxDeductAmount = data.maxDeductAmount
+      ruleForm.pointsValidityDays = data.pointsValidityDays ?? null
+      ruleForm.birthdayDouble = data.birthdayDouble
+      ruleForm.minAmountThreshold = data.minAmountThreshold ?? 0
+      ruleForm.status = data.status
+      ruleForm.remark = data.remark || ''
+    } else {
+      // 无规则：表单保持默认值，保存时走 Create
+      ruleForm.id = 0
+    }
   } catch (error: any) {
     ElMessage.error(error.message || '加载规则失败')
   } finally {
@@ -291,11 +308,24 @@ const handleSaveRule = async () => {
     if (valid) {
       ruleSaving.value = true
       try {
+        // 前端整数 X -> 后端 deductRate = 1/X（保留 6 位小数）
+        const deductRate = ruleForm.deductPointsPerYuan > 0
+          ? Math.round((1 / ruleForm.deductPointsPerYuan) * 1e6) / 1e6
+          : 0
         await savePointsRule({
-          ...ruleForm,
-          updatedAt: ''
+          id: ruleForm.id,
+          pointsRate: ruleForm.pointsRate,
+          deductRate,
+          maxDeductAmount: ruleForm.maxDeductAmount,
+          pointsValidityDays: ruleForm.pointsValidityDays,
+          birthdayDouble: ruleForm.birthdayDouble,
+          minAmountThreshold: ruleForm.minAmountThreshold,
+          status: ruleForm.status,
+          remark: ruleForm.remark
         })
         ElMessage.success('保存成功')
+        // 重新加载以获取后端生成的 id（新建场景）和时间戳
+        await loadRule()
       } catch (error: any) {
         ElMessage.error(error.message || '保存失败')
       } finally {
@@ -310,6 +340,7 @@ const recordLoading = ref(false)
 const recordData = ref<PointsRecord[]>([])
 const recordSearchForm = reactive({
   customerName: '',
+  phone: '',
   changeType: undefined as PointsChangeType | undefined
 })
 const recordPagination = reactive({
@@ -323,6 +354,7 @@ const loadRecords = async () => {
   try {
     const res = await getPointsRecords({
       customerName: recordSearchForm.customerName || undefined,
+      phone: recordSearchForm.phone || undefined,
       changeType: recordSearchForm.changeType,
       pageIndex: recordPagination.pageIndex,
       pageSize: recordPagination.pageSize
@@ -343,74 +375,52 @@ const handleRecordSearch = () => {
 
 const handleRecordReset = () => {
   recordSearchForm.customerName = ''
+  recordSearchForm.phone = ''
   recordSearchForm.changeType = undefined
   handleRecordSearch()
-}
-
-// ==================== 积分兑换 ====================
-const exchangeDialogVisible = ref(false)
-const exchangeSubmitting = ref(false)
-const exchangeCustomerList = ref<Array<{
-  customerId: number
-  customerName: string
-  phone: string
-  currentPoints: number
-}>>([])
-const exchangeForm = reactive({
-  customerId: undefined as number | undefined,
-  points: 0,
-  remark: ''
-})
-
-/** 打开积分兑换对话框 */
-const openExchangeDialog = async () => {
-  exchangeDialogVisible.value = true
-  exchangeForm.customerId = undefined
-  exchangeForm.points = 0
-  exchangeForm.remark = ''
-  try {
-    exchangeCustomerList.value = await getCustomersForPointsExchange()
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载客户列表失败')
-  }
-}
-
-/** 确认积分兑换 */
-const handleExchange = async () => {
-  if (!exchangeForm.customerId) {
-    ElMessage.warning('请选择客户')
-    return
-  }
-  if (exchangeForm.points <= 0) {
-    ElMessage.warning('兑换积分必须大于0')
-    return
-  }
-  exchangeSubmitting.value = true
-  try {
-    await exchangePoints(exchangeForm.customerId, exchangeForm.points, exchangeForm.remark || undefined)
-    ElMessage.success('兑换成功')
-    exchangeDialogVisible.value = false
-    loadRecords()
-  } catch (error: any) {
-    // 积分不足时显示友好错误提示（后端/Mock 返回的错误消息已包含当前积分）
-    ElMessage.error(error.message || '兑换失败')
-  } finally {
-    exchangeSubmitting.value = false
-  }
 }
 
 // ==================== 工具方法 ====================
 
 /** 变动类型文本 */
 const changeTypeText = (type: number) => {
-  const map: Record<number, string> = { 1: '消费获取', 2: '兑换扣减', 3: '活动赠送', 4: '退款扣减' }
+  const map: Record<number, string> = {
+    1: '消费获取',
+    2: '积分抵扣',
+    3: '退款扣减',
+    5: '充值获得',
+    6: '疗程卡购买',
+    7: '过期清零',
+    8: '手动调整'
+  }
   return map[type] || '未知'
 }
 
 /** 变动类型标签 */
 const changeTypeTagType = (type: number) => {
-  const map: Record<number, string> = { 1: 'success', 2: 'warning', 3: '', 4: 'danger' }
+  const map: Record<number, string> = {
+    1: 'success',
+    2: 'warning',
+    3: 'danger',
+    5: 'success',
+    6: 'success',
+    7: 'info',
+    8: 'warning'
+  }
   return map[type] || ''
+}
+
+/** 格式化日期时间 */
+const formatDateTime = (dateStr?: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 onMounted(async () => {
@@ -426,6 +436,23 @@ onMounted(async () => {
 <style scoped>
 .points-management {
   width: 100%;
+}
+
+/* Tabs样式 */
+:deep(.el-tabs__item) {
+  color: var(--text-secondary);
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: var(--primary);
+}
+
+:deep(.el-tabs__active-bar) {
+  background-color: var(--primary);
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  border-color: var(--border-primary);
 }
 
 /* 卡片样式 */
@@ -491,15 +518,11 @@ onMounted(async () => {
   align-items: center;
 }
 
-.toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
+/* margin-left: auto 保证工具栏只有右侧内容时按钮仍靠右（本页规则页签只有左侧按钮，流水页签只有右侧按钮） */
 .toolbar-right {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 /* 积分变动样式 */
@@ -520,6 +543,22 @@ onMounted(async () => {
 
 .text-muted {
   color: var(--text-tertiary);
+}
+
+/* 未配置规则提示 */
+.rule-unsaved-alert {
+  margin-bottom: 16px;
+}
+
+.rule-unsaved-alert .alert-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rule-unsaved-alert .alert-content {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 /* 表单提示 */

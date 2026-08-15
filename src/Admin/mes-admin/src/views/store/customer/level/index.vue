@@ -58,7 +58,7 @@
         style="width: 100%"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="sort" label="排序" width="80" align="center" />
+        <el-table-column prop="level" label="等级值" width="100" align="center" />
         <el-table-column prop="name" label="等级名称" min-width="140">
           <template #default="{ row }">
             <span class="level-name">{{ row.name }}</span>
@@ -67,7 +67,8 @@
         <el-table-column prop="code" label="等级编码" width="140" />
         <el-table-column label="折扣率" width="120" align="center">
           <template #default="{ row }">
-            <el-tag :type="discountTagType(row.discountRate)" size="small" effect="plain">
+            <span v-if="row.discountRate >= 1">-</span>
+            <el-tag v-else :type="discountTagType(row.discountRate)" size="small" effect="plain">
               {{ (row.discountRate * 10).toFixed(1) }}折
             </el-tag>
           </template>
@@ -105,7 +106,18 @@
           <el-input v-model="formData.name" placeholder="请输入等级名称" />
         </el-form-item>
         <el-form-item label="等级编码" prop="code">
-          <el-input v-model="formData.code" placeholder="如 NORMAL、SILVER" :disabled="isEdit" />
+          <el-input v-model="formData.code" placeholder="如 NORMAL、SILVER、level1" />
+        </el-form-item>
+        <el-form-item label="等级值" prop="level">
+          <el-input-number
+            v-model="formData.level"
+            :min="1"
+            :step="1"
+            :precision="0"
+            controls-position="right"
+            style="width: 100%"
+          />
+          <div class="form-tip">等级值不可重复，用于标识等级高低</div>
         </el-form-item>
         <el-form-item label="折扣率" prop="discountRate">
           <el-input-number
@@ -118,15 +130,6 @@
             style="width: 100%"
           />
           <div class="form-tip">1.00 表示原价，0.90 表示9折</div>
-        </el-form-item>
-        <el-form-item label="排序" prop="sort">
-          <el-input-number
-            v-model="formData.sort"
-            :min="0"
-            :step="1"
-            controls-position="right"
-            style="width: 100%"
-          />
         </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入备注" />
@@ -146,7 +149,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
-import { getCustomerLevelsMock, createCustomerLevel, updateCustomerLevel, deleteCustomerLevel } from '@/api/customer'
+import { getCustomerLevels, createCustomerLevel, updateCustomerLevel, deleteCustomerLevel, batchDeleteCustomerLevels } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { CustomerLevel } from '@/api/customer/types'
 
@@ -162,17 +165,19 @@ const tableLoading = ref(false)
 const tableData = ref<CustomerLevel[]>([])
 const selectedRows = ref<CustomerLevel[]>([])
 
-// 前端过滤（等级列表不分页）
+// 前端过滤（等级列表不分页），按等级值升序排序
 const filteredData = computed(() => {
-  if (!searchForm.name) return tableData.value
-  return tableData.value.filter(item => item.name.includes(searchForm.name))
+  const data = searchForm.name
+    ? tableData.value.filter(item => item.name.includes(searchForm.name))
+    : tableData.value
+  return [...data].sort((a, b) => a.level - b.level)
 })
 
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
   try {
-    tableData.value = await getCustomerLevelsMock()
+    tableData.value = await getCustomerLevels()
   } catch (error: any) {
     ElMessage.error(error.message || '加载数据失败')
   } finally {
@@ -200,8 +205,8 @@ const formData = reactive({
   id: 0,
   name: '',
   code: '',
+  level: 1,
   discountRate: 1,
-  sort: 1,
   remark: ''
 })
 
@@ -212,14 +217,15 @@ const formRules: FormRules = {
   ],
   code: [
     { required: true, message: '等级编码不能为空', trigger: 'blur' },
-    { pattern: /^[A-Z_]+$/, message: '等级编码只能包含大写字母和下划线', trigger: 'blur' }
+    { pattern: /^[A-Za-z0-9_]+$/, message: '等级编码只能包含字母、数字和下划线', trigger: 'blur' }
+  ],
+  level: [
+    { required: true, message: '等级值不能为空', trigger: 'blur' },
+    { type: 'number', min: 1, message: '等级值必须为正整数', trigger: 'blur' }
   ],
   discountRate: [
     { required: true, message: '折扣率不能为空', trigger: 'blur' },
     { type: 'number', min: 0.01, max: 1, message: '折扣率范围 0.01-1', trigger: 'blur' }
-  ],
-  sort: [
-    { required: true, message: '排序不能为空', trigger: 'blur' }
   ]
 }
 
@@ -228,8 +234,8 @@ const resetFormData = () => {
   formData.id = 0
   formData.name = ''
   formData.code = ''
+  formData.level = 1
   formData.discountRate = 1
-  formData.sort = 1
   formData.remark = ''
 }
 
@@ -237,7 +243,10 @@ const resetFormData = () => {
 const handleAdd = () => {
   isEdit.value = false
   resetFormData()
-  formData.sort = tableData.value.length + 1
+  // 默认等级值取当前最大值 + 1，避免与已有等级冲突
+  formData.level = tableData.value.length > 0
+    ? Math.max(...tableData.value.map(l => l.level)) + 1
+    : 1
   dialogVisible.value = true
 }
 
@@ -247,8 +256,8 @@ const handleEdit = (row: CustomerLevel) => {
   formData.id = row.id
   formData.name = row.name
   formData.code = row.code
+  formData.level = row.level
   formData.discountRate = row.discountRate
-  formData.sort = row.sort
   formData.remark = row.remark || ''
   dialogVisible.value = true
 }
@@ -280,9 +289,7 @@ const handleBatchDelete = async () => {
       confirmButtonText: '确定删除',
       cancelButtonText: '取消'
     })
-    for (const row of selectedRows.value) {
-      await deleteCustomerLevel(row.id)
-    }
+    await batchDeleteCustomerLevels(selectedRows.value.map(r => r.id))
     ElMessage.success('批量删除成功')
     loadData()
   } catch (error: any) {
@@ -302,8 +309,8 @@ const handleSubmit = async () => {
         const payload = {
           name: formData.name,
           code: formData.code,
+          level: formData.level,
           discountRate: formData.discountRate,
-          sort: formData.sort,
           remark: formData.remark || undefined
         }
         if (isEdit.value) {

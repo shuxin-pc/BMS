@@ -65,4 +65,23 @@ public class TechniciansController : ControllerBase
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
+
+    /// <summary>
+    /// 按服务项目查询可用技师（预约时过滤技师下拉 + 服务项目页展示可服务技师）
+    /// serviceProductId/masterId 均为空时返回指定来源全部启用技师；
+    /// masterId（商品主档ID）自动反查租户内 ServiceProduct 后按技能匹配。
+    /// </summary>
+    [HttpGet("available-by-service")]
+    public async Task<ApiResponseDto<List<TechnicianDto>>> GetAvailableByService(
+        [FromQuery] long? serviceProductId,
+        [FromQuery] long? masterId,
+        [FromQuery] int? source)
+        => await _appService.GetAvailableByServiceAsync(serviceProductId, masterId, source);
+
+    /// <summary>
+    /// 查询技师可服务的服务项目列表（技师页展示擅长项目）
+    /// </summary>
+    [HttpGet("{id:long}/services")]
+    public async Task<ApiResponseDto<List<TechnicianServiceItemDto>>> GetServices(long id)
+        => await _appService.GetServiceProductsByTechnicianAsync(id);
 }

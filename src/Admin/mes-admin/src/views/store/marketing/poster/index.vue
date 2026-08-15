@@ -53,53 +53,56 @@
           </div>
         </div>
 
-        <div class="preview-area">
-          <div
-            ref="posterCanvasRef"
-            class="poster-canvas"
-            :style="posterCanvasStyle"
-            @click="handlePreviewZoom"
-          >
-            <!-- 背景图片层 -->
-            <img
-              v-if="posterData.backgroundImage"
-              :src="posterData.backgroundImage.url"
-              class="poster-bg-img"
-              crossorigin="anonymous"
-            />
-            <div class="poster-content" :style="{ color: posterData.textColor }">
-              <span class="poster-badge" v-if="posterData.badge">{{ posterData.badge }}</span>
-              <h1 class="poster-title" :style="{ fontSize: posterData.titleFontSize + 'px' }">
-                {{ posterData.title }}
-              </h1>
-              <p class="poster-subtitle" v-if="posterData.subtitle">{{ posterData.subtitle }}</p>
-              <p class="poster-description" v-if="posterData.description">{{ posterData.description }}</p>
-              <p class="poster-effective" v-if="posterData.effectiveDate">有效期至 {{ posterData.effectiveDate }}</p>
+        <div class="preview-area" ref="previewAreaRef">
+          <div class="poster-stage" :class="{ capturing: isCapturing }" :style="posterStageStyle">
+            <div
+              ref="posterCanvasRef"
+              class="poster-canvas"
+              :class="{ capturing: isCapturing }"
+              :style="posterCanvasStyle"
+              @click="handlePreviewZoom"
+            >
+              <!-- 背景图片层 -->
+              <img
+                v-if="posterData.backgroundImage"
+                :src="posterData.backgroundImage.url"
+                class="poster-bg-img"
+                crossorigin="anonymous"
+              />
+              <div class="poster-content" :style="{ color: posterData.textColor }">
+                <span class="poster-badge" v-if="posterData.badge">{{ posterData.badge }}</span>
+                <h1 class="poster-title" :style="{ fontSize: posterData.titleFontSize + 'px' }">
+                  {{ posterData.title }}
+                </h1>
+                <p class="poster-subtitle" v-if="posterData.subtitle">{{ posterData.subtitle }}</p>
+                <p class="poster-description" v-if="posterData.description">{{ posterData.description }}</p>
+                <p class="poster-effective" v-if="posterData.effectiveDate">有效期至 {{ posterData.effectiveDate }}</p>
 
-              <div class="poster-highlight" v-if="posterData.price || posterData.originalPrice">
-                <div class="poster-price" v-if="posterData.price">
-                  <span class="unit">¥</span>{{ posterData.price.toFixed(0) }}<span class="unit">.{{ (posterData.price % 1).toFixed(2).slice(2) }}</span>
+                <div class="poster-highlight" v-if="posterData.price || posterData.originalPrice">
+                  <div class="poster-price" v-if="posterData.price">
+                    <span class="unit">¥</span>{{ posterData.price.toFixed(0) }}<span class="unit">.{{ (posterData.price % 1).toFixed(2).slice(2) }}</span>
+                  </div>
+                  <div class="poster-original" v-if="posterData.originalPrice">
+                    原价 ¥{{ formatPrice(posterData.originalPrice) }}
+                  </div>
                 </div>
-                <div class="poster-original" v-if="posterData.originalPrice">
-                  原价 ¥{{ formatPrice(posterData.originalPrice) }}
-                </div>
-              </div>
 
-              <div class="poster-items" v-if="posterItems.length > 0">
-                <div class="poster-item" v-for="(item, idx) in posterItems" :key="idx">
-                  {{ item }}
+                <div class="poster-items" v-if="posterItems.length > 0">
+                  <div class="poster-item" v-for="(item, idx) in posterItems" :key="idx">
+                    {{ item }}
+                  </div>
                 </div>
-              </div>
 
-              <div class="poster-footer">
-                <div>
-                  <div class="poster-store" v-if="posterData.storeName">{{ posterData.storeName }}</div>
-                  <div class="poster-address" v-if="posterData.storeAddress">{{ posterData.storeAddress }}</div>
-                  <div class="poster-contact" v-if="posterData.contact">{{ posterData.contact }}</div>
-                </div>
-                <div class="poster-qr" v-if="posterData.showQr">
-                  <img v-if="posterData.qrcodeImage" :src="posterData.qrcodeImage.url" class="qr-img" />
-                  <span v-else>▣</span>
+                <div class="poster-footer">
+                  <div>
+                    <div class="poster-store" v-if="posterData.storeName">{{ posterData.storeName }}</div>
+                    <div class="poster-address" v-if="posterData.storeAddress">{{ posterData.storeAddress }}</div>
+                    <div class="poster-contact" v-if="posterData.contact">{{ posterData.contact }}</div>
+                  </div>
+                  <div class="poster-qr" v-if="posterData.showQr">
+                    <img v-if="posterData.qrcodeImage" :src="posterData.qrcodeImage.url" class="qr-img" />
+                    <span v-else>▣</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -111,11 +114,12 @@
       <!-- ========== 右侧素材/属性面板 ========== -->
       <div class="props-panel">
         <!-- 属性配置 -->
-        <div class="props-card">
-          <div class="panel-header">
+        <div class="props-card" :class="{ collapsed: collapsedPanels.content }">
+          <div class="panel-header collapsible" @click="togglePanel('content')">
             <span class="panel-title">内容编辑</span>
+            <span class="collapse-arrow" :class="{ collapsed: collapsedPanels.content }">▾</span>
           </div>
-          <div class="props-body">
+          <div class="props-body" v-show="!collapsedPanels.content">
             <div class="prop-group">
               <div class="prop-label">活动标签</div>
               <el-input v-model="posterData.badge" placeholder="如：限时活动" />
@@ -211,11 +215,12 @@
         </div>
 
         <!-- 样式配置 -->
-        <div class="props-card" style="flex: 0 0 auto;">
-          <div class="panel-header">
+        <div class="props-card props-card-auto" :class="{ collapsed: collapsedPanels.style }">
+          <div class="panel-header collapsible" @click="togglePanel('style')">
             <span class="panel-title">样式配置</span>
+            <span class="collapse-arrow" :class="{ collapsed: collapsedPanels.style }">▾</span>
           </div>
-          <div class="props-body">
+          <div class="props-body" v-show="!collapsedPanels.style">
             <div class="prop-group">
               <div class="prop-label">背景色（独立选择）</div>
               <el-color-picker v-model="posterData.backgroundColor" show-alpha />
@@ -249,20 +254,43 @@
         </div>
 
         <!-- 素材库 -->
-        <div class="props-card" style="flex: 0 0 auto;">
-          <div class="panel-header">
+        <div class="props-card props-card-auto" :class="{ collapsed: collapsedPanels.material }">
+          <div class="panel-header collapsible" @click="togglePanel('material')">
             <span class="panel-title">素材库</span>
+            <span class="collapse-arrow" :class="{ collapsed: collapsedPanels.material }">▾</span>
           </div>
-          <div class="props-body">
-            <div class="material-grid">
-              <div
-                v-for="(material, idx) in presetAssets.slice(0, 6)"
-                :key="idx"
-                class="material-item"
-                @click="openImagePicker('background')"
-              >
-                <img :src="material.thumbnail" class="material-thumb" />
+          <div class="props-body" v-show="!collapsedPanels.material">
+            <div class="material-section">
+              <div class="prop-label">预设背景</div>
+              <div class="material-grid">
+                <div
+                  v-for="asset in presetAssets"
+                  :key="asset.id"
+                  class="material-item"
+                  :class="{ active: posterData.backgroundImage?.id === asset.id }"
+                  :title="asset.name"
+                  @click="applyMaterial(asset)"
+                >
+                  <img :src="asset.thumbnail" class="material-thumb" />
+                </div>
               </div>
+            </div>
+            <div class="material-section">
+              <div class="prop-label">我的图片</div>
+              <div class="material-grid" v-if="recentUploadedImages.length > 0">
+                <div
+                  v-for="asset in recentUploadedImages"
+                  :key="asset.id"
+                  class="material-item"
+                  :class="{ active: posterData.backgroundImage?.id === asset.id }"
+                  :title="asset.name"
+                  @click="applyMaterial(asset)"
+                >
+                  <button class="asset-delete-btn" title="删除这张图片" @click.stop="deleteUploadedImage(asset.id)">×</button>
+                  <img :src="asset.thumbnail" class="material-thumb" />
+                </div>
+              </div>
+              <div class="empty-tip" v-else>暂无上传图片，可在「内容编辑 → 背景图片」中上传</div>
             </div>
           </div>
         </div>
@@ -279,7 +307,7 @@
     <el-dialog v-model="imagePickerVisible" title="选择图片" width="640px" append-to-body>
       <el-tabs v-model="activeImageTab">
         <el-tab-pane label="预设素材" name="preset">
-          <div class="asset-grid">
+          <div class="asset-grid" v-if="presetAssetsForField.length > 0">
             <div
               v-for="asset in presetAssetsForField"
               :key="asset.id"
@@ -290,6 +318,7 @@
               <span class="asset-name">{{ asset.name }}</span>
             </div>
           </div>
+          <div class="empty-tip" v-else>该字段暂无预设素材，请通过"本地上传"上传图片</div>
         </el-tab-pane>
         <el-tab-pane label="本地上传" name="upload">
           <div class="upload-area">
@@ -300,7 +329,7 @@
             >
               <button class="upload-btn">📁 从本地上传</button>
             </el-upload>
-            <div class="upload-tip">支持 JPG / PNG / WebP，单张 ≤5MB，宽度 ≥800px，最多 50 张</div>
+            <div class="upload-tip">支持 JPG / PNG / WebP，单张 ≤5MB，宽度 ≥800px；超出 50 张或存储空间不足时自动清理最早上传的图片</div>
           </div>
         </el-tab-pane>
         <el-tab-pane label="我的图片" name="mine">
@@ -311,6 +340,7 @@
               class="asset-item"
               @click="selectImage(asset)"
             >
+              <button class="asset-delete-btn" title="删除这张图片" @click.stop="deleteUploadedImage(asset.id)">×</button>
               <img :src="asset.thumbnail" class="asset-thumb" />
               <span class="asset-name">{{ asset.name }}</span>
             </div>
@@ -348,7 +378,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import html2canvas from 'html2canvas'
 
@@ -468,37 +498,6 @@ const createBackgroundSvg = (type: string): string => {
   return svgs[type] || svgs.warm
 }
 
-/** 生成二维码占位 SVG */
-const createQrcodeSvg = (withLogo: boolean = false): string => {
-  const cells: string[] = []
-  // 三个定位角
-  cells.push('<rect x="10" y="10" width="25" height="25" fill="#000"/>')
-  cells.push('<rect x="65" y="10" width="25" height="25" fill="#000"/>')
-  cells.push('<rect x="10" y="65" width="25" height="25" fill="#000"/>')
-  cells.push('<rect x="15" y="15" width="15" height="15" fill="#fff"/>')
-  cells.push('<rect x="70" y="15" width="15" height="15" fill="#fff"/>')
-  cells.push('<rect x="15" y="70" width="15" height="15" fill="#fff"/>')
-  cells.push('<rect x="19" y="19" width="7" height="7" fill="#000"/>')
-  cells.push('<rect x="74" y="19" width="7" height="7" fill="#000"/>')
-  cells.push('<rect x="19" y="74" width="7" height="7" fill="#000"/>')
-  // 随机数据点
-  const dots = [
-    [45,15],[55,20],[40,30],[50,40],[60,35],[45,50],[55,60],[70,50],
-    [40,70],[50,80],[60,75],[70,85],[80,70],[45,25],[65,40],[55,45],
-    [40,50],[60,60],[70,75],[80,85],[45,35],[55,55],[65,65],[75,45]
-  ]
-  dots.forEach(([x,y]) => cells.push(`<rect x="${x}" y="${y}" width="5" height="5" fill="#000"/>`))
-  if (withLogo) {
-    cells.push('<circle cx="50" cy="50" r="12" fill="#fff"/>')
-    cells.push('<circle cx="50" cy="50" r="10" fill="#D4AF37"/>')
-    cells.push('<circle cx="50" cy="50" r="5" fill="#fff"/>')
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-    <rect width="100" height="100" fill="#fff"/>
-    ${cells.join('')}
-  </svg>`
-}
-
 // ==================== 预设素材库 ====================
 const presetAssets: ImageAsset[] = [
   // 背景图（6张）
@@ -507,10 +506,7 @@ const presetAssets: ImageAsset[] = [
   { id: 'bg-forest', name: '森林绿意', url: makeSvgUrl(createBackgroundSvg('forest')), source: 'preset', category: 'background', thumbnail: makeSvgUrl(createBackgroundSvg('forest')) },
   { id: 'bg-starry', name: '星空夜景', url: makeSvgUrl(createBackgroundSvg('starry')), source: 'preset', category: 'background', thumbnail: makeSvgUrl(createBackgroundSvg('starry')) },
   { id: 'bg-minimal', name: '极简米白', url: makeSvgUrl(createBackgroundSvg('minimal')), source: 'preset', category: 'background', thumbnail: makeSvgUrl(createBackgroundSvg('minimal')) },
-  { id: 'bg-gold', name: '金箔质感', url: makeSvgUrl(createBackgroundSvg('gold')), source: 'preset', category: 'background', thumbnail: makeSvgUrl(createBackgroundSvg('gold')) },
-  // 二维码占位（2张）
-  { id: 'qr-standard', name: '标准二维码', url: makeSvgUrl(createQrcodeSvg(false)), source: 'preset', category: 'qrcode', thumbnail: makeSvgUrl(createQrcodeSvg(false)) },
-  { id: 'qr-logo', name: '带Logo二维码', url: makeSvgUrl(createQrcodeSvg(true)), source: 'preset', category: 'qrcode', thumbnail: makeSvgUrl(createQrcodeSvg(true)) }
+  { id: 'bg-gold', name: '金箔质感', url: makeSvgUrl(createBackgroundSvg('gold')), source: 'preset', category: 'background', thumbnail: makeSvgUrl(createBackgroundSvg('gold')) }
 ]
 
 // ==================== 模板数据（8个，按需求 T1-T8）====================
@@ -688,6 +684,7 @@ const selectedTemplateId = ref(1)
 
 // ==================== 海报数据 ====================
 const posterCanvasRef = ref<HTMLElement | null>(null)
+const previewAreaRef = ref<HTMLElement | null>(null)
 
 const posterData = reactive<PosterData>({
   badge: '限时折扣',
@@ -731,27 +728,29 @@ const colorOptions = [
 const selectedColorIndex = ref(0)
 
 const posterCanvasStyle = computed(() => {
-  const size = {
+  // 画布始终保持设计稿真实像素，仅用 transform 缩放显示，保证导出清晰度
+  const layout = {
     width: posterSize.value.width + 'px',
-    height: posterSize.value.height + 'px'
+    height: posterSize.value.height + 'px',
+    transform: `scale(${effectiveScale.value})`
   }
   if (posterData.backgroundImage) {
     return {
       background: `url(${posterData.backgroundImage.url}) center/cover no-repeat`,
-      ...size
+      ...layout
     }
   }
   // 优先使用用户独立选择的背景色（非空且非默认时）
   if (posterData.backgroundColor) {
     return {
       background: posterData.backgroundColor,
-      ...size
+      ...layout
     }
   }
   // 兜底使用模板渐变预设
   return {
     background: colorOptions[selectedColorIndex.value],
-    ...size
+    ...layout
   }
 })
 
@@ -782,8 +781,7 @@ const selectTemplate = (tpl: Template) => {
 const sizeOptions = [
   { id: 'a4', name: 'A4', width: 595, height: 842 },
   { id: 'a5', name: 'A5', width: 420, height: 595 },
-  { id: 'moments', name: '朋友圈', width: 375, height: 667 },
-  { id: 'wallpaper', name: '手机壁纸', width: 375, height: 812 }
+  { id: 'moments', name: '朋友圈', width: 375, height: 667 }
 ]
 
 const selectedSize = ref('moments')
@@ -797,12 +795,76 @@ const handleSizeChange = (sizeId: string) => {
   }
 }
 
+// ==================== 预览缩放 ====================
+/**
+ * 预览缩放比，让不同尺寸的画布在预览区内等比适应显示。
+ * 不放大（上限 100%），避免小尺寸海报被拉伸失真。
+ */
+const previewScale = ref(1)
+
+/** 截图期间需要按 100% 渲染，否则 html2canvas 会把缩放后的尺寸当成真实尺寸 */
+const isCapturing = ref(false)
+
+const effectiveScale = computed(() => (isCapturing.value ? 1 : previewScale.value))
+
+/** 缩放后画布的占位尺寸。transform 不影响布局盒子，需由外层撑出真实占位，否则会误出滚动条 */
+const posterStageStyle = computed(() => ({
+  width: posterSize.value.width * effectiveScale.value + 'px',
+  height: posterSize.value.height * effectiveScale.value + 'px'
+}))
+
+/** 按预览区可用空间重算缩放比 */
+const updatePreviewScale = () => {
+  const area = previewAreaRef.value
+  if (!area) return
+  const style = getComputedStyle(area)
+  const availableWidth =
+    area.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  const availableHeight =
+    area.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+  if (availableWidth <= 0 || availableHeight <= 0) return
+  const { width, height } = posterSize.value
+  previewScale.value = Math.min(availableWidth / width, availableHeight / height, 1)
+}
+
+/**
+ * 以 100% 缩放执行截图操作，结束后恢复预览缩放。
+ * html2canvas 会读取根元素的 transform，带缩放截图会得到偏小或被裁切的结果。
+ */
+const withFullScale = async function <T>(capture: () => Promise<T>): Promise<T> {
+  isCapturing.value = true
+  await nextTick()
+  try {
+    return await capture()
+  } finally {
+    isCapturing.value = false
+  }
+}
+
+let previewResizeObserver: ResizeObserver | null = null
+
+watch(posterSize, updatePreviewScale)
+
 // ==================== 字号控制 ====================
 const changeFontSize = (delta: number) => {
   const newSize = posterData.titleFontSize + delta
   if (newSize >= 16 && newSize <= 60) {
     posterData.titleFontSize = newSize
   }
+}
+
+// ==================== 右侧面板折叠 ====================
+type PropsPanelKey = 'content' | 'style' | 'material'
+
+/** 右侧各卡片的折叠状态，true 表示已折叠 */
+const collapsedPanels = reactive<Record<PropsPanelKey, boolean>>({
+  content: false,
+  style: true,
+  material: true
+})
+
+const togglePanel = (key: PropsPanelKey) => {
+  collapsedPanels[key] = !collapsedPanels[key]
 }
 
 // ==================== 防抖工具 ====================
@@ -845,12 +907,14 @@ const handlePreviewZoom = async () => {
   zoomLoading.value = true
   zoomImageUrl.value = ''
   try {
-    const canvas = await html2canvas(posterCanvasRef.value, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: null,
-      logging: false
-    })
+    const canvas = await withFullScale(() =>
+      html2canvas(posterCanvasRef.value!, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false
+      })
+    )
     zoomImageUrl.value = canvas.toDataURL('image/png')
   } catch (error) {
     console.error('生成预览失败:', error)
@@ -869,19 +933,17 @@ const uploadedImages = ref<ImageAsset[]>([])
 const UPLOADED_IMAGES_KEY = 'poster_uploaded_images'
 const MAX_UPLOAD_COUNT = 50
 
-/** 根据当前选择字段过滤预设素材 */
+/** 根据当前选择字段过滤预设素材（仅背景图有预设素材，二维码等需用户上传） */
 const presetAssetsForField = computed(() => {
-  if (!activeImageField.value) return presetAssets
-  if (activeImageField.value === 'background') {
-    return presetAssets.filter(a => a.category === 'background')
-  }
-  return presetAssets.filter(a => a.category === 'qrcode')
+  if (activeImageField.value !== 'background') return []
+  return presetAssets.filter(a => a.category === 'background')
 })
 
 /** 打开图片选择器 */
 const openImagePicker = (field: 'background' | 'qrcode') => {
   activeImageField.value = field
-  activeImageTab.value = 'preset'
+  // 二维码已无预设占位素材，默认进入本地上传，引导用户上传真实二维码
+  activeImageTab.value = field === 'qrcode' ? 'upload' : 'preset'
   imagePickerVisible.value = true
 }
 
@@ -897,12 +959,43 @@ const selectImage = (asset: ImageAsset) => {
   ElMessage.success(`已选择「${asset.name}」`)
 }
 
+/** 素材库快速应用背景图：直接设置，不经过选择器弹窗 */
+const applyMaterial = (asset: ImageAsset) => {
+  posterData.backgroundImage = asset
+}
+
+/** 我的图片按上传时间倒序（最新上传在前，便于快速复用） */
+const recentUploadedImages = computed(() => [...uploadedImages.value].reverse())
+
+/** 删除已上传图片（素材库「我的图片」与选择器弹窗「我的图片」共用入口） */
+const deleteUploadedImage = (id: string) => {
+  uploadedImages.value = uploadedImages.value.filter(img => img.id !== id)
+  saveUploadedImages()
+  ElMessage.success('图片已删除')
+}
+
+/** 淘汰最早上传的图片（LRU），用于数量/配额超限时自动腾出存储空间 */
+const evictOldestImage = () => {
+  if (uploadedImages.value.length === 0) return
+  let oldestIndex = 0
+  uploadedImages.value.forEach((img, i) => {
+    if ((img.uploadTime ?? 0) < (uploadedImages.value[oldestIndex].uploadTime ?? 0)) {
+      oldestIndex = i
+    }
+  })
+  uploadedImages.value.splice(oldestIndex, 1)
+}
+
 /** 上传前校验与处理：校验大小/格式/分辨率，转base64存localStorage */
 const handleBeforeUpload = async (file: File): Promise<boolean> => {
-  // 校验数量
-  if (uploadedImages.value.length >= MAX_UPLOAD_COUNT) {
-    ElMessage.error(`最多上传${MAX_UPLOAD_COUNT}张图片，请先删除部分历史图片`)
-    return false
+  // 数量达到上限时自动淘汰最早上传的图片，为新图腾出位置
+  let evictedForCount = 0
+  while (uploadedImages.value.length >= MAX_UPLOAD_COUNT) {
+    evictOldestImage()
+    evictedForCount++
+  }
+  if (evictedForCount > 0) {
+    ElMessage.warning(`图片数量已达上限，已自动清理 ${evictedForCount} 张最早上传的图片`)
   }
   // 校验大小
   if (file.size > 5 * 1024 * 1024) {
@@ -963,20 +1056,32 @@ const loadUploadedImages = () => {
   }
 }
 
-/** 保存已上传图片到localStorage */
+/** 保存已上传图片到localStorage；配额不足时自动淘汰最早上传的图片直至写入成功 */
 const saveUploadedImages = () => {
-  try {
-    localStorage.setItem(UPLOADED_IMAGES_KEY, JSON.stringify(uploadedImages.value))
-  } catch (e) {
-    console.error('保存上传图片失败:', e)
-    ElMessage.error('存储空间不足，无法保存图片')
+  let evictedForStorage = 0
+  while (true) {
+    try {
+      localStorage.setItem(UPLOADED_IMAGES_KEY, JSON.stringify(uploadedImages.value))
+      if (evictedForStorage > 0) {
+        ElMessage.warning(`存储空间不足，已自动清理 ${evictedForStorage} 张最早上传的图片`)
+      }
+      return
+    } catch (e) {
+      if (uploadedImages.value.length === 0) {
+        console.error('保存上传图片失败:', e)
+        ElMessage.error('存储空间不足，无法保存图片')
+        return
+      }
+      evictOldestImage()
+      evictedForStorage++
+    }
   }
 }
 
 // ==================== 草稿功能 ====================
 const DRAFTS_KEY = 'poster_drafts'
 const MAX_DRAFT_COUNT = 5
-const AUTO_SAVE_INTERVAL = 30000 // 30秒
+const AUTO_SAVE_INTERVAL = 60000 // 60秒（兜底保存；主动保存在停止编辑后由防抖触发）
 
 const drafts = ref<PosterDraft[]>([])
 const draftsDialogVisible = ref(false)
@@ -1042,16 +1147,33 @@ const doSaveDraft = () => {
   }
 }
 
-/** 自动保存草稿（静默，不提示） */
+/** 自动保存草稿（静默，不提示）；仅在内容变化时写入localStorage，避免无谓写入触发「重新加载站点」提示 */
 const autoSaveDraft = () => {
   // 只在已有草稿时静默更新最近一条，避免无限增加草稿
   if (drafts.value.length === 0) return
   const latest = drafts.value[0]
+  const newPosterData = JSON.parse(JSON.stringify(posterData))
+  // 内容与最新草稿一致时直接返回，不写localStorage
+  const posterDataChanged =
+    !latest.posterData ||
+    JSON.stringify(latest.posterData) !== JSON.stringify(newPosterData)
+  if (!posterDataChanged && latest.templateId === selectedTemplateId.value) {
+    return
+  }
   latest.templateId = selectedTemplateId.value
-  latest.posterData = JSON.parse(JSON.stringify(posterData))
+  latest.posterData = newPosterData
   latest.createdAt = Date.now()
   saveDraftsToStorage()
 }
+
+/** 自动保存防抖：停止编辑5秒后静默保存，避免编辑过程中频繁写localStorage */
+const debouncedAutoSaveDraft = debounce(() => {
+  autoSaveDraft()
+}, 5000)
+
+// 编辑内容变化后触发防抖自动保存（深监听海报数据与模板切换）
+watch(posterData, () => debouncedAutoSaveDraft(), { deep: true })
+watch(selectedTemplateId, () => debouncedAutoSaveDraft())
 
 /** 打开草稿列表弹窗 */
 const openDraftsDialog = () => {
@@ -1115,12 +1237,14 @@ const handleExport = async () => {
   }
   try {
     ElMessage.info('正在生成图片，请稍候...')
-    const canvas = await html2canvas(posterCanvasRef.value, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: null,
-      logging: false
-    })
+    const canvas = await withFullScale(() =>
+      html2canvas(posterCanvasRef.value!, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false
+      })
+    )
     canvas.toBlob((blob) => {
       if (!blob) {
         ElMessage.error('图片生成失败')
@@ -1159,10 +1283,16 @@ const handleBeforeUnload = (e: BeforeUnloadEvent) => {
 onMounted(() => {
   loadUploadedImages()
   loadDrafts()
-  // 启动30秒自动保存
+  // 启动60秒兜底自动保存（主动保存在停止编辑后由防抖触发）
   autoSaveTimer = setInterval(autoSaveDraft, AUTO_SAVE_INTERVAL)
   // 监听页面卸载
   window.addEventListener('beforeunload', handleBeforeUnload)
+  // 预览区尺寸变化时重算缩放比（窗口缩放、右侧面板折叠等）
+  updatePreviewScale()
+  if (previewAreaRef.value) {
+    previewResizeObserver = new ResizeObserver(updatePreviewScale)
+    previewResizeObserver.observe(previewAreaRef.value)
+  }
 })
 
 onUnmounted(() => {
@@ -1171,6 +1301,8 @@ onUnmounted(() => {
     autoSaveTimer = null
   }
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  previewResizeObserver?.disconnect()
+  previewResizeObserver = null
 })
 </script>
 
@@ -1433,13 +1565,26 @@ onUnmounted(() => {
   position: relative;
 }
 
+/* 缩放占位层：撑出缩放后的实际视觉尺寸，让预览区居中与滚动判断正确 */
+.poster-stage {
+  flex: none;
+  transition: width 0.3s, height 0.3s;
+}
+
 .poster-canvas {
   border-radius: var(--radius-md);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 60px rgba(255, 107, 107, 0.2);
   position: relative;
   overflow: hidden;
-  transition: width 0.3s, height 0.3s, background 0.3s;
+  transform-origin: top left;
+  transition: width 0.3s, height 0.3s, background 0.3s, transform 0.3s;
   cursor: zoom-in;
+}
+
+/* 截图时必须立刻回到 100%，过渡中的中间值会让 html2canvas 取到错误尺寸 */
+.poster-stage.capturing,
+.poster-canvas.capturing {
+  transition: none;
 }
 
 .poster-bg-img {
@@ -1621,12 +1766,44 @@ onUnmounted(() => {
   overflow: hidden;
   position: relative;
   flex: 1;
+  min-height: 0;
+}
+
+/* 内容高度自适应的卡片（样式配置、素材库），空间不足时可收缩并内部滚动 */
+.props-card-auto {
+  flex: 0 1 auto;
+}
+
+/* 折叠态：仅保留标题栏高度 */
+.props-card.collapsed {
+  flex: 0 0 auto;
+}
+
+/* 可折叠标题栏 */
+.panel-header.collapsible {
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel-header.collapsible:hover .panel-title {
+  color: var(--primary);
+}
+
+.collapse-arrow {
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.3s;
+}
+
+.collapse-arrow.collapsed {
+  transform: rotate(-90deg);
 }
 
 .props-body {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+  min-height: 0;
 }
 
 /* 属性表单 */
@@ -1779,6 +1956,17 @@ onUnmounted(() => {
   object-fit: cover;
 }
 
+/* 素材库区块间距 */
+.material-section + .material-section {
+  margin-top: 16px;
+}
+
+/* 当前应用的背景图高亮 */
+.material-item.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
 /* 底部操作栏 */
 .action-bar {
   padding: 12px;
@@ -1866,6 +2054,38 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* 已上传图片删除按钮（素材库「我的图片」与选择器弹窗「我的图片」共用） */
+.material-item,
+.asset-item {
+  position: relative;
+}
+
+.asset-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 2;
+}
+
+.material-item:hover .asset-delete-btn,
+.asset-item:hover .asset-delete-btn {
+  opacity: 1;
+}
+
 .upload-area {
   text-align: center;
   padding: 40px 20px;
@@ -1931,8 +2151,9 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
+  /* 弹窗为浅色浮层风格，草稿列表用浅色样式与白色弹窗背景协调 */
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   border-radius: var(--radius-md);
 }
 
@@ -1943,12 +2164,12 @@ onUnmounted(() => {
 .draft-name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: #1f2937;
 }
 
 .draft-time {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: #9ca3af;
   margin-top: 4px;
 }
 
@@ -1962,9 +2183,10 @@ onUnmounted(() => {
   font-size: 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  /* 浅色弹窗内按钮配色 */
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #4b5563;
   transition: all 0.3s;
 }
 

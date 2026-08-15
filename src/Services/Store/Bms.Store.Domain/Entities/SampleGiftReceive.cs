@@ -41,6 +41,11 @@ public class SampleGiftReceive : StoreBusinessEntityBase
     public string? Remark { get; set; }
 
     /// <summary>
+    /// 关联活动ID（可选，用于活动维度归因统计）
+    /// </summary>
+    public long? ActivityId { get; set; }
+
+    /// <summary>
     /// 导航属性：商品
     /// </summary>
     public Product? Product { get; set; }
@@ -54,4 +59,9 @@ public class SampleGiftReceive : StoreBusinessEntityBase
     /// 导航属性：库存批次
     /// </summary>
     public InventoryBatch? InventoryBatch { get; set; }
+
+    /// <summary>
+    /// 导航属性：活动
+    /// </summary>
+    public Activity? Activity { get; set; }
 }

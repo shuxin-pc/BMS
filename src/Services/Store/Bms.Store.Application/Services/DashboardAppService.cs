@@ -305,7 +305,7 @@ public class DashboardAppService : IDashboardAppService
     private TenantStoreContext ResolveTenantStore()
     {
         if (!_currentUser.TenantId.HasValue)
-            return new TenantStoreContext(0, 0, "无法确定当前租户", 401);
+            return new TenantStoreContext(0, 0, "登录状态异常，请重新登录", 401);
         if (!_currentUser.StoreId.HasValue)
             return new TenantStoreContext(0, 0, "请选择门店", 400);
         return new TenantStoreContext(_currentUser.TenantId.Value, _currentUser.StoreId.Value, null, 0);

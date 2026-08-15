@@ -17,7 +17,6 @@ public class MenuRepository : IMenuRepository
     {
         return await _context.Menus
             .Include(m => m.Children)
-            .Include(m => m.Permissions)
             .FirstOrDefaultAsync(m => m.Id == id && !m.IsDeleted);
     }
 
@@ -25,7 +24,6 @@ public class MenuRepository : IMenuRepository
     {
         return await _context.Menus
             .Include(m => m.Children)
-            .Include(m => m.Permissions)
             .FirstOrDefaultAsync(m => m.Code == code && !m.IsDeleted);
     }
 
@@ -54,9 +52,9 @@ public class MenuRepository : IMenuRepository
             .Select(ur => ur.RoleId)
             .ToListAsync();
 
-        var menuIds = await _context.RolePermissions
-            .Where(rp => roleIds.Contains(rp.RoleId))
-            .Select(rp => rp.Permission.MenuId)
+        var menuIds = await _context.RoleMenuAuths
+            .Where(rma => roleIds.Contains(rma.RoleId))
+            .Select(rma => rma.MenuId)
             .Distinct()
             .ToListAsync();
 
@@ -70,9 +68,9 @@ public class MenuRepository : IMenuRepository
 
     public async Task<List<Menu>> GetByRoleIdAsync(long roleId)
     {
-        var menuIds = await _context.RolePermissions
-            .Where(rp => rp.RoleId == roleId)
-            .Select(rp => rp.Permission.MenuId)
+        var menuIds = await _context.RoleMenuAuths
+            .Where(rma => rma.RoleId == roleId)
+            .Select(rma => rma.MenuId)
             .Distinct()
             .ToListAsync();
 

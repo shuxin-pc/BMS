@@ -24,15 +24,6 @@
             <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 120px">
               <el-option label="在岗" :value="1" />
               <el-option label="休息" :value="2" />
-              <el-option label="离职" :value="3" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="职级">
-            <el-select v-model="searchForm.level" placeholder="全部" clearable style="width: 120px">
-              <el-option label="初级" :value="1" />
-              <el-option label="中级" :value="2" />
-              <el-option label="高级" :value="3" />
-              <el-option label="总监" :value="4" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -58,7 +49,7 @@
         </el-button>
         <el-button
           type="danger"
-          :disabled="selectedRows.length === 0"
+          :disabled="selectedRows.length === 0 || selectedRows.some(row => !canOperate(row))"
           @click="handleBatchDelete"
         >
           <el-icon><Delete /></el-icon>
@@ -89,7 +80,6 @@
               </div>
               <div class="technician-detail">
                 <div class="technician-name">{{ row.name }}</div>
-                <div class="technician-code">{{ row.jobNumber }}</div>
               </div>
             </div>
           </template>
@@ -115,12 +105,21 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="serviceItems" label="服务项目" min-width="200" show-overflow-tooltip />
-        <el-table-column label="职级" width="90" align="center">
+        <el-table-column label="可服务项目" min-width="200">
           <template #default="{ row }">
-            <el-tag :type="levelTagType(row.level)" size="small" effect="dark">
-              {{ levelText(row.level) }}
-            </el-tag>
+            <div v-if="technicianServicesMap[row.id] && technicianServicesMap[row.id].length" class="skill-tags">
+              <el-tag
+                v-for="name in technicianServicesMap[row.id]"
+                :key="name"
+                size="small"
+                effect="plain"
+                type="info"
+                class="skill-tag"
+              >
+                {{ name }}
+              </el-tag>
+            </div>
+            <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
@@ -142,14 +141,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="hireDate" label="入职日期" width="120" />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button
               link
               type="primary"
               size="small"
-              :disabled="row.source === 2"
+              :disabled="!canOperate(row)"
               @click="handleEdit(row)"
             >
               <el-icon><Edit /></el-icon>
@@ -159,7 +157,7 @@
               link
               type="danger"
               size="small"
-              :disabled="row.source === 2"
+              :disabled="!canOperate(row)"
               @click="handleDelete(row)"
             >
               <el-icon><Delete /></el-icon>
@@ -203,17 +201,12 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="工号" prop="jobNumber">
-              <el-input v-model="formData.jobNumber" placeholder="请输入工号" :disabled="isEdit" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
             <el-form-item label="手机号" prop="phone">
               <el-input v-model="formData.phone" placeholder="请输入手机号" />
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="性别" prop="gender">
               <el-radio-group v-model="formData.gender">
@@ -225,59 +218,49 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="职级" prop="level">
-              <el-select v-model="formData.level" placeholder="请选择职级" style="width: 100%">
-                <el-option label="初级" :value="1" />
-                <el-option label="中级" :value="2" />
-                <el-option label="高级" :value="3" />
-                <el-option label="总监" :value="4" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="状态" prop="status">
               <el-radio-group v-model="formData.status">
                 <el-radio :value="1">在岗</el-radio>
                 <el-radio :value="2">休息</el-radio>
-                <el-radio :value="3">离职</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
         </el-row>
         <!-- 技师来源由后端根据当前租户强制赋值，前端无需录入 -->
         <el-form-item label="技能标签" prop="skillCategoryIds">
-          <el-select
+          <el-tree-select
             v-model="formData.skillCategoryIds"
+            :data="skillCategoryTree"
+            :props="{ label: 'name', children: 'children' }"
+            node-key="id"
             multiple
             filterable
             clearable
+            check-strictly
             placeholder="请选择技能标签"
             style="width: 100%"
-          >
-            <el-option
-              v-for="item in skillCategoryOptions"
-              :key="item.id"
-              :label="item.name"
-              :value="item.id"
-            />
-          </el-select>
+          />
         </el-form-item>
-        <el-form-item label="服务项目" prop="serviceItems">
-          <el-input v-model="formData.serviceItems" placeholder="请输入服务项目，用顿号分隔" />
+        <el-form-item label="可服务项目">
+          <template v-if="isEdit">
+            <div class="skill-tags">
+              <el-tag
+                v-for="name in technicianServicesMap[formData.id] || []"
+                :key="name"
+                size="small"
+                effect="plain"
+                type="info"
+                class="skill-tag"
+              >
+                {{ name }}
+              </el-tag>
+              <span v-if="!(technicianServicesMap[formData.id] && technicianServicesMap[formData.id].length)" class="text-muted">
+                暂无可服务项目
+              </span>
+            </div>
+          </template>
+          <span v-else class="text-muted">保存后展示可服务项目</span>
         </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="入职日期" prop="hireDate">
-              <el-date-picker
-                v-model="formData.hireDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择入职日期"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
@@ -301,21 +284,23 @@ import {
   createTechnician,
   updateTechnician,
   deleteTechnician,
-  deleteTechnicians
+  deleteTechnicians,
+  getTechnicianServices
 } from '@/api/staff'
 import { getSkillCategoryTree } from '@/api/skill'
 import type { SkillCategory } from '@/api/skill'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { Technician, TechnicianSource } from '@/api/staff/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
 
 // 搜索表单
 const searchForm = reactive({
   name: '',
   phone: '',
-  status: undefined as number | undefined,
-  level: undefined as number | undefined
+  status: undefined as number | undefined
 })
 
 // 表格数据
@@ -330,6 +315,23 @@ const pagination = reactive({
   total: 0
 })
 
+// 技师可服务项目名称缓存（id -> 名称列表，双向匹配展示用）
+const technicianServicesMap = ref<Record<number, string[]>>({})
+
+/**
+ * 加载单个技师可服务项目名称（懒加载 + 缓存，避免重复请求）
+ * @param technicianId 技师ID
+ */
+const loadTechnicianServices = async (technicianId: number) => {
+  if (technicianServicesMap.value[technicianId]) return
+  try {
+    const list = await getTechnicianServices(technicianId)
+    technicianServicesMap.value[technicianId] = list.map(s => s.name)
+  } catch {
+    technicianServicesMap.value[technicianId] = []
+  }
+}
+
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
@@ -338,12 +340,13 @@ const loadData = async () => {
       name: searchForm.name || undefined,
       phone: searchForm.phone || undefined,
       status: searchForm.status,
-      level: searchForm.level,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
     tableData.value = res.list
     pagination.total = res.total
+    // 批量加载当前页技师的可服务项目（并行请求）
+    await Promise.all(tableData.value.map(t => loadTechnicianServices(t.id)))
   } catch (error) {
     ElMessage.error('加载数据失败')
   } finally {
@@ -362,7 +365,6 @@ const handleReset = () => {
   searchForm.name = ''
   searchForm.phone = ''
   searchForm.status = undefined
-  searchForm.level = undefined
   handleSearch()
 }
 
@@ -377,13 +379,9 @@ const formData = reactive({
   name: '',
   phone: '',
   gender: 1 as number,
-  jobNumber: '',
   skillCategoryIds: [] as number[],
-  serviceItems: '',
-  level: 1 as number,
   status: 1 as number,
   source: 1 as TechnicianSource,
-  hireDate: '',
   remark: ''
 })
 
@@ -392,10 +390,6 @@ const formRules: FormRules = {
     { required: true, message: '技师姓名不能为空', trigger: 'blur' },
     { max: 50, message: '技师姓名最多50个字符', trigger: 'blur' }
   ],
-  jobNumber: [
-    { required: true, message: '工号不能为空', trigger: 'blur' },
-    { min: 2, max: 50, message: '工号长度为2-50个字符', trigger: 'blur' }
-  ],
   phone: [
     { required: true, message: '手机号不能为空', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
@@ -403,37 +397,17 @@ const formRules: FormRules = {
   gender: [
     { required: true, message: '请选择性别', trigger: 'change' }
   ],
-  level: [
-    { required: true, message: '请选择职级', trigger: 'change' }
-  ],
   status: [
     { required: true, message: '请选择状态', trigger: 'change' }
-  ],
-  hireDate: [
-    { required: true, message: '请选择入职日期', trigger: 'change' }
-  ],
-  serviceItems: [
-    { required: true, message: '服务项目不能为空', trigger: 'blur' }
   ]
 }
 
-// 技能分类选项
-const skillCategoryOptions = ref<{ id: number; name: string }[]>([])
+// 技能分类树形选项（保留层级结构，供 el-tree-select 展示）
+const skillCategoryTree = ref<SkillCategory[]>([])
 
 const loadSkillCategories = async () => {
   try {
-    const tree = await getSkillCategoryTree({})
-    const flatten = (nodes: SkillCategory[]): { id: number; name: string }[] => {
-      const result: { id: number; name: string }[] = []
-      nodes.forEach(node => {
-        result.push({ id: node.id, name: node.name })
-        if (node.children && node.children.length > 0) {
-          result.push(...flatten(node.children))
-        }
-      })
-      return result
-    }
-    skillCategoryOptions.value = flatten(tree)
+    skillCategoryTree.value = await getSkillCategoryTree({})
   } catch {
     // 加载失败时静默处理
   }
@@ -445,13 +419,9 @@ const resetFormData = () => {
   formData.name = ''
   formData.phone = ''
   formData.gender = 1
-  formData.jobNumber = ''
   formData.skillCategoryIds = []
-  formData.serviceItems = ''
-  formData.level = 1
   formData.status = 1
   formData.source = 1
-  formData.hireDate = ''
   formData.remark = ''
 }
 
@@ -469,14 +439,12 @@ const handleEdit = (row: Technician) => {
   formData.name = row.name
   formData.phone = row.phone
   formData.gender = row.gender
-  formData.jobNumber = row.jobNumber || ''
   formData.skillCategoryIds = row.skillCategoryIds ? [...row.skillCategoryIds] : []
-  formData.serviceItems = row.serviceItems || ''
-  formData.level = row.level || 1
   formData.status = row.status
   formData.source = row.source
-  formData.hireDate = row.hireDate || ''
   formData.remark = row.remark || ''
+  // 编辑弹窗展示可服务项目（表格加载时已缓存则直接命中）
+  loadTechnicianServices(row.id)
   dialogVisible.value = true
 }
 
@@ -530,11 +498,7 @@ const handleSubmit = async () => {
           phone: formData.phone,
           gender: formData.gender,
           skillCategoryIds: formData.skillCategoryIds,
-          jobNumber: formData.jobNumber,
-          serviceItems: formData.serviceItems,
-          level: formData.level,
           status: formData.status,
-          hireDate: formData.hireDate,
           remark: formData.remark || undefined
         }
         if (isEdit.value) {
@@ -560,35 +524,30 @@ const handleSelectionChange = (rows: Technician[]) => {
   selectedRows.value = rows
 }
 
+/**
+ * 判断当前用户是否可编辑/删除指定技师
+ * 规则：技师归属租户与当前租户一致才可操作
+ * - 商家门店（tenantId≠1）对平台技师（tenantId=1）只读，仅可操作本店自有技师
+ * - 平台租户（tenantId=1）可维护本租户创建的平台技师
+ */
+const canOperate = (row: Technician): boolean => {
+  const currentTenantId = userStore.currentTenantId
+  if (!currentTenantId || row.tenantId == null) return false
+  return String(row.tenantId) === String(currentTenantId)
+}
+
 // 状态文本与样式
 const statusText = (status: number): string => {
-  const map: Record<number, string> = { 1: '在岗', 2: '休息', 3: '离职' }
+  const map: Record<number, string> = { 1: '在岗', 2: '休息' }
   return map[status] || '未知'
 }
 
 const statusTagType = (status: number): 'success' | 'warning' | 'info' => {
   const map: Record<number, 'success' | 'warning' | 'info'> = {
     1: 'success',
-    2: 'warning',
-    3: 'info'
+    2: 'warning'
   }
   return map[status] || 'info'
-}
-
-// 职级文本与样式
-const levelText = (level: number): string => {
-  const map: Record<number, string> = { 1: '初级', 2: '中级', 3: '高级', 4: '总监' }
-  return map[level] || '未知'
-}
-
-const levelTagType = (level: number): 'info' | 'success' | 'warning' | 'danger' => {
-  const map: Record<number, 'info' | 'success' | 'warning' | 'danger'> = {
-    1: 'info',
-    2: 'success',
-    3: 'warning',
-    4: 'danger'
-  }
-  return map[level] || 'info'
 }
 
 onMounted(async () => {
@@ -707,16 +666,16 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-.technician-code {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
 /* 技能标签 */
 .skill-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* 空状态占位 */
+.text-muted {
+  color: var(--text-tertiary);
 }
 
 .skill-tag {

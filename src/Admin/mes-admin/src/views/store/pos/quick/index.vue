@@ -127,6 +127,23 @@
                 <span v-else-if="item.productType === 5" class="cart-expiry expiry-missing">效期未选</span>
                 <el-button v-if="item.productType === 2" link size="small" @click="openTechDialog(item)">选技师</el-button>
               </div>
+              <!-- 赠品关联活动（非必填，用于活动维度归因统计，写入 InventoryLog.ActivityId） -->
+              <div v-if="item.productType === 5" class="cart-activity">
+                <el-select
+                  v-model="item.activityId"
+                  placeholder="关联活动（非必填）"
+                  clearable
+                  size="small"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="act in activityOptions"
+                    :key="act.id"
+                    :label="act.name"
+                    :value="act.id"
+                  />
+                </el-select>
+              </div>
             </div>
             <div class="qty-control">
               <button class="qty-btn" @click="changeQty(item, -1)">−</button>
@@ -495,6 +512,7 @@ import { getTechnicians, type Technician } from '@/api/technician'
 import { getTreatmentCardSales, verifyTreatmentCard, type TreatmentCardSale, type TreatmentCardVerifyItemInput } from '@/api/treatment-card'
 import { getAppointments, type Appointment } from '@/api/appointment'
 import { getProductExpiryOptions, type ProductExpiryOption } from '@/api/inventory'
+import { getActivityOptions, type ActivityOption } from '@/api/activity'
 
 // ==================== 商品数据 ====================
 interface POSProduct {
@@ -624,6 +642,17 @@ const loadCustomerLevels = async () => {
   }
 }
 
+// ==================== 活动选项（赠品关联活动用） ====================
+const activityOptions = ref<ActivityOption[]>([])
+const loadActivityOptions = async () => {
+  try {
+    activityOptions.value = await getActivityOptions()
+  } catch (e: any) {
+    // 静默失败，不影响主流程
+    console.warn('加载活动选项失败:', e.message)
+  }
+}
+
 // 根据等级ID获取折扣率（POS 内部用 0-10 整数表示，9 = 9折）
 const getDiscountRateByLevelId = (levelId?: number): number => {
   if (!levelId) return 10
@@ -713,6 +742,8 @@ interface CartItem {
   /** 源预约ID（预约转订单时记录，后端 OrderAppService 据此复制技师/房间/设备到 OrderItem） */
   sourceAppointmentId?: number
   expirationDates?: (string | null)[]  // 店员选择的效期列表（按扣减顺序），undefined 表示系统自动推荐；null 元素表示"无效期限制"批次
+  /** 关联活动ID（仅赠品 Type=5 有意义，用于活动维度归因统计，非必填） */
+  activityId?: number | null
 }
 
 const cart = ref<CartItem[]>([])
@@ -981,7 +1012,7 @@ const cashPayMethod = ref<1 | 2 | 3 | 4>(1)
 const storedValueAmount = ref(0)
 const pointsAmount = ref(0)
 // 积分规则（用于组合支付类别3积分抵扣计算）
-const comboPointsRule = ref<{ pointsToYuan: number } | null>(null)
+const comboPointsRule = ref<{ deductRate: number } | null>(null)
 
 // 组合支付合计
 const combinedTotal = computed(() => {
@@ -991,7 +1022,7 @@ const combinedTotal = computed(() => {
 // 积分最大可抵扣金额 = min(会员积分 × 抵扣率, 应收金额)
 const maxPointsDeduct = computed(() => {
   if (!selectedMember.value || !comboPointsRule.value) return 0
-  const rate = comboPointsRule.value.pointsToYuan || 0
+  const rate = comboPointsRule.value.deductRate || 0
   if (rate <= 0) return 0
   const byPoints = selectedMember.value.totalPoints * rate
   return Math.round(Math.min(byPoints, payableAmount.value) * 100) / 100
@@ -1074,10 +1105,10 @@ const openPayDialog = async () => {
   if (!comboPointsRule.value) {
     try {
       const rule = await getPointsRule()
-      comboPointsRule.value = { pointsToYuan: rule.pointsToYuan }
+      comboPointsRule.value = { deductRate: rule?.deductRate ?? 0 }
     } catch (e) {
       // 积分规则加载失败不阻塞，组合支付积分栏将不可用
-      comboPointsRule.value = { pointsToYuan: 0 }
+      comboPointsRule.value = { deductRate: 0 }
     }
   }
   payDialogVisible.value = true
@@ -1189,7 +1220,9 @@ const handleConfirmPay = async () => {
       // 实物商品（type=1）和赠品（type=5）均需传效期列表；服务项目（type=2）不需要
       // 赠品走与零售商品相同的批次扣减逻辑（FEFO+FIFO），后端 DeductSampleGiftOutAsync 按效期扣减
       expirationDates: (item.productType === 1 || item.productType === 5) ? item.expirationDates : undefined,
-      allowAutoFillBeyondSelection: false
+      allowAutoFillBeyondSelection: false,
+      // 赠品（type=5）关联活动（非必填，写入 InventoryLog.ActivityId 用于活动维度归因统计）
+      activityId: item.productType === 5 ? item.activityId : undefined
     })),
     // 预约转订单：取第一个有 sourceAppointmentId 的明细对应的预约ID（预约一次只生成一个订单）
     sourceAppointmentId: cart.value.find(i => i.sourceAppointmentId)?.sourceAppointmentId
@@ -1235,7 +1268,6 @@ const handleInsufficientExpiryStock = async (errorMessage: string, originalPaylo
 
   const productName = parts[2]
   const shortfall = parts[3]
-  const optionsStr = parts[4]
 
   try {
     await ElMessageBox.confirm(
@@ -1516,7 +1548,8 @@ onMounted(async () => {
     loadCategories(),
     loadProducts(),
     loadGifts(),
-    loadCustomerLevels()
+    loadCustomerLevels(),
+    loadActivityOptions()
   ])
 })
 
@@ -1962,6 +1995,10 @@ onUnmounted(() => {
 .cart-spec {
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+.cart-activity {
+  margin-top: 6px;
 }
 
 .cart-price {

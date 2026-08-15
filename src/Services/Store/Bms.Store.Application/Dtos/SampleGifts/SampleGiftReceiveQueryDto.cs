@@ -9,4 +9,9 @@ public class SampleGiftReceiveQueryDto : PagedRequestDto
 {
     public long? ProductId { get; set; }
     public long? CustomerId { get; set; }
+
+    /// <summary>
+    /// 关联活动ID筛选
+    /// </summary>
+    public long? ActivityId { get; set; }
 }

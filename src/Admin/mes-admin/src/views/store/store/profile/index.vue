@@ -97,11 +97,15 @@
             {{ formatDate(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
+            </el-button>
+            <el-button link type="primary" size="small" @click="handleAssignUser(row)">
+              <el-icon><User /></el-icon>
+              分配用户
             </el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
@@ -235,14 +239,38 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 分配用户弹窗 -->
+    <el-dialog
+      v-model="userDialogVisible"
+      :title="`分配用户 - ${currentStoreForUser?.name ?? ''}`"
+      width="700px"
+      :close-on-click-modal="false"
+    >
+      <el-transfer
+        v-model="transferValue"
+        :data="transferData"
+        :titles="['可分配用户', '已分配用户']"
+        filterable
+        filter-placeholder="搜索用户名/姓名"
+        :left-default-checked="[]"
+        :right-default-checked="[]"
+      />
+      <template #footer>
+        <el-button @click="userDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="userSubmitLoading" @click="handleUserSubmit">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
-import { getStores, createStore, updateStore, deleteStore, deleteStores } from '@/api/store'
+import { Search, Refresh, Plus, Delete, Edit, User } from '@element-plus/icons-vue'
+import { getStores, createStore, updateStore, deleteStore, deleteStores, getStoreAvailableUsers, assignStoreUsers } from '@/api/store'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { Store } from '@/api/store/types'
 
@@ -490,6 +518,53 @@ const handleSubmit = async () => {
 // 选择行
 const handleSelectionChange = (rows: Store[]) => {
   selectedRows.value = rows
+}
+
+// ==================== 分配用户 ====================
+
+interface TransferItem {
+  key: string
+  label: string
+}
+
+const userDialogVisible = ref(false)
+const currentStoreForUser = ref<Store | null>(null)
+const transferData = ref<TransferItem[]>([])
+const transferValue = ref<string[]>([])
+const userSubmitLoading = ref(false)
+
+// 打开分配用户弹窗
+const handleAssignUser = async (row: Store) => {
+  currentStoreForUser.value = row
+  userDialogVisible.value = true
+  transferData.value = []
+  transferValue.value = []
+  try {
+    const users = await getStoreAvailableUsers(row.id)
+    transferData.value = users.map(u => ({
+      key: u.id,
+      label: u.realName ? `${u.realName}（${u.userName}）` : u.userName
+    }))
+    // 右侧默认显示已分配用户
+    transferValue.value = users.filter(u => u.assigned).map(u => u.id)
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载用户列表失败')
+  }
+}
+
+// 提交分配（全量替换）
+const handleUserSubmit = async () => {
+  if (!currentStoreForUser.value) return
+  userSubmitLoading.value = true
+  try {
+    await assignStoreUsers(currentStoreForUser.value.id, transferValue.value)
+    ElMessage.success('分配成功')
+    userDialogVisible.value = false
+  } catch (error: any) {
+    ElMessage.error(error.message || '分配失败')
+  } finally {
+    userSubmitLoading.value = false
+  }
 }
 
 // 格式化日期

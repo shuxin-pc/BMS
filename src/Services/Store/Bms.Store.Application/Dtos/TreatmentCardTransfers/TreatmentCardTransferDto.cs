@@ -51,6 +51,11 @@ public class TreatmentCardTransferDto
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作员姓名（转让时的姓名快照）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 状态（1:已转让）
     /// </summary>
     public int Status { get; set; }

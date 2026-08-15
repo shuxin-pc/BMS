@@ -10,4 +10,5 @@ public class InventoryAlertQueryDto : PagedRequestDto
     public long? ProductId { get; set; }
     public int? AlertType { get; set; }
     public bool? IsProcessed { get; set; }
+    public string? ProductName { get; set; }
 }

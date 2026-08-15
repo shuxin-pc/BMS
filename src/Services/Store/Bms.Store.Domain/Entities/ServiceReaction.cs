@@ -17,7 +17,15 @@ public class ServiceReaction : StoreBusinessEntityBase
     public long? OrderId { get; set; }
 
     /// <summary>
-    /// 服务项目
+    /// 服务项目商品ID（引用门店商品档案 Product.Id，仅服务类商品）
+    /// 可空：客户通过电话/微信反馈时可能无法确定具体项目，此时仅保留文字描述
+    /// 用于不良反应率统计与追溯服务所用耗材（排查过敏源）
+    /// </summary>
+    public long? ProductId { get; set; }
+
+    /// <summary>
+    /// 服务项目名称快照（登记时从商品主档复制并锁定）
+    /// 商品改名或下架后档案仍保持当时的项目名，保证纠纷举证时不失真
     /// </summary>
     public string? ServiceItem { get; set; }
 

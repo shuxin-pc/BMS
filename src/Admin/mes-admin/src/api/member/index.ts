@@ -6,13 +6,13 @@ import type {
   MemberAccount,
   MemberAccountQuery,
   RechargeRequest,
+  RechargeGiftPreview,
   RechargeRule,
   RechargeRuleQuery,
   RechargeRuleCreate,
   RechargeRuleUpdate,
   MemberTransaction,
   MemberTransactionQuery,
-  AccountStatus,
   TransactionType,
   StoredValueCashFlow
 } from './types'
@@ -22,13 +22,13 @@ export type {
   MemberAccount,
   MemberAccountQuery,
   RechargeRequest,
+  RechargeGiftPreview,
   RechargeRule,
   RechargeRuleQuery,
   RechargeRuleCreate,
   RechargeRuleUpdate,
   MemberTransaction,
   MemberTransactionQuery,
-  AccountStatus,
   TransactionType,
   StoredValueCashFlow,
   PagedResponse
@@ -45,6 +45,8 @@ export type {
 export async function getMemberAccounts(query?: MemberAccountQuery): Promise<PagedResponse<MemberAccount>> {
   const qs = buildQuery({
     customerId: query?.customerId,
+    customerName: query?.customerName,
+    phone: query?.phone,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })
@@ -53,54 +55,26 @@ export async function getMemberAccounts(query?: MemberAccountQuery): Promise<Pag
 
 /**
  * 储值充值
- * 后端无专门充值接口，通过 StoredValueLogsController.Create 创建充值流水实现。
- * 先获取账户当前余额，计算前后值，再 POST 流水。
+ * 对接后端 POST /api/store/storedValueAccounts/recharge，
+ * 由后端按储值规则计算赠送金额、写流水并在事务内更新余额（避免前端计算余额导致并发覆盖）
  * @param data 充值请求
  */
 export async function rechargeAccount(data: RechargeRequest): Promise<void> {
-  // 1. 获取账户当前状态
-  const account = await request<MemberAccount>(`/storedValueAccounts/${data.accountId}`)
-
-  const beforeBalance = account.balance
-  const beforeRealBalance = account.realBalance
-  const beforeGiftBalance = account.giftBalance
-
-  // 充值：实收金额进入 realBalance，赠送金额进入 giftBalance
-  const afterRealBalance = beforeRealBalance + data.amount
-  const afterGiftBalance = beforeGiftBalance + data.bonusAmount
-  const afterBalance = afterRealBalance + afterGiftBalance
-
-  // 2. 创建充值流水（type=1 充值）
-  await request('/storedValueLogs', {
+  await request('/storedValueAccounts/recharge', {
     method: 'POST',
-    body: JSON.stringify({
-      customerId: account.customerId,
-      type: 1,
-      amount: data.amount + data.bonusAmount,
-      realAmount: data.amount,
-      giftAmount: data.bonusAmount,
-      beforeBalance,
-      afterBalance,
-      realBalanceChange: data.amount,
-      giftBalanceChange: data.bonusAmount,
-      beforeRealBalance,
-      afterRealBalance,
-      beforeGiftBalance,
-      afterGiftBalance,
-      payMethod: data.paymentMethod,
-      remark: data.remark || '充值'
-    })
+    body: JSON.stringify(data)
   })
 }
 
 /**
- * 冻结/解冻储值账户
- * 后端暂未实现此接口（StoredValueAccount 实体无 Status 字段，需后续迭代）
- * @param id 账户ID
- * @param status 目标状态：1-正常，2-冻结
+ * 试算充值赠送金额
+ * 与实际充值使用同一计算口径，仅用于充值弹窗实时展示
+ * @param amount 充值金额
+ * @returns 试算结果
  */
-export async function toggleAccountStatus(_id: number, _status: number): Promise<void> {
-  throw new Error('账户冻结功能开发中')
+export async function previewRechargeGift(amount: number): Promise<RechargeGiftPreview> {
+  const qs = buildQuery({ amount })
+  return request<RechargeGiftPreview>(`/storedValueRules/gift-preview${qs}`)
 }
 
 // ==================== 储值规则 API ====================
@@ -140,10 +114,9 @@ export async function createRechargeRule(data: RechargeRuleCreate): Promise<Rech
  * @returns 更新后的规则
  */
 export async function updateRechargeRule(data: RechargeRuleUpdate): Promise<RechargeRule> {
-  const { id, ...rest } = data
-  return request<RechargeRule>(`/storedValueRules/${id}`, {
+  return request<RechargeRule>(`/storedValueRules/${data.id}`, {
     method: 'PUT',
-    body: JSON.stringify(rest)
+    body: JSON.stringify(data)
   })
 }
 
@@ -167,6 +140,10 @@ export async function getMemberTransactions(query?: MemberTransactionQuery): Pro
   const qs = buildQuery({
     customerId: query?.customerId,
     type: query?.type,
+    customerName: query?.customerName,
+    phone: query?.phone,
+    startDate: query?.startDate,
+    endDate: query?.endDate,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })

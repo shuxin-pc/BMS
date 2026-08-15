@@ -8,6 +8,27 @@ public class OrderDto
     public long Id { get; set; }
     public string OrderNo { get; set; } = string.Empty;
     public long? CustomerId { get; set; }
+
+    /// <summary>
+    /// 客户姓名（散客订单为 null）
+    /// </summary>
+    public string? CustomerName { get; set; }
+
+    /// <summary>
+    /// 客户手机号（散客订单为 null）
+    /// </summary>
+    public string? Phone { get; set; }
+
+    /// <summary>
+    /// 门店名称
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
+    /// 消费项目摘要（从 OrderItems 聚合商品名称，Distinct 后用"、"连接）
+    /// </summary>
+    public string? ProjectSummary { get; set; }
+
     public int OrderType { get; set; }
     public int Status { get; set; }
     public int BackfillStatus { get; set; }

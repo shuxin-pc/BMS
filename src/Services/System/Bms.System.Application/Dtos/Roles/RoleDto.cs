@@ -40,7 +40,6 @@ public class RoleCreateDto
     /// </summary>
     public int Level { get; set; }
     public int DataScopeType { get; set; } = 1;
-    public List<long> PermissionIds { get; set; } = new();
     public List<long>? CustomOrganizationIds { get; set; }
 }
 
@@ -56,12 +55,5 @@ public class RoleUpdateDto
     /// </summary>
     public int Level { get; set; }
     public int DataScopeType { get; set; }
-    public List<long> PermissionIds { get; set; } = new();
     public List<long>? CustomOrganizationIds { get; set; }
-}
-
-public class RoleAssignPermissionsDto
-{
-    public long RoleId { get; set; }
-    public List<long> PermissionIds { get; set; } = new();
 }

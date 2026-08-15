@@ -303,7 +303,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus, Delete, Edit, View, User, OfficeBuilding, DataAnalysis, Setting } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Edit, View } from '@element-plus/icons-vue'
 import { getTenants, createTenant, updateTenant, deleteTenant, deleteTenants, getSubsystemsAll, getTenantSubsystems, assignTenantSubsystems } from '@/api/system'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { useUserStore } from '@/stores/user'
@@ -620,27 +620,6 @@ const formatDate = (dateStr: string) => {
     hour: '2-digit',
     minute: '2-digit'
   })
-}
-
-// 格式化过期时间（后端存储N+1天UTC，转本地日期显示要减1天）
-const formatExpireTime = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  date.setDate(date.getDate() - 1)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-}
-
-// 格式化字节数
-const formatBytes = (bytes: number) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 onMounted(async () => {

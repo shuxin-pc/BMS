@@ -5,7 +5,7 @@ namespace Bms.Store.Domain.Entities;
 /// 永久保留，不参与软删除，用于合规审计追溯
 /// 依据：《个人信息保护法》第 47 条要求删除个人信息但保留审计记录
 /// </summary>
-public class CustomerDeleteLog : StoreTenantEntityBase
+public class CustomerDeleteLog : StoreBusinessEntityBase
 {
     /// <summary>
     /// 原客户ID（已物理删除）

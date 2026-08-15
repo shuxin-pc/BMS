@@ -10,7 +10,6 @@ public class PointsRuleCreateDtoValidator : AbstractValidator<PointsRuleCreateDt
 {
     public PointsRuleCreateDtoValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().WithMessage("名称不能为空").MaximumLength(100).WithMessage("名称最多100个字符");
         RuleFor(x => x.PointsRate).GreaterThanOrEqualTo(0).WithMessage("积分比例必须大于等于0");
         RuleFor(x => x.DeductRate).GreaterThanOrEqualTo(0).WithMessage("抵扣比例必须大于等于0");
         RuleFor(x => x.MaxDeductAmount).GreaterThanOrEqualTo(0).WithMessage("最大抵扣金额必须大于等于0");
@@ -25,7 +24,6 @@ public class PointsRuleUpdateDtoValidator : AbstractValidator<PointsRuleUpdateDt
 {
     public PointsRuleUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new PointsRuleCreateDtoValidator());
     }
 }

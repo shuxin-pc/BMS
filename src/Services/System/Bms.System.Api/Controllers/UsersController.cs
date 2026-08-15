@@ -5,7 +5,7 @@ using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Users;
 using Bms.System.Application.Dtos.Profile;
 using Bms.System.Application.Services;
-using Bms.System.Domain.Attributes;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Domain.Exceptions;
 using Bms.System.Domain.Interfaces;
 using Bms.System.Domain.Enums;
@@ -58,9 +58,9 @@ public class UsersController : ControllerBase
             }
         }
 
-        // 数据权限过滤：仅普通用户需要按组织过滤
-        // tenant_admin 数据权限范围为全租户（DataScopeType=All），无需按组织过滤
-        if (!isSuperAdmin && !isTenantAdmin && userIdClaim != null && long.TryParse(userIdClaim.Value, out long currentUserId))
+        // 数据权限过滤：非超级管理员按 DataScope 过滤
+        // tenant_admin 的 DataScope=All，走 All 分支不做额外过滤（与原语义一致）
+        if (!isSuperAdmin && userIdClaim != null && long.TryParse(userIdClaim.Value, out long currentUserId))
         {
             // 获取当前用户的数据权限范围
             var scope = await _dataPermissionFilter.GetDataPermissionScopeAsync(currentUserId);
@@ -71,19 +71,35 @@ public class UsersController : ControllerBase
                 // 仅本人：只能看到自己
                 request.UserId = currentUserId;
             }
-            else if (scope.OrganizationIds.Any())
+            else if (scope.ScopeType == DataScopeType.All)
             {
-                // 部门及以下/自定义：按组织ID列表过滤
-                request.OrganizationIds = scope.OrganizationIds;
+                // 全部数据：不做额外过滤（已有租户隔离），保留前端的组织筛选条件
             }
-            // 全部数据：不做额外过滤（已有租户隔离）
+            else if (scope.ScopeType == DataScopeType.DepartmentAndBelow || scope.ScopeType == DataScopeType.Custom)
+            {
+                // 部门及以下/自定义：将前端选择限制在权限范围内
+                if (request.OrganizationIds != null && request.OrganizationIds.Any())
+                {
+                    // 取交集：用户选择的组织 ∩ 权限范围内的组织
+                    var intersected = request.OrganizationIds.Intersect(scope.OrganizationIds).ToList();
+                    // 交集非空用交集；交集为空说明选的组织都不在权限范围内，强制返回空结果
+                    request.OrganizationIds = intersected.Any()
+                        ? intersected
+                        : new List<long> { long.MinValue };
+                }
+                else
+                {
+                    // 用户未选组织，用权限范围内的所有组织
+                    request.OrganizationIds = scope.OrganizationIds;
+                }
+            }
         }
 
         return await _userService.GetPagedListAsync(request);
     }
 
     /// <summary>
-    /// 获取用户列表（带租户隔离和姓名筛选）
+    /// 获取用户列表（带租户隔离和数据权限过滤）
     /// </summary>
     [HttpGet("all")]
     public async Task<ApiResponseDto<List<UserDto>>> GetAll([FromQuery] long? tenantId, [FromQuery] string? realName)
@@ -91,16 +107,51 @@ public class UsersController : ControllerBase
         // 获取当前用户角色
         var currentUserRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         var isSuperAdmin = currentUserRoles.Contains("super_admin");
+        var isTenantAdmin = currentUserRoles.Contains("tenant_admin");
         var tenantIdClaim = User.FindFirst("tenant_id");
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
 
         // 租户隔离：非超级管理员只能看到当前租户的用户
         long? effectiveTenantId = tenantId;
+        long? creatorTenantId = null;
         if (!isSuperAdmin && tenantIdClaim != null && long.TryParse(tenantIdClaim.Value, out long currentTenantId))
         {
             effectiveTenantId = currentTenantId;
+            // tenant_admin 自身由 super_admin 创建（CreatorTenantId=平台租户），不应被 CreatorTenantId 过滤掉
+            // 普通用户设置 CreatorTenantId 过滤：屏蔽平台跨租户创建的用户（含 tenant_admin）
+            if (!isTenantAdmin)
+            {
+                creatorTenantId = currentTenantId;
+            }
         }
 
-        return await _userService.GetAllListAsync(effectiveTenantId, realName);
+        // 数据权限过滤：非超级管理员按 DataScope 过滤
+        // tenant_admin 的 DataScope=All，走 All 分支不做额外过滤（与原语义一致）
+        long? filterUserId = null;
+        List<long>? filterOrganizationIds = null;
+        if (!isSuperAdmin && userIdClaim != null && long.TryParse(userIdClaim.Value, out long currentUserId))
+        {
+            // 获取当前用户的数据权限范围
+            var scope = await _dataPermissionFilter.GetDataPermissionScopeAsync(currentUserId);
+
+            // 根据数据权限类型设置过滤条件
+            if (scope.ScopeType == DataScopeType.Self)
+            {
+                // 仅本人：只能看到自己
+                filterUserId = currentUserId;
+            }
+            else if (scope.ScopeType == DataScopeType.All)
+            {
+                // 全部数据：不做额外过滤（已有租户隔离）
+            }
+            else if (scope.ScopeType == DataScopeType.DepartmentAndBelow || scope.ScopeType == DataScopeType.Custom)
+            {
+                // 部门及以下/自定义：限制在权限范围内的组织
+                filterOrganizationIds = scope.OrganizationIds;
+            }
+        }
+
+        return await _userService.GetAllListAsync(effectiveTenantId, realName, filterUserId, filterOrganizationIds, creatorTenantId);
     }
 
     /// <summary>

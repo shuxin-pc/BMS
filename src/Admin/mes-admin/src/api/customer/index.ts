@@ -1,25 +1,32 @@
 // 客户档案管理 - API服务
+// 真实后端调用统一走 shared/storeRequest（路径前缀 /api/store，自动注入 X-Store-Id）
 import type {
   Customer,
   CustomerQuery,
   CustomerCreate,
   CustomerUpdate,
+  CustomerPermanentDeleteDto,
   CustomerLevel,
   CustomerLevelCreate,
   CustomerLevelUpdate,
+  CustomerTag,
+  CustomerTagCreate,
+  CustomerTagUpdate,
+  CustomerTagQuery,
   PointsRule,
   PointsRecord,
   PointsRecordQuery,
+  PointsChangeType,
+  PointsLogCreate,
   ConsumeRecord,
   ConsumeRecordQuery,
   BirthdayReminder,
   BirthdayReminderQuery,
   ConsumeThankRecord,
   ConsumeThankQuery,
-  CustomerConsumptionStat,
-  ApiResponse,
-  PagedResponse
+  CustomerConsumptionStat
 } from './types'
+import { request, buildQuery, type ApiResponse, type PagedResponse } from '../shared/storeRequest'
 
 // 导出类型供外部使用
 export type {
@@ -27,13 +34,19 @@ export type {
   CustomerQuery,
   CustomerCreate,
   CustomerUpdate,
+  CustomerPermanentDeleteDto,
   CustomerLevel,
   CustomerLevelCreate,
   CustomerLevelUpdate,
+  CustomerTag,
+  CustomerTagCreate,
+  CustomerTagUpdate,
+  CustomerTagQuery,
   PointsRule,
   PointsRecord,
   PointsRecordQuery,
   PointsChangeType,
+  PointsLogCreate,
   ConsumeRecord,
   ConsumeRecordQuery,
   BirthdayReminder,
@@ -43,48 +56,6 @@ export type {
   CustomerConsumptionStat,
   ApiResponse,
   PagedResponse
-}
-
-// 通过网关访问后端服务
-const API_BASE = '/api/customer'
-
-// 获取token
-const getToken = () => localStorage.getItem('token')
-
-// 通用请求方法
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>)
-  }
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: headers as HeadersInit
-  })
-
-  let errorMessage = ''
-  try {
-    const result: ApiResponse<T> = await response.json()
-    if (result.message) {
-      errorMessage = result.message
-    }
-    if (result.code != 200) {
-      throw new Error(errorMessage || '请求失败')
-    }
-    return result.data
-  } catch (err: any) {
-    if (errorMessage) {
-      throw new Error(errorMessage)
-    }
-    throw new Error(`请求失败: ${response.status}`)
-  }
 }
 
 // ==================== 客户管理 ====================
@@ -95,14 +66,16 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
  * @returns 分页客户列表
  */
 export async function getCustomers(query?: CustomerQuery): Promise<PagedResponse<Customer>> {
-  const params = new URLSearchParams()
-  if (query?.name) params.append('name', query.name)
-  if (query?.phone) params.append('phone', query.phone)
-  if (query?.levelId !== undefined) params.append('levelId', String(query.levelId))
-  if (query?.gender !== undefined) params.append('gender', String(query.gender))
-  params.append('pageIndex', String(query?.pageIndex || 1))
-  params.append('pageSize', String(query?.pageSize || 20))
-  return request<PagedResponse<Customer>>(`${API_BASE}/customers?${params}`)
+  const params = buildQuery({
+    name: query?.name,
+    phone: query?.phone,
+    levelId: query?.levelId,
+    tagId: query?.tagId,
+    gender: query?.gender,
+    pageIndex: query?.pageIndex || 1,
+    pageSize: query?.pageSize || 20
+  })
+  return request<PagedResponse<Customer>>(`/customers${params}`)
 }
 
 /**
@@ -111,7 +84,7 @@ export async function getCustomers(query?: CustomerQuery): Promise<PagedResponse
  * @returns 客户详情
  */
 export async function getCustomer(id: number): Promise<Customer> {
-  return request<Customer>(`${API_BASE}/customers/${id}`)
+  return request<Customer>(`/customers/${id}`)
 }
 
 /**
@@ -120,7 +93,7 @@ export async function getCustomer(id: number): Promise<Customer> {
  * @returns 创建后的客户信息
  */
 export async function createCustomer(data: CustomerCreate): Promise<Customer> {
-  return request<Customer>(`${API_BASE}/customers`, {
+  return request<Customer>(`/customers`, {
     method: 'POST',
     body: JSON.stringify(data)
   })
@@ -132,7 +105,7 @@ export async function createCustomer(data: CustomerCreate): Promise<Customer> {
  * @returns 更新后的客户信息
  */
 export async function updateCustomer(data: CustomerUpdate): Promise<Customer> {
-  return request<Customer>(`${API_BASE}/customers/${data.id}`, {
+  return request<Customer>(`/customers/${data.id}`, {
     method: 'PUT',
     body: JSON.stringify(data)
   })
@@ -143,7 +116,7 @@ export async function updateCustomer(data: CustomerUpdate): Promise<Customer> {
  * @param id 客户ID
  */
 export async function deleteCustomer(id: number): Promise<void> {
-  return request<void>(`${API_BASE}/customers/${id}`, {
+  return request<void>(`/customers/${id}`, {
     method: 'DELETE'
   })
 }
@@ -153,9 +126,28 @@ export async function deleteCustomer(id: number): Promise<void> {
  * @param ids 客户ID列表
  */
 export async function deleteCustomers(ids: number[]): Promise<void> {
-  return request<void>(`${API_BASE}/customers/batch`, {
+  return request<void>(`/customers/batch`, {
     method: 'POST',
     body: JSON.stringify({ ids })
+  })
+}
+
+/**
+ * 永久删除客户档案（物理删除）
+ * 物理删除客户及关联个人信息（含美容档案、身体数据、对比照片等），订单脱敏保留
+ * 前置条件：无未完成订单、无未核销疗程卡、无储值余额
+ * 需二次确认（客户手机号后4位）
+ * 依据：《个人信息保护法》第 47 条
+ * @param id 客户ID
+ * @param dto 二次确认码 + 删除原因
+ */
+export async function permanentlyDeleteCustomer(
+  id: number,
+  dto: CustomerPermanentDeleteDto
+): Promise<void> {
+  return request<void>(`/customers/${id}/permanent`, {
+    method: 'DELETE',
+    body: JSON.stringify(dto)
   })
 }
 
@@ -163,91 +155,147 @@ export async function deleteCustomers(ids: number[]): Promise<void> {
 
 /**
  * 获取客户等级列表
+ * 后端 CustomerLevelsController.GetList 为分页接口，此处拉取全量后返回 list
  * @returns 等级列表
  */
 export async function getCustomerLevels(): Promise<CustomerLevel[]> {
-  return request<CustomerLevel[]>(`${API_BASE}/levels`)
-}
-
-// ==================== 客户等级（Mock 增删改） ====================
-
-// Mock 客户等级数据
-const mockCustomerLevels: CustomerLevel[] = [
-  { id: 1, name: '普通会员', code: 'NORMAL', discountRate: 1.0, sort: 1, remark: '默认等级' },
-  { id: 2, name: '银卡会员', code: 'SILVER', discountRate: 0.95, sort: 2, remark: '银卡等级' },
-  { id: 3, name: '金卡会员', code: 'GOLD', discountRate: 0.9, sort: 3, remark: '金卡等级' },
-  { id: 4, name: '钻石会员', code: 'DIAMOND', discountRate: 0.85, sort: 4, remark: '钻石等级' }
-]
-
-let mockLevelIdCounter = 100
-
-/**
- * 获取客户等级列表（Mock 版本，含分页可选）
- * @returns 等级列表
- */
-export async function getCustomerLevelsMock(): Promise<CustomerLevel[]> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  return [...mockCustomerLevels].sort((a, b) => a.sort - b.sort)
+  const result = await request<PagedResponse<CustomerLevel>>(`/customerLevels${buildQuery({ pageSize: 9999 })}`)
+  return result.list
 }
 
 /**
- * 创建客户等级（Mock）
+ * 创建客户等级
+ * 业务约束：系统仅支持普通会员(level=1)和会员(level=2)两个等级，同租户最多 2 条
  * @param data 等级信息
  * @returns 创建后的等级
  */
 export async function createCustomerLevel(data: CustomerLevelCreate): Promise<CustomerLevel> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  if (mockCustomerLevels.some(item => item.code === data.code)) {
-    throw new Error('等级编码已存在')
-  }
-  const newLevel: CustomerLevel = {
-    id: ++mockLevelIdCounter,
-    ...data
-  }
-  mockCustomerLevels.push(newLevel)
-  return newLevel
+  return request<CustomerLevel>(`/customerLevels`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
 }
 
 /**
- * 更新客户等级（Mock）
+ * 更新客户等级
+ * 业务约束：等级值 level 创建后不可修改
  * @param data 等级信息
  * @returns 更新后的等级
  */
 export async function updateCustomerLevel(data: CustomerLevelUpdate): Promise<CustomerLevel> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  const index = mockCustomerLevels.findIndex(item => item.id === data.id)
-  if (index === -1) throw new Error('等级不存在')
-  if (mockCustomerLevels.some(item => item.code === data.code && item.id !== data.id)) {
-    throw new Error('等级编码已存在')
-  }
-  mockCustomerLevels[index] = { ...data }
-  return mockCustomerLevels[index]
+  return request<CustomerLevel>(`/customerLevels/${data.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
 }
 
 /**
- * 删除客户等级（Mock）
+ * 删除客户等级
+ * 业务约束：默认等级(level=1)不可删除，有关联客户的等级不可删除
  * @param id 等级ID
  */
 export async function deleteCustomerLevel(id: number): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  const index = mockCustomerLevels.findIndex(item => item.id === id)
-  if (index === -1) throw new Error('等级不存在')
-  mockCustomerLevels.splice(index, 1)
+  return request<void>(`/customerLevels/${id}`, {
+    method: 'DELETE'
+  })
 }
 
-// ==================== 积分管理（Mock） ====================
+/**
+ * 批量删除客户等级
+ * 业务约束：默认等级(level=1)不可删除，有关联客户的等级不可删除
+ * @param ids 等级ID列表
+ */
+export async function batchDeleteCustomerLevels(ids: number[]): Promise<void> {
+  return request<void>(`/customerLevels/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  })
+}
 
-// Mock 积分规则
+// ==================== 客户标签 ====================
+
+/**
+ * 获取客户标签分页列表
+ * @param query 查询参数
+ * @returns 分页标签列表
+ */
+export async function getCustomerTags(query?: CustomerTagQuery): Promise<PagedResponse<CustomerTag>> {
+  const params = buildQuery({
+    name: query?.name,
+    pageIndex: query?.pageIndex || 1,
+    pageSize: query?.pageSize || 20
+  })
+  return request<PagedResponse<CustomerTag>>(`/customerTags${params}`)
+}
+
+/**
+ * 获取全量客户标签列表（供客户弹窗下拉使用，不分页）
+ * @returns 标签列表
+ */
+export async function getAllCustomerTags(): Promise<CustomerTag[]> {
+  return request<CustomerTag[]>(`/customerTags/all`)
+}
+
+/**
+ * 创建客户标签
+ * @param data 标签信息
+ * @returns 创建后的标签
+ */
+export async function createCustomerTag(data: CustomerTagCreate): Promise<CustomerTag> {
+  return request<CustomerTag>(`/customerTags`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 更新客户标签
+ * @param data 标签信息
+ * @returns 更新后的标签
+ */
+export async function updateCustomerTag(data: CustomerTagUpdate): Promise<CustomerTag> {
+  return request<CustomerTag>(`/customerTags/${data.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 删除客户标签
+ * 业务约束：有关联客户的标签不可删除
+ * @param id 标签ID
+ */
+export async function deleteCustomerTag(id: number): Promise<void> {
+  return request<void>(`/customerTags/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 批量删除客户标签
+ * 业务约束：有关联客户的标签不可删除
+ * @param ids 标签ID列表
+ */
+export async function batchDeleteCustomerTags(ids: number[]): Promise<void> {
+  return request<void>(`/customerTags/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  })
+}
+
+// ==================== 积分管理 ====================
+
+// Mock 积分规则（仅 earnPoints/refundPoints 等 Mock 函数依赖，真实页面走下方 getPointsRule/savePointsRule）
 const mockPointsRule: PointsRule = {
   id: 1,
-  name: '默认积分规则',
-  pointsPerYuan: 1,
-  pointsToYuan: 0.01,
+  pointsRate: 1,
+  deductRate: 0.01,
+  maxDeductAmount: 0,
+  pointsValidityDays: null,
   birthdayDouble: true,
-  minPointsThreshold: 0,
+  minAmountThreshold: 0,
   status: 1,
-  remark: '消费1元获得1积分，100积分抵扣1元',
-  updatedAt: '2026-07-01 10:00:00'
+  remark: '消费1元获得1积分，100积分抵扣1元'
 }
 
 // Mock 积分流水
@@ -257,10 +305,10 @@ const mockPointsRecords: PointsRecord[] = [
     customerId: 1001,
     customerName: '张小美',
     phone: '138****8888',
-    changePoints: 196,
+    points: 196,
     beforePoints: 324,
     afterPoints: 520,
-    changeType: 1,
+    type: 1,
     changeTime: '2026-07-10 14:31:00',
     orderNo: 'OD20260710001',
     remark: '消费获取积分'
@@ -270,46 +318,22 @@ const mockPointsRecords: PointsRecord[] = [
     customerId: 1002,
     customerName: '李晓红',
     phone: '139****6666',
-    changePoints: 398,
+    points: 398,
     beforePoints: 626,
     afterPoints: 1024,
-    changeType: 1,
+    type: 1,
     changeTime: '2026-07-10 15:21:00',
     orderNo: 'OD20260710002'
-  },
-  {
-    id: 3,
-    customerId: 1003,
-    customerName: '王丽华',
-    phone: '137****1234',
-    changePoints: -50,
-    beforePoints: 500,
-    afterPoints: 450,
-    changeType: 2,
-    changeTime: '2026-07-09 16:00:00',
-    remark: '兑换礼品'
-  },
-  {
-    id: 4,
-    customerId: 1004,
-    customerName: '陈芳',
-    phone: '135****5678',
-    changePoints: 100,
-    beforePoints: 200,
-    afterPoints: 300,
-    changeType: 3,
-    changeTime: '2026-07-08 09:30:00',
-    remark: '周年庆活动赠送'
   },
   {
     id: 5,
     customerId: 1005,
     customerName: '赵敏',
     phone: '136****9999',
-    changePoints: -500,
+    points: -500,
     beforePoints: 500,
     afterPoints: 0,
-    changeType: 4,
+    type: 3,
     changeTime: '2026-07-07 18:00:00',
     orderNo: 'OD20260707005',
     remark: '订单退款扣减'
@@ -329,71 +353,62 @@ const mockCustomerPointsCache: Map<number, { name: string; phone: string; points
 let mockPointsRecordIdCounter = 100
 
 /**
- * 获取积分规则配置（Mock）
- * @returns 积分规则
+ * 获取当前门店的积分规则（后端按门店隔离，每店一份，取列表第一条）
+ * @returns 积分规则，当前门店未配置时返回 null
  */
-export async function getPointsRule(): Promise<PointsRule> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  return { ...mockPointsRule }
+export async function getPointsRule(): Promise<PointsRule | null> {
+  const params = buildQuery({ pageIndex: 1, pageSize: 1 })
+  const res = await request<PagedResponse<PointsRule>>(`/pointsRules${params}`)
+  return res.list[0] ?? null
 }
 
 /**
- * 保存积分规则配置（Mock）
+ * 保存积分规则（有 id 走 PUT 更新，无 id 走 POST 创建）
  * @param data 积分规则
- * @returns 更新后的规则
+ * @returns 保存后的规则
  */
 export async function savePointsRule(data: PointsRule): Promise<PointsRule> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  mockPointsRule.name = data.name
-  mockPointsRule.pointsPerYuan = data.pointsPerYuan
-  mockPointsRule.pointsToYuan = data.pointsToYuan
-  mockPointsRule.birthdayDouble = data.birthdayDouble
-  mockPointsRule.minPointsThreshold = data.minPointsThreshold
-  mockPointsRule.status = data.status
-  mockPointsRule.remark = data.remark
-  mockPointsRule.updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
-  return { ...mockPointsRule }
+  const body = JSON.stringify({
+    pointsRate: data.pointsRate,
+    deductRate: data.deductRate,
+    maxDeductAmount: data.maxDeductAmount,
+    pointsValidityDays: data.pointsValidityDays,
+    birthdayDouble: data.birthdayDouble,
+    minAmountThreshold: data.minAmountThreshold,
+    status: data.status,
+    remark: data.remark
+  })
+  if (data.id) {
+    return request<PointsRule>(`/pointsRules/${data.id}`, {
+      method: 'PUT',
+      body
+    })
+  }
+  return request<PointsRule>(`/pointsRules`, {
+    method: 'POST',
+    body
+  })
 }
 
 /**
- * 获取积分流水分页列表（Mock）
+ * 获取积分流水分页列表
  * @param query 查询参数
  * @returns 分页积分流水
  */
 export async function getPointsRecords(query?: PointsRecordQuery): Promise<PagedResponse<PointsRecord>> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  let list = [...mockPointsRecords]
-  if (query?.customerName) list = list.filter(item => item.customerName.includes(query.customerName!))
-  if (query?.changeType !== undefined) list = list.filter(item => item.changeType === query.changeType)
-  const total = list.length
-  const pageIndex = query?.pageIndex || 1
-  const pageSize = query?.pageSize || 20
-  const start = (pageIndex - 1) * pageSize
-  return { list: list.slice(start, start + pageSize), total, pageIndex, pageSize }
-}
-
-/**
- * 获取可兑换积分的客户列表（Mock）
- * @returns 客户列表（含当前积分）
- */
-export async function getCustomersForPointsExchange(): Promise<Array<{
-  customerId: number
-  customerName: string
-  phone: string
-  currentPoints: number
-}>> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  return Array.from(mockCustomerPointsCache.entries()).map(([customerId, info]) => ({
-    customerId,
-    customerName: info.name,
-    phone: info.phone,
-    currentPoints: info.points
-  }))
+  const params = buildQuery({
+    customerName: query?.customerName,
+    phone: query?.phone,
+    type: query?.changeType,
+    pageIndex: query?.pageIndex || 1,
+    pageSize: query?.pageSize || 20
+  })
+  return request<PagedResponse<PointsRecord>>(`/customerPointsLogs${params}`)
 }
 
 /**
  * 消费获取积分（Mock）
- * 按 PointsRule 的 pointsPerYuan 计算获得积分，低于门槛不获取
+ * 按 PointsRule 的 pointsRate 计算获得积分，低于门槛不获取
  * @param customerId 客户ID
  * @param orderAmount 消费金额（元）
  * @param orderId 关联订单号
@@ -410,10 +425,10 @@ export async function earnPoints(
   if (!customer) throw new Error('客户不存在')
 
   const rule = { ...mockPointsRule }
-  const earnedPoints = Math.floor(orderAmount * rule.pointsPerYuan)
-  if (earnedPoints < rule.minPointsThreshold) {
-    throw new Error(`消费积分未达门槛（最低 ${rule.minPointsThreshold} 积分）`)
+  if (orderAmount < (rule.minAmountThreshold ?? 0)) {
+    throw new Error(`消费金额未达门槛（最低 ${rule.minAmountThreshold} 元）`)
   }
+  const earnedPoints = Math.floor(orderAmount * rule.pointsRate)
 
   const beforePoints = customer.points
   const afterPoints = beforePoints + earnedPoints
@@ -423,56 +438,13 @@ export async function earnPoints(
     customerId,
     customerName: customer.name,
     phone: customer.phone,
-    changePoints: earnedPoints,
+    points:earnedPoints,
     beforePoints,
     afterPoints,
-    changeType: 1,
+    type: 1,
     changeTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
     orderNo: orderId,
     remark: '消费获取积分'
-  }
-
-  mockPointsRecords.push(record)
-  customer.points = afterPoints
-  return record
-}
-
-/**
- * 积分兑换扣减（Mock）
- * 兑换时扣减积分，积分不足时抛出错误（积分永不为负）
- * @param customerId 客户ID
- * @param pointsToExchange 兑换所需积分
- * @param remark 备注
- * @returns 生成的积分流水记录
- */
-export async function exchangePoints(
-  customerId: number,
-  pointsToExchange: number,
-  remark?: string
-): Promise<PointsRecord> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-
-  const customer = mockCustomerPointsCache.get(customerId)
-  if (!customer) throw new Error('客户不存在')
-
-  const beforePoints = customer.points
-  const afterPoints = beforePoints - pointsToExchange
-  // 兑换扣减：积分不足时拒绝操作，确保积分不为负
-  if (afterPoints < 0) {
-    throw new Error(`积分不足，当前积分：${beforePoints}`)
-  }
-
-  const record: PointsRecord = {
-    id: ++mockPointsRecordIdCounter,
-    customerId,
-    customerName: customer.name,
-    phone: customer.phone,
-    changePoints: -pointsToExchange,
-    beforePoints,
-    afterPoints,
-    changeType: 2,
-    changeTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
-    remark: remark || '积分兑换'
   }
 
   mockPointsRecords.push(record)
@@ -508,10 +480,10 @@ export async function refundPoints(
     customerId,
     customerName: customer.name,
     phone: customer.phone,
-    changePoints: -actualDeduct,
+    points:-actualDeduct,
     beforePoints,
     afterPoints,
-    changeType: 4,
+    type: 3,
     changeTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
     orderNo: orderId,
     remark: `订单退款扣减积分（应扣${pointsToDeduct}，实扣${actualDeduct}）`
@@ -522,252 +494,124 @@ export async function refundPoints(
   return record
 }
 
-// ==================== 消费记录（Mock） ====================
-
-const mockConsumeRecords: ConsumeRecord[] = [
-  {
-    id: 1,
-    customerId: 1001,
-    customerName: '张小美',
-    phone: '138****8888',
-    orderNo: 'OD20260710001',
-    amount: 196,
-    projectName: '美甲服务-法式美甲、手部护理',
-    paymentMethod: 2,
-    consumeTime: '2026-07-10 14:30:00',
-    storeName: '总店'
-  },
-  {
-    id: 2,
-    customerId: 1002,
-    customerName: '李晓红',
-    phone: '139****6666',
-    orderNo: 'OD20260710002',
-    amount: 398,
-    projectName: '洗护套餐 x2',
-    paymentMethod: 3,
-    consumeTime: '2026-07-10 15:20:00',
-    storeName: '总店'
-  },
-  {
-    id: 3,
-    customerId: 1003,
-    customerName: '王丽华',
-    phone: '137****1234',
-    orderNo: 'OD20260709003',
-    amount: 280,
-    projectName: '面部护理-深层清洁',
-    paymentMethod: 4,
-    consumeTime: '2026-07-09 10:15:00',
-    storeName: '城南分店'
-  },
-  {
-    id: 4,
-    customerId: 1004,
-    customerName: '陈芳',
-    phone: '135****5678',
-    orderNo: 'OD20260708004',
-    amount: 158,
-    projectName: '美睫服务-自然款',
-    paymentMethod: 1,
-    consumeTime: '2026-07-08 16:45:00',
-    storeName: '城南分店'
-  },
-  {
-    id: 5,
-    customerId: 1005,
-    customerName: '赵敏',
-    phone: '136****9999',
-    orderNo: 'OD20260707005',
-    amount: 500,
-    projectName: '全身护理套餐',
-    paymentMethod: 5,
-    consumeTime: '2026-07-07 11:00:00',
-    storeName: '总店'
-  }
-]
+// ==================== 手动调整积分 ====================
 
 /**
- * 获取消费记录分页列表（Mock）
+ * 创建积分流水（手动调整）
+ * 后端 CreateAsync 仅允许 Type=8（手动调整），其他类型由业务流程自动写入
+ * @param data 积分流水数据
+ */
+export async function createPointsLog(data: PointsLogCreate): Promise<void> {
+  await request(`/customerPointsLogs`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+// ==================== 消费记录 ====================
+
+/** 后端订单 DTO（消费记录所需字段子集，camelCase 与后端 JSON 序列化对齐） */
+interface OrderDtoForConsume {
+  id: number
+  orderNo: string
+  customerId?: number
+  customerName?: string
+  phone?: string
+  storeName?: string
+  projectSummary?: string
+  paidAmount: number
+  payMethod?: number
+  orderTime: string
+}
+
+/**
+ * 获取消费记录分页列表
+ * 对接后端：GET /api/store/orders（按客户姓名/手机号/时间范围过滤）
+ * 将 OrderDto 字段映射为 ConsumeRecord
  * @param query 查询参数
  * @returns 分页消费记录
  */
 export async function getConsumeRecords(query?: ConsumeRecordQuery): Promise<PagedResponse<ConsumeRecord>> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  let list = [...mockConsumeRecords]
-  if (query?.customerName) list = list.filter(item => item.customerName.includes(query.customerName!))
-  if (query?.phone) list = list.filter(item => item.phone.includes(query.phone!))
-  if (query?.startDate) list = list.filter(item => item.consumeTime >= query.startDate!)
-  if (query?.endDate) list = list.filter(item => item.consumeTime <= query.endDate! + ' 23:59:59')
-  const total = list.length
-  const pageIndex = query?.pageIndex || 1
-  const pageSize = query?.pageSize || 20
-  const start = (pageIndex - 1) * pageSize
-  return { list: list.slice(start, start + pageSize), total, pageIndex, pageSize }
+  const qs = buildQuery({
+    customerName: query?.customerName,
+    phone: query?.phone,
+    startDate: query?.startDate,
+    endDate: query?.endDate,
+    pageIndex: query?.pageIndex || 1,
+    pageSize: query?.pageSize || 20
+  })
+  const res = await request<PagedResponse<OrderDtoForConsume>>(`/orders${qs}`)
+  return {
+    list: res.list.map(o => ({
+      id: o.id,
+      customerId: o.customerId ?? 0,
+      customerName: o.customerName ?? '散客',
+      phone: o.phone ?? '',
+      orderNo: o.orderNo,
+      amount: o.paidAmount,
+      projectName: o.projectSummary ?? '',
+      paymentMethod: o.payMethod ?? 0,
+      consumeTime: o.orderTime,
+      storeName: o.storeName ?? ''
+    })),
+    total: res.total,
+    pageIndex: res.pageIndex,
+    pageSize: res.pageSize
+  }
 }
 
-// ==================== 客户关怀（Mock） ====================
-
-const mockBirthdayReminders: BirthdayReminder[] = [
-  {
-    id: 1,
-    customerId: 1001,
-    customerName: '张小美',
-    phone: '138****8888',
-    birthday: '07-14',
-    daysToBirthday: 2,
-    careStatus: 1
-  },
-  {
-    id: 2,
-    customerId: 1002,
-    customerName: '李晓红',
-    phone: '139****6666',
-    birthday: '07-15',
-    daysToBirthday: 3,
-    careStatus: 1
-  },
-  {
-    id: 3,
-    customerId: 1003,
-    customerName: '王丽华',
-    phone: '137****1234',
-    birthday: '07-10',
-    daysToBirthday: 0,
-    careStatus: 2,
-    careTime: '2026-07-10 09:00:00'
-  },
-  {
-    id: 4,
-    customerId: 1004,
-    customerName: '陈芳',
-    phone: '135****5678',
-    birthday: '07-20',
-    daysToBirthday: 8,
-    careStatus: 1
-  },
-  {
-    id: 5,
-    customerId: 1005,
-    customerName: '赵敏',
-    phone: '136****9999',
-    birthday: '07-05',
-    daysToBirthday: -7,
-    careStatus: 2,
-    careTime: '2026-07-05 10:30:00'
-  }
-]
-
-const mockConsumeThanks: ConsumeThankRecord[] = [
-  {
-    id: 1,
-    customerId: 1001,
-    customerName: '张小美',
-    phone: '138****8888',
-    lastAmount: 196,
-    lastConsumeTime: '2026-07-10 14:30:00',
-    thankStatus: 1
-  },
-  {
-    id: 2,
-    customerId: 1002,
-    customerName: '李晓红',
-    phone: '139****6666',
-    lastAmount: 398,
-    lastConsumeTime: '2026-07-10 15:20:00',
-    thankStatus: 1
-  },
-  {
-    id: 3,
-    customerId: 1003,
-    customerName: '王丽华',
-    phone: '137****1234',
-    lastAmount: 280,
-    lastConsumeTime: '2026-07-09 10:15:00',
-    thankStatus: 2,
-    thankMethod: 2,
-    thankTime: '2026-07-09 12:00:00'
-  },
-  {
-    id: 4,
-    customerId: 1004,
-    customerName: '陈芳',
-    phone: '135****5678',
-    lastAmount: 158,
-    lastConsumeTime: '2026-07-08 16:45:00',
-    thankStatus: 2,
-    thankMethod: 1,
-    thankTime: '2026-07-08 18:00:00'
-  },
-  {
-    id: 5,
-    customerId: 1005,
-    customerName: '赵敏',
-    phone: '136****9999',
-    lastAmount: 500,
-    lastConsumeTime: '2026-07-07 11:00:00',
-    thankStatus: 1
-  }
-]
+// ==================== 客户关怀 ====================
 
 /**
- * 获取生日提醒分页列表（Mock）
+ * 获取生日提醒分页列表
  * @param query 查询参数
  * @returns 分页生日提醒
  */
 export async function getBirthdayReminders(query?: BirthdayReminderQuery): Promise<PagedResponse<BirthdayReminder>> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  let list = [...mockBirthdayReminders]
-  if (query?.customerName) list = list.filter(item => item.customerName.includes(query.customerName!))
-  if (query?.careStatus !== undefined) list = list.filter(item => item.careStatus === query.careStatus)
-  const total = list.length
-  const pageIndex = query?.pageIndex || 1
-  const pageSize = query?.pageSize || 20
-  const start = (pageIndex - 1) * pageSize
-  return { list: list.slice(start, start + pageSize), total, pageIndex, pageSize }
+  const params = buildQuery({
+    customerName: query?.customerName,
+    phone: query?.phone,
+    careStatus: query?.careStatus,
+    pageIndex: query?.pageIndex,
+    pageSize: query?.pageSize
+  })
+  return request<PagedResponse<BirthdayReminder>>(`/customerCares/birthdays${params}`)
 }
 
 /**
- * 标记生日关怀完成（Mock）
- * @param id 记录ID
+ * 标记生日关怀完成
+ * @param id 客户ID
  */
 export async function markBirthdayCared(id: number): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  const item = mockBirthdayReminders.find(r => r.id === id)
-  if (!item) throw new Error('记录不存在')
-  item.careStatus = 2
-  item.careTime = new Date().toISOString().replace('T', ' ').substring(0, 19)
+  await request<void>(`/customerCares/birthdays/${id}/mark`, { method: 'POST' })
 }
 
 /**
- * 获取消费感谢分页列表（Mock）
+ * 获取消费感谢分页列表
  * @param query 查询参数
  * @returns 分页消费感谢
  */
 export async function getConsumeThanks(query?: ConsumeThankQuery): Promise<PagedResponse<ConsumeThankRecord>> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  let list = [...mockConsumeThanks]
-  if (query?.customerName) list = list.filter(item => item.customerName.includes(query.customerName!))
-  if (query?.thankStatus !== undefined) list = list.filter(item => item.thankStatus === query.thankStatus)
-  const total = list.length
-  const pageIndex = query?.pageIndex || 1
-  const pageSize = query?.pageSize || 20
-  const start = (pageIndex - 1) * pageSize
-  return { list: list.slice(start, start + pageSize), total, pageIndex, pageSize }
+  const params = buildQuery({
+    customerName: query?.customerName,
+    phone: query?.phone,
+    thankStatus: query?.thankStatus,
+    pageIndex: query?.pageIndex,
+    pageSize: query?.pageSize
+  })
+  return request<PagedResponse<ConsumeThankRecord>>(`/customerCares/consumeThanks${params}`)
 }
 
 /**
- * 标记消费感谢完成（Mock）
- * @param id 记录ID
+ * 标记消费感谢完成
+ * @param id 订单ID
  * @param method 感谢方式
  */
 export async function markConsumeThanked(id: number, method: number): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  const item = mockConsumeThanks.find(r => r.id === id)
-  if (!item) throw new Error('记录不存在')
-  item.thankStatus = 2
-  item.thankMethod = method
-  item.thankTime = new Date().toISOString().replace('T', ' ').substring(0, 19)
+  await request<void>(`/customerCares/consumeThanks/${id}/mark`, {
+    method: 'POST',
+    body: JSON.stringify({ method })
+  })
 }
 
 // ==================== 客户消费统计 ====================
@@ -778,5 +622,5 @@ export async function markConsumeThanked(id: number, method: number): Promise<vo
  * @returns 消费统计数据
  */
 export async function getCustomerConsumptionStat(customerId: number): Promise<CustomerConsumptionStat> {
-  return request<CustomerConsumptionStat>(`${API_BASE}/customers/${customerId}/consumption-stat`)
+  return request<CustomerConsumptionStat>(`/customers/${customerId}/consumption-stat`)
 }

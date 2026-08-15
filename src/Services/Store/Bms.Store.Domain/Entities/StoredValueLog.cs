@@ -92,6 +92,12 @@ public class StoredValueLog : StoreBusinessEntityBase
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作人姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
+    /// 冗余原因：Store 与 System 为独立服务，且用户可能改名/离职，历史流水需保留操作当时的姓名快照
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 导航属性：客户
     /// </summary>
     public Customer? Customer { get; set; }

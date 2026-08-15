@@ -45,8 +45,10 @@ using Bms.Store.Application.Dtos.TreatmentCards;
 using Bms.Store.Application.Dtos.Suppliers;
 using Bms.Store.Application.Dtos.Technicians;
 using Bms.Store.Application.Dtos.SampleGifts;
+using Bms.Store.Application.Dtos.Activities;
 using CustomerEntity = Bms.Store.Domain.Entities.Customer;
 using CustomerLevelEntity = Bms.Store.Domain.Entities.CustomerLevel;
+using CustomerTagEntity = Bms.Store.Domain.Entities.CustomerTag;
 using CustomerBeautyProfileEntity = Bms.Store.Domain.Entities.CustomerBeautyProfile;
 using CustomerPointsLogEntity = Bms.Store.Domain.Entities.CustomerPointsLog;
 using ConsumeLogEntity = Bms.Store.Domain.Entities.ConsumeLog;
@@ -74,8 +76,8 @@ using TechnicianEntity = Bms.Store.Domain.Entities.Technician;
 using TechnicianStatisticEntity = Bms.Store.Domain.Entities.TechnicianStatistic;
 using DailyStatEntity = Bms.Store.Domain.Entities.DailyStat;
 using MonthlyStatEntity = Bms.Store.Domain.Entities.MonthlyStat;
-using SampleGiftOutEntity = Bms.Store.Domain.Entities.SampleGiftOut;
 using SampleGiftReceiveEntity = Bms.Store.Domain.Entities.SampleGiftReceive;
+using ActivityEntity = Bms.Store.Domain.Entities.Activity;
 using ServiceProductEntity = Bms.Store.Domain.Entities.ServiceProduct;
 
 namespace Bms.Store.Application.Mapping;
@@ -109,20 +111,19 @@ public static class EntityMappingConfig
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
             .Map(d => d.UpdatedAt, s => s.UpdatedTime)
-            .Map(d => d.Spec, s => s.Specification)
-            .Map(d => d.Description, s => s.Remark)
-            .Map(d => d.CategoryName, s => s.Category != null ? s.Category.Name : null)
+            .Map(d => d.Spec, s => s.Master != null ? s.Master.Specification : null)
+            .Map(d => d.CategoryName, s => s.Master != null && s.Master.Category != null ? s.Master.Category.Name : null)
             .Ignore(d => d.Duration)
             .Ignore(d => d.RequiredRoomType)
             .Ignore(d => d.EquipmentTypeIds)
             .Ignore(d => d.EquipmentTypeNames)
-            .Ignore(d => d.ApplicableSkills);
+            .Ignore(d => d.SkillCategoryIds)
+            .Ignore(d => d.SkillCategoryNames);
 
         // ProductCreateDto -> Product：字段名差异映射，忽略审计字段（子表字段由 AppService 处理，Mapster 自动忽略目标不存在的字段）
+        // 注意：Spec/Name/Code 等主档字段已移至 ProductMaster，此映射不再处理这些字段，由 AppService 统一处理
         TypeAdapterConfig<ProductCreateDto, ProductEntity>
             .NewConfig()
-            .Map(d => d.Specification, s => s.Spec)
-            .Map(d => d.Remark, s => s.Description)
             .Ignore(d => d.Id)
             .Ignore(d => d.CreatedTime)
             .Ignore(d => d.UpdatedTime)
@@ -132,13 +133,15 @@ public static class EntityMappingConfig
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode)
             .Ignore(d => d.LastPurchasePrice)
-            .Ignore(d => d.Category);
+            .Ignore(d => d.Master);
 
-        // ProductCategory -> ProductCategoryDto：ParentId(long?) -> long 自动转换（null -> 0）
+        // ProductCategory -> ProductCategoryDto：ParentId(long?) -> long 自动转换（null -> 0），时间字段名映射
         TypeAdapterConfig<ProductCategoryEntity, ProductCategoryDto>
-            .NewConfig();
+            .NewConfig()
+            .Map(d => d.CreatedAt, s => s.CreatedTime);
 
         // ProductCategoryCreateDto -> ProductCategory：忽略审计字段，ParentId 在 AppService 手动处理
+        // ProductCategory 已改为租户级（StoreTenantEntity），不再有 StoreId/StoreCode
         TypeAdapterConfig<ProductCategoryCreateDto, ProductCategoryEntity>
             .NewConfig()
             .Ignore(d => d.Id)
@@ -146,11 +149,7 @@ public static class EntityMappingConfig
             .Ignore(d => d.UpdatedTime)
             .Ignore(d => d.IsDeleted)
             .Ignore(d => d.TenantId)
-            .Ignore(d => d.TenantCode)
-            .Ignore(d => d.StoreId)
-            .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Code)
-            .Ignore(d => d.Remark);
+            .Ignore(d => d.TenantCode);
 
         // ServiceBom -> ServiceBomDto：时间字段映射
         TypeAdapterConfig<ServiceBomEntity, ServiceBomDto>
@@ -243,11 +242,12 @@ public static class EntityMappingConfig
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode);
 
-        // StockTransferItem -> StockTransferItemDto：时间字段映射
+        // StockTransferItem -> StockTransferItemDto：时间字段映射 + 商品类型从 Master.Type 映射
         TypeAdapterConfig<StockTransferItemEntity, StockTransferItemDto>
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
-            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime)
+            .Map(d => d.Type, s => s.Product.Master.Type);
 
         // StockTransferItemCreateDto -> StockTransferItem：忽略审计字段
         TypeAdapterConfig<StockTransferItemCreateDto, StockTransferItemEntity>
@@ -295,8 +295,6 @@ public static class EntityMappingConfig
             .Ignore(d => d.IsDeleted)
             .Ignore(d => d.TenantId)
             .Ignore(d => d.TenantCode)
-            .Ignore(d => d.StoreId)
-            .Ignore(d => d.StoreCode)
             .Ignore(d => d.Parent);
 
         // DailySettlement -> DailySettlementDto：时间字段名映射
@@ -358,8 +356,7 @@ public static class EntityMappingConfig
             .Ignore(d => d.TenantId)
             .Ignore(d => d.TenantCode)
             .Ignore(d => d.StoreId)
-            .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Supplier);
+            .Ignore(d => d.StoreCode);
 
         // PurchaseOrderItem -> PurchaseOrderItemDto：时间字段名映射
         TypeAdapterConfig<PurchaseOrderItemEntity, PurchaseOrderItemDto>
@@ -442,6 +439,7 @@ public static class EntityMappingConfig
             .Map(d => d.UpdatedAt, s => s.UpdatedTime);
 
         // ServiceComparisonPhotoCreateDto -> ServiceComparisonPhoto：忽略审计字段及导航属性
+        // Items 为提交用结构（含保留标记 Id），需由 AppService 按新增/保留区分处理，不能直接映射
         TypeAdapterConfig<ServiceComparisonPhotoCreateDto, ServiceComparisonPhotoEntity>
             .NewConfig()
             .Ignore(d => d.Id)
@@ -451,13 +449,17 @@ public static class EntityMappingConfig
             .Ignore(d => d.TenantCode)
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Customer);
+            .Ignore(d => d.Customer)
+            .Ignore(d => d.Items);
 
         // BodyDataRecord -> BodyDataRecordDto：时间字段名映射
+        // CustomerName/Phone 不在实体上，由 AppService 手动填充，此处显式忽略
         TypeAdapterConfig<BodyDataRecordEntity, BodyDataRecordDto>
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
-            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime)
+            .Ignore(d => d.CustomerName)
+            .Ignore(d => d.CustomerPhone);
 
         // BodyDataRecordCreateDto -> BodyDataRecord：忽略审计字段及导航属性
         TypeAdapterConfig<BodyDataRecordCreateDto, BodyDataRecordEntity>
@@ -488,7 +490,8 @@ public static class EntityMappingConfig
             .Ignore(d => d.TenantCode)
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Level);
+            .Ignore(d => d.Level)
+            .Ignore(d => d.CustomerTagLinks);
 
         // CustomerLevel -> CustomerLevelDto：时间字段名映射
         TypeAdapterConfig<CustomerLevelEntity, CustomerLevelDto>
@@ -498,6 +501,24 @@ public static class EntityMappingConfig
 
         // CustomerLevelCreateDto -> CustomerLevel：忽略审计字段
         TypeAdapterConfig<CustomerLevelCreateDto, CustomerLevelEntity>
+            .NewConfig()
+            .Ignore(d => d.Id)
+            .Ignore(d => d.CreatedTime)
+            .Ignore(d => d.UpdatedTime)
+            .Ignore(d => d.IsDeleted)
+            .Ignore(d => d.TenantId)
+            .Ignore(d => d.TenantCode)
+            .Ignore(d => d.StoreId)
+            .Ignore(d => d.StoreCode);
+
+        // CustomerTag -> CustomerTagDto：时间字段名映射
+        TypeAdapterConfig<CustomerTagEntity, CustomerTagDto>
+            .NewConfig()
+            .Map(d => d.CreatedAt, s => s.CreatedTime)
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+
+        // CustomerTagCreateDto -> CustomerTag：忽略审计字段
+        TypeAdapterConfig<CustomerTagCreateDto, CustomerTagEntity>
             .NewConfig()
             .Ignore(d => d.Id)
             .Ignore(d => d.CreatedTime)
@@ -528,10 +549,14 @@ public static class EntityMappingConfig
             .Ignore(d => d.Customer);
 
         // CustomerPointsLog -> CustomerPointsLogDto：时间字段名映射
+        // CustomerName/Phone/OrderNo 不在实体上，由 AppService 手动填充，此处显式忽略
         TypeAdapterConfig<CustomerPointsLogEntity, CustomerPointsLogDto>
             .NewConfig()
-            .Map(d => d.CreatedAt, s => s.CreatedTime)
-            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+            .Map(d => d.ChangeTime, s => s.CreatedTime)
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime)
+            .Ignore(d => d.CustomerName)
+            .Ignore(d => d.Phone)
+            .Ignore(d => d.OrderNo);
 
         // CustomerPointsLogCreateDto -> CustomerPointsLog：忽略审计字段及导航属性
         TypeAdapterConfig<CustomerPointsLogCreateDto, CustomerPointsLogEntity>
@@ -633,18 +658,6 @@ public static class EntityMappingConfig
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
             .Map(d => d.UpdatedAt, s => s.UpdatedTime);
-
-        // PriceChangeLogCreateDto -> PriceChangeLog：忽略审计字段及导航属性
-        TypeAdapterConfig<PriceChangeLogCreateDto, PriceChangeLogEntity>
-            .NewConfig()
-            .Ignore(d => d.Id)
-            .Ignore(d => d.CreatedTime)
-            .Ignore(d => d.UpdatedTime)
-            .Ignore(d => d.TenantId)
-            .Ignore(d => d.TenantCode)
-            .Ignore(d => d.StoreId)
-            .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Product);
 
         // Inventory -> InventoryDto：时间字段名映射
         TypeAdapterConfig<InventoryEntity, InventoryDto>
@@ -935,13 +948,35 @@ public static class EntityMappingConfig
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode);
 
+        // Activity -> ActivityDto：时间字段名映射
+        TypeAdapterConfig<ActivityEntity, ActivityDto>
+            .NewConfig()
+            .Map(d => d.CreatedAt, s => s.CreatedTime)
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+
+        // ActivityCreateDto -> Activity：忽略审计字段
+        TypeAdapterConfig<ActivityCreateDto, ActivityEntity>
+            .NewConfig()
+            .Ignore(d => d.Id)
+            .Ignore(d => d.CreatedTime)
+            .Ignore(d => d.UpdatedTime)
+            .Ignore(d => d.IsDeleted)
+            .Ignore(d => d.TenantId)
+            .Ignore(d => d.TenantCode)
+            .Ignore(d => d.StoreId)
+            .Ignore(d => d.StoreCode);
+
         // Technician -> TechnicianDto：时间字段名映射 + 技能分类 + 来源文本（只读派生字段需忽略写入）
         TypeAdapterConfig<TechnicianEntity, TechnicianDto>
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
             .Map(d => d.UpdatedAt, s => s.UpdatedTime)
-            .Map(d => d.SkillCategoryIds, s => s.TechnicianSkills.Select(ts => ts.SkillCategoryId).ToList())
-            .Map(d => d.SkillCategoryNames, s => s.TechnicianSkills.Select(ts => ts.SkillCategory != null ? ts.SkillCategory.Name : string.Empty).ToList())
+            .Map(d => d.SkillCategoryIds, s => s.TechnicianSkills
+                .Where(ts => ts.SkillCategory != null && !ts.SkillCategory.IsDeleted)
+                .Select(ts => ts.SkillCategoryId).ToList())
+            .Map(d => d.SkillCategoryNames, s => s.TechnicianSkills
+                .Where(ts => ts.SkillCategory != null && !ts.SkillCategory.IsDeleted)
+                .Select(ts => ts.SkillCategory.Name).ToList())
             .Ignore(d => d.SourceText);
 
         // TechnicianCreateDto -> Technician：忽略审计字段及导航属性
@@ -1009,24 +1044,6 @@ public static class EntityMappingConfig
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode);
 
-        // SampleGiftOut -> SampleGiftOutDto：时间字段名映射
-        TypeAdapterConfig<SampleGiftOutEntity, SampleGiftOutDto>
-            .NewConfig()
-            .Map(d => d.CreatedAt, s => s.CreatedTime)
-            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
-
-        // SampleGiftOutCreateDto -> SampleGiftOut：忽略审计字段及导航属性
-        TypeAdapterConfig<SampleGiftOutCreateDto, SampleGiftOutEntity>
-            .NewConfig()
-            .Ignore(d => d.Id)
-            .Ignore(d => d.CreatedTime)
-            .Ignore(d => d.UpdatedTime)
-            .Ignore(d => d.TenantId)
-            .Ignore(d => d.TenantCode)
-            .Ignore(d => d.StoreId)
-            .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Product);
-
         // SampleGiftReceive -> SampleGiftReceiveDto：时间字段名映射
         TypeAdapterConfig<SampleGiftReceiveEntity, SampleGiftReceiveDto>
             .NewConfig()
@@ -1044,25 +1061,29 @@ public static class EntityMappingConfig
             .Ignore(d => d.StoreId)
             .Ignore(d => d.StoreCode)
             .Ignore(d => d.Product)
-            .Ignore(d => d.Customer);
+            .Ignore(d => d.Customer)
+            .Ignore(d => d.Activity);
 
         // ServiceProduct -> ServiceProductDto：时间字段名映射
+        // MasterId（实体）映射到 ProductId（DTO），保持 DTO 契约不变
         TypeAdapterConfig<ServiceProductEntity, ServiceProductDto>
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
-            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime)
+            .Map(d => d.ProductId, s => s.MasterId);
 
         // ServiceProductCreateDto -> ServiceProduct：忽略审计字段及导航属性
+        // ServiceProduct 已改为租户级（StoreTenantEntity），不再有 StoreId/StoreCode
+        // ProductId（DTO）映射到 MasterId（实体），Product 导航改名为 Master
         TypeAdapterConfig<ServiceProductCreateDto, ServiceProductEntity>
             .NewConfig()
+            .Map(d => d.MasterId, s => s.ProductId)
             .Ignore(d => d.Id)
             .Ignore(d => d.CreatedTime)
             .Ignore(d => d.UpdatedTime)
             .Ignore(d => d.IsDeleted)
             .Ignore(d => d.TenantId)
             .Ignore(d => d.TenantCode)
-            .Ignore(d => d.StoreId)
-            .Ignore(d => d.StoreCode)
-            .Ignore(d => d.Product);
+            .Ignore(d => d.Master);
     }
 }

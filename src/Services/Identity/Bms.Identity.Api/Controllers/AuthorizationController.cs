@@ -114,75 +114,116 @@ public class AuthorizationController : ControllerBase
             // 更新用户最后登录信息
             await UpdateLastLoginAsync(validationResult.UserId, DateTime.Now, GetClientIpAddress());
 
-            // 创建身份
-            var identity = new ClaimsIdentity(
-                authenticationType: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                nameType: OpenIddictConstants.Claims.Name,
-                roleType: OpenIddictConstants.Claims.Role);
-
-            // 添加标准声明
-            identity.AddClaim(OpenIddictConstants.Claims.Subject, validationResult.UserId.ToString());
-            identity.AddClaim(OpenIddictConstants.Claims.Name, validationResult.UserName);
-            identity.AddClaim("tenant_id", validationResult.TenantId.ToString());
-            if (!string.IsNullOrEmpty(validationResult.TenantCode))
-            {
-                identity.AddClaim("tenant_code", validationResult.TenantCode);
-            }
-            identity.AddClaim("user_id", validationResult.UserId.ToString());
-
-            if (!string.IsNullOrEmpty(validationResult.RealName))
-            {
-                identity.AddClaim("real_name", validationResult.RealName);
-            }
-
-            if (!string.IsNullOrEmpty(validationResult.Email))
-            {
-                identity.AddClaim(OpenIddictConstants.Claims.Email, validationResult.Email);
-            }
-
-            // 添加角色声明
-            if (validationResult.Roles != null)
-            {
-                foreach (var role in validationResult.Roles)
-                {
-                    identity.AddClaim(OpenIddictConstants.Claims.Role, role);
-                }
-            }
-
             // 创建票证
-            var principal = new ClaimsPrincipal(identity);
-            principal.SetScopes(
-                OpenIddictConstants.Scopes.OpenId,
-                OpenIddictConstants.Scopes.Profile,
-                OpenIddictConstants.Scopes.OfflineAccess);
-
-            principal.SetDestinations(GetDestinations);
+            var principal = BuildPrincipal(validationResult);
 
             _logger.LogInformation("正在登录用户...");
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
         catch (Exception ex)
         {
+            // 异常详情仅记录到日志，接口返回通用错误信息避免泄露内部实现
             _logger.LogError(ex, "出现错误：处理密码模式授权时发生异常，用户：{Username}", request.Username);
             return BadRequest(new OpenIddictResponse
             {
                 Error = OpenIddictConstants.Errors.ServerError,
-                ErrorDescription = $"服务器内部错误: {ex.Message}"
+                ErrorDescription = "服务器内部错误"
             });
         }
     }
 
-    private Task<IActionResult> HandleRefreshTokenFlowAsync()
+    /// <summary>
+    /// 处理刷新令牌流程
+    /// OpenIddict 已自动验证刷新令牌有效性，HttpContext.User 包含原 token 的 claims
+    /// 刷新时重新从 System 服务拉取最新用户状态，确保用户被禁用或权限变更后旧 Token 无法刷新
+    /// </summary>
+    private async Task<IActionResult> HandleRefreshTokenFlowAsync()
     {
-        // OpenIddict 会自动处理刷新令牌逻辑
-        // 这里可以添加自定义逻辑，如检查用户是否被禁用等
-        return Task.FromResult<IActionResult>(Challenge(
-            authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-            properties: new AuthenticationProperties(new Dictionary<string, string?>
+        // 从原 token 中提取用户ID
+        var userIdClaim = User.FindFirst("user_id")?.Value
+                          ?? User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
+        if (userIdClaim == null || !long.TryParse(userIdClaim, out long userId))
+        {
+            _logger.LogWarning("刷新令牌失败：无法从令牌中解析用户ID");
+            return Challenge(
+                authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                properties: new AuthenticationProperties(new Dictionary<string, string?>
+                {
+                    [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                    [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "无效的刷新令牌"
+                }));
+        }
+
+        // 从 System 服务获取用户最新状态（校验用户/租户状态，返回最新角色与权限）
+        var userInfo = await _systemApiClient.GetUserForRefreshAsync(userId);
+        if (!userInfo.IsValid)
+        {
+            _logger.LogWarning("刷新令牌失败：用户ID={UserId}，原因：{Reason}", userId, userInfo.ErrorMessage);
+            return Challenge(
+                authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                properties: new AuthenticationProperties(new Dictionary<string, string?>
+                {
+                    [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                    [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = userInfo.ErrorMessage ?? "用户已被禁用"
+                }));
+        }
+
+        _logger.LogInformation("刷新令牌成功，用户ID={UserId}，用户名={UserName}", userInfo.UserId, userInfo.UserName);
+
+        // 重新构建 principal，签发新 token（携带最新角色与权限）
+        var principal = BuildPrincipal(userInfo);
+        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>
+    /// 根据用户验证响应构建 ClaimsPrincipal，统一密码模式与刷新令牌模式的身份构造逻辑
+    /// </summary>
+    private static ClaimsPrincipal BuildPrincipal(ValidateUserResponse userInfo)
+    {
+        // 创建身份
+        var identity = new ClaimsIdentity(
+            authenticationType: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+            nameType: OpenIddictConstants.Claims.Name,
+            roleType: OpenIddictConstants.Claims.Role);
+
+        // 添加标准声明
+        identity.AddClaim(OpenIddictConstants.Claims.Subject, userInfo.UserId.ToString());
+        identity.AddClaim(OpenIddictConstants.Claims.Name, userInfo.UserName);
+        identity.AddClaim("tenant_id", userInfo.TenantId.ToString());
+        if (!string.IsNullOrEmpty(userInfo.TenantCode))
+        {
+            identity.AddClaim("tenant_code", userInfo.TenantCode);
+        }
+        identity.AddClaim("user_id", userInfo.UserId.ToString());
+
+        if (!string.IsNullOrEmpty(userInfo.RealName))
+        {
+            identity.AddClaim("real_name", userInfo.RealName);
+        }
+
+        if (!string.IsNullOrEmpty(userInfo.Email))
+        {
+            identity.AddClaim(OpenIddictConstants.Claims.Email, userInfo.Email);
+        }
+
+        // 添加角色声明
+        if (userInfo.Roles != null)
+        {
+            foreach (var role in userInfo.Roles)
             {
-                [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
-                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "刷新令牌功能待实现"
-            })));
+                identity.AddClaim(OpenIddictConstants.Claims.Role, role);
+            }
+        }
+
+        // 创建票证
+        var principal = new ClaimsPrincipal(identity);
+        principal.SetScopes(
+            OpenIddictConstants.Scopes.OpenId,
+            OpenIddictConstants.Scopes.Profile,
+            OpenIddictConstants.Scopes.OfflineAccess);
+
+        principal.SetDestinations(GetDestinations);
+        return principal;
     }
 
     private static IEnumerable<string> GetDestinations(Claim claim)

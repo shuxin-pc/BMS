@@ -4,7 +4,7 @@ namespace Bms.Store.Domain.Entities;
 /// 技师-技能分类 关联表
 /// 对应需求 B4.3：技师技能标签结构化关联（替代 Technician.SkillTags 字符串字段）
 /// </summary>
-public class TechnicianSkill : StoreEntity
+public class TechnicianSkill : StoreBusinessEntityBase
 {
     /// <summary>
     /// 技师 ID（关联 Technician.Id）

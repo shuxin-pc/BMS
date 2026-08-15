@@ -30,12 +30,6 @@
               <el-option label="爽约" :value="6" />
             </el-select>
           </el-form-item>
-          <el-form-item label="技师来源">
-            <el-select v-model="searchForm.technicianSource" placeholder="全部" clearable style="width: 130px">
-              <el-option label="商家技师" :value="1" />
-              <el-option label="平台技师" :value="2" />
-            </el-select>
-          </el-form-item>
           <el-form-item label="日期范围">
             <el-date-picker
               v-model="searchForm.dateRange"
@@ -183,7 +177,7 @@
     <el-dialog
       v-model="dialogVisible"
       title="新增预约"
-      width="560px"
+      width="640px"
       :close-on-click-modal="false"
     >
       <el-form
@@ -209,9 +203,11 @@
                 <el-option
                   v-for="c in customerOptions"
                   :key="c.id"
-                  :label="`${c.name}（${c.phone}）`"
+                  :label="c.name"
                   :value="c.id"
-                />
+                >
+                  <span>{{ c.name }}（{{ c.phone }}）</span>
+                </el-option>
               </el-select>
             </el-form-item>
           </el-col>
@@ -237,40 +233,58 @@
             />
           </el-select>
         </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="技师">
-              <el-select
-                v-model="formData.technicianId"
-                filterable
-                placeholder="请选择技师"
-                style="width: 100%"
-                @change="handleTechnicianChange"
-              >
-                <el-option
-                  v-for="t in technicianOptions"
-                  :key="t.id"
-                  :value="t.id"
-                >
-                  <span :class="{ 'resource-occupied': technicianOccupancyMap.get(t.id)?.isOccupied }">
-                    {{ t.source === 2 ? '[平台]' : '[自有]' }}{{ t.name }}
-                    <el-tag v-if="technicianOccupancyMap.get(t.id)?.isOccupied" type="danger" size="small" effect="plain">
-                      占用
-                    </el-tag>
-                  </span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="技师来源">
-              <el-radio-group v-model="formData.technicianSource" @change="handleTechnicianSourceChange">
-                <el-radio :value="1">商家技师</el-radio>
-                <el-radio :value="2">平台技师</el-radio>
-              </el-radio-group>
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <el-form-item label="商家技师">
+          <el-select
+            v-model="formData.merchantTechnicianId"
+            filterable
+            clearable
+            placeholder="请选择商家技师"
+            style="width: 100%"
+            @change="handleMerchantTechnicianChange"
+          >
+            <el-option
+              v-for="t in merchantTechnicianOptions"
+              :key="t.id"
+              :value="t.id"
+            >
+              <div class="technician-option">
+                <span :class="{ 'resource-occupied': technicianOccupancyMap.get(t.id)?.isOccupied }">
+                  {{ t.name }}
+                  <el-tag v-if="technicianOccupancyMap.get(t.id)?.isOccupied" type="danger" size="small" effect="plain">
+                    占用
+                  </el-tag>
+                </span>
+                <span class="technician-skill">{{ formatSkills(t.skillCategoryNames) }}</span>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="平台技师">
+          <el-select
+            v-model="formData.platformTechnicianId"
+            filterable
+            clearable
+            placeholder="请选择平台技师"
+            style="width: 100%"
+            @change="handlePlatformTechnicianChange"
+          >
+            <el-option
+              v-for="t in platformTechnicianOptions"
+              :key="t.id"
+              :value="t.id"
+            >
+              <div class="technician-option">
+                <span :class="{ 'resource-occupied': technicianOccupancyMap.get(t.id)?.isOccupied }">
+                  {{ t.name }}
+                  <el-tag v-if="technicianOccupancyMap.get(t.id)?.isOccupied" type="danger" size="small" effect="plain">
+                    占用
+                  </el-tag>
+                </span>
+                <span class="technician-skill">{{ formatSkills(t.skillCategoryNames) }}</span>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="房间/床位">
           <el-select
             v-model="formData.roomId"
@@ -342,7 +356,7 @@
                 v-model="formData.endTime"
                 format="HH:mm"
                 value-format="HH:mm"
-                placeholder="选择服务项目后自动计算"
+                placeholder="自动计算"
                 disabled
                 style="width: 100%"
               />
@@ -419,7 +433,7 @@ import {
 } from '@/api/appointment'
 import { getCustomers } from '@/api/customer'
 import type { Customer } from '@/api/customer/types'
-import { getTechnicians } from '@/api/technician'
+import { getTechniciansAvailableByService } from '@/api/technician'
 import type { Technician } from '@/api/technician/types'
 import { getProducts } from '@/api/product'
 import type { Product } from '@/api/product/types'
@@ -436,7 +450,6 @@ const searchForm = reactive({
   customerName: '',
   phone: '',
   status: undefined as number | undefined,
-  technicianSource: undefined as TechnicianSource | undefined,
   dateRange: [] as string[]
 })
 
@@ -456,9 +469,9 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getAppointments({
-      // TODO: AppointmentQuery 不支持 customerName/phone 查询，需改为 customerId
+      customerName: searchForm.customerName || undefined,
+      phone: searchForm.phone || undefined,
       status: searchForm.status,
-      technicianSource: searchForm.technicianSource,
       appointmentDateStart: searchForm.dateRange?.[0],
       appointmentDateEnd: searchForm.dateRange?.[1],
       pageIndex: pagination.pageIndex,
@@ -484,7 +497,6 @@ const handleReset = () => {
   searchForm.customerName = ''
   searchForm.phone = ''
   searchForm.status = undefined
-  searchForm.technicianSource = undefined
   searchForm.dateRange = []
   handleSearch()
 }
@@ -544,6 +556,9 @@ const formData = reactive({
   duration: undefined as number | undefined,
   technicianId: undefined as number | undefined,
   technicianName: '',
+  // 商家技师/平台技师分别单独选择，互斥（选择其一清空另一）
+  merchantTechnicianId: undefined as number | undefined,
+  platformTechnicianId: undefined as number | undefined,
   technicianSource: 1 as TechnicianSource,
   roomId: undefined as number | undefined,
   roomName: '',
@@ -554,11 +569,59 @@ const formData = reactive({
   remark: ''
 })
 
+/**
+ * 格式化当天日期（YYYY-MM-DD）
+ * @returns 当天日期字符串
+ */
+const formatToday = (): string => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/**
+ * 校验预约日期 + 开始时间不能早于当前时间
+ * - 预约日期早于今天：不合法
+ * - 预约日期为今天但开始时间早于当前时刻：不合法
+ * @param _rule 规则对象（未使用）
+ * @param _value 当前字段值（未使用，直接读取 formData 组合校验）
+ * @param callback 校验回调
+ */
+const validateAppointmentTime = (_rule: unknown, _value: unknown, callback: (error?: Error) => void) => {
+  if (!formData.appointmentDate || !formData.startTime) {
+    callback()
+    return
+  }
+  const today = formatToday()
+  if (formData.appointmentDate < today) {
+    callback(new Error('预约日期不能早于今天'))
+    return
+  }
+  if (formData.appointmentDate === today) {
+    const now = new Date()
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+    const [sh, sm] = formData.startTime.split(':').map(Number)
+    if (!isNaN(sh) && !isNaN(sm) && sh * 60 + sm < nowMinutes) {
+      callback(new Error('开始时间不能早于当前时间'))
+      return
+    }
+  }
+  callback()
+}
+
 const formRules: FormRules = {
   customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
   productId: [{ required: true, message: '请选择服务项目', trigger: 'change' }],
-  appointmentDate: [{ required: true, message: '请选择预约日期', trigger: 'change' }],
-  startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }]
+  appointmentDate: [
+    { required: true, message: '请选择预约日期', trigger: 'change' },
+    { validator: validateAppointmentTime, trigger: 'change' }
+  ],
+  startTime: [
+    { required: true, message: '请选择开始时间', trigger: 'change' },
+    { validator: validateAppointmentTime, trigger: 'change' }
+  ]
 }
 
 // 重置表单
@@ -570,6 +633,8 @@ const resetForm = () => {
   formData.duration = undefined
   formData.technicianId = undefined
   formData.technicianName = ''
+  formData.merchantTechnicianId = undefined
+  formData.platformTechnicianId = undefined
   formData.technicianSource = 1
   formData.roomId = undefined
   formData.roomName = ''
@@ -652,8 +717,10 @@ const handleCustomerChange = (customerId: number) => {
   }
 }
 
-// 技师列表
-const technicianOptions = ref<Technician[]>([])
+// 商家技师列表（按服务项目适用技能过滤）
+const merchantTechnicianOptions = ref<Technician[]>([])
+// 平台技师列表（平台技师技能无法对齐当前门店技能分类，保持全部可选）
+const platformTechnicianOptions = ref<Technician[]>([])
 
 /**
  * 资源可用性状态（技师/房间/设备）
@@ -745,39 +812,75 @@ watch(
   }
 )
 
+// 预约日期或开始时间变化时，重新校验"预约时间不能早于当前时间"
+watch(
+  () => [formData.appointmentDate, formData.startTime],
+  () => {
+    if (dialogVisible.value && formRef.value) {
+      formRef.value.validateField(['appointmentDate', 'startTime'])
+    }
+  }
+)
+
 /**
- * 加载技师列表（按技师来源过滤）
+ * 加载商家技师与平台技师列表（并行请求，按服务项目适用技能过滤）
+ * - 已选服务项目：按服务项目适用技能过滤（树形展开匹配，选父级自动匹配子级）
+ * - 未选服务项目：返回指定来源全部启用技师
  */
 const loadTechnicians = async () => {
   try {
-    const res = await getTechnicians({
-      status: 1,
-      source: formData.technicianSource,
-      pageIndex: 1,
-      pageSize: 200
-    })
-    technicianOptions.value = res.list
+    const [merchantList, platformList] = await Promise.all([
+      getTechniciansAvailableByService(formData.productId, undefined, 1),
+      getTechniciansAvailableByService(formData.productId, undefined, 2)
+    ])
+    merchantTechnicianOptions.value = merchantList
+    platformTechnicianOptions.value = platformList
   } catch {
-    technicianOptions.value = []
+    merchantTechnicianOptions.value = []
+    platformTechnicianOptions.value = []
   }
 }
 
 /**
- * 选择技师后同步技师名称
- * @param technicianId 选中的技师ID
+ * 格式化技师技能展示文本
+ * @param skills 技能分类名称列表
+ * @returns 展示文本（无技能时提示未设置）
  */
-const handleTechnicianChange = (technicianId: number) => {
-  const tech = technicianOptions.value.find(t => t.id === technicianId)
-  formData.technicianName = tech ? tech.name : ''
+const formatSkills = (skills?: string[]): string => {
+  if (!skills || skills.length === 0) return '未设置技能'
+  return `技能：${skills.join('、')}`
 }
 
 /**
- * 技师来源切换时清空已选技师并重新加载列表
+ * 选择商家技师：同步技师ID/名称/来源，并清空平台技师保证互斥
+ * @param technicianId 选中的商家技师ID（清空时为 undefined）
  */
-const handleTechnicianSourceChange = () => {
-  formData.technicianId = undefined
-  formData.technicianName = ''
-  loadTechnicians()
+const handleMerchantTechnicianChange = (technicianId: number | undefined) => {
+  if (technicianId !== undefined) {
+    formData.platformTechnicianId = undefined
+    formData.technicianSource = 1
+    formData.technicianId = technicianId
+    formData.technicianName = merchantTechnicianOptions.value.find(t => t.id === technicianId)?.name ?? ''
+  } else {
+    formData.technicianId = undefined
+    formData.technicianName = ''
+  }
+}
+
+/**
+ * 选择平台技师：同步技师ID/名称/来源，并清空商家技师保证互斥
+ * @param technicianId 选中的平台技师ID（清空时为 undefined）
+ */
+const handlePlatformTechnicianChange = (technicianId: number | undefined) => {
+  if (technicianId !== undefined) {
+    formData.merchantTechnicianId = undefined
+    formData.technicianSource = 2
+    formData.technicianId = technicianId
+    formData.technicianName = platformTechnicianOptions.value.find(t => t.id === technicianId)?.name ?? ''
+  } else {
+    formData.technicianId = undefined
+    formData.technicianName = ''
+  }
 }
 
 // 服务项目列表
@@ -815,10 +918,6 @@ const recalcEndTime = () => {
   formData.endTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`
 }
 
-/**
- * 选择服务项目后保存 duration 并自动重算 endTime
- * @param productId 选中的服务项目商品ID
- */
 /**
  * 选择服务项目后，根据服务项目所需房间类型与当前时段重新加载可用房间
  * - 时段已确定：调用后端接口按 RequiredRoomType + 时段冲突过滤
@@ -877,11 +976,25 @@ const handleServiceProductChange = async (productId: number) => {
   if (previousEquipmentId && !equipmentOptions.value.some(e => e.id === previousEquipmentId)) {
     formData.equipmentId = undefined
   }
+
+  // 技师过滤：按服务项目适用技能联动（树形展开匹配，选父级自动匹配子级），并清空已选技师
+  const previousTechnicianId = formData.technicianId
+  await loadTechnicians()
+  const stillAvailable = merchantTechnicianOptions.value.some(t => t.id === previousTechnicianId)
+    || platformTechnicianOptions.value.some(t => t.id === previousTechnicianId)
+  if (previousTechnicianId && !stillAvailable) {
+    formData.technicianId = undefined
+    formData.technicianName = ''
+    formData.merchantTechnicianId = undefined
+    formData.platformTechnicianId = undefined
+  }
 }
 
 // 新增
 const handleAdd = () => {
   resetForm()
+  // 预约日期默认填入当天
+  formData.appointmentDate = formatToday()
   loadRooms()
   loadEquipments()
   loadCustomers()
@@ -1071,5 +1184,17 @@ onMounted(async () => {
 .resource-occupied {
   color: var(--el-color-danger, #f56c6c);
   font-weight: 600;
+}
+
+/* 技师下拉选项：名称 + 技能展示（选择技师时展示技能） */
+.technician-option {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+}
+
+.technician-skill {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 </style>

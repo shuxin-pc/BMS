@@ -84,4 +84,16 @@ public class Message : EntityBase
     /// 消息归属租户编码（与 TenantId 对应）
     /// </summary>
     public string TenantCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 业务类型标识（如 "BirthdayReminder"），用于按业务场景查询/去重。
+    /// 非业务触发的消息可为空。
+    /// </summary>
+    public string? BizType { get; set; }
+
+    /// <summary>
+    /// 业务唯一键（如 "{customerId}:{year}"），与 BizType 配合用于判断同一业务事件是否已发送消息。
+    /// 同一 BizType+BizKey 只应存在一条未撤回的 Message。
+    /// </summary>
+    public string? BizKey { get; set; }
 }

@@ -4,7 +4,7 @@ using System.Security.Claims;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Organizations;
 using Bms.System.Application.Services;
-using Bms.System.Domain.Attributes;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Domain.Exceptions;
 
 namespace Bms.System.Api.Controllers;
@@ -26,22 +26,53 @@ public class OrganizationsController : ControllerBase
     /// 获取组织树形列表
     /// </summary>
     [HttpGet("tree")]
+    [Permission("system:organization:view")]
     public async Task<ApiResponseDto<List<OrganizationDto>>> GetTree([FromQuery] OrganizationQueryDto? query)
     {
         // 获取当前用户信息进行租户隔离
         var (isSuperAdmin, tenantId) = GetCurrentUserInfo();
 
-        // 租户隔离：非超级管理员只能看到当前租户的组织
-        // 超级管理员如果传了 tenantId，按租户筛选；否则返回所有可见组织
+        // 租户隔离：非超级管理员强制使用当前租户，忽略 query.TenantId 防止跨租户越权
+        // 仅超级管理员可通过 query.TenantId 跨租户查询
         long? effectiveTenantId = null;
         if (!isSuperAdmin && tenantId.HasValue)
         {
-            // 非超级管理员：如果请求中没有指定租户筛选条件，默认使用当前租户
-            effectiveTenantId = query?.TenantId ?? tenantId;
+            // 非超级管理员：强制使用当前租户，忽略前端传入的 tenantId 防止越权
+            effectiveTenantId = tenantId;
         }
-        else if (query?.TenantId.HasValue == true)
+        else if (isSuperAdmin && query?.TenantId.HasValue == true)
         {
-            // 超级管理员或非超级管理员传了 tenantId：按租户筛选
+            // 超级管理员：按传入的 tenantId 筛选
+            effectiveTenantId = query.TenantId;
+        }
+
+        var result = await _organizationService.GetTreeListAsync(query, isSuperAdmin, effectiveTenantId);
+        return ApiResponseDto<List<OrganizationDto>>.Success(result);
+    }
+
+    /// <summary>
+    /// 获取组织树（下拉数据专用）
+    /// 下拉查询辅助接口，仅需认证，不校验权限码
+    /// 用于用户管理、角色管理、站内信等页面的组织下拉选择，避免因未分配组织架构页面权限导致下拉无选项
+    /// 租户隔离：非超级管理员强制使用当前租户，仅超级管理员可通过 query.TenantId 跨租户查询
+    /// </summary>
+    [HttpGet("options")]
+    public async Task<ApiResponseDto<List<OrganizationDto>>> GetOptions([FromQuery] OrganizationQueryDto? query)
+    {
+        // 获取当前用户信息进行租户隔离
+        var (isSuperAdmin, tenantId) = GetCurrentUserInfo();
+
+        // 租户隔离：非超级管理员强制使用当前租户，忽略 query.TenantId 防止跨租户越权
+        // 仅超级管理员可通过 query.TenantId 跨租户查询
+        long? effectiveTenantId = null;
+        if (!isSuperAdmin && tenantId.HasValue)
+        {
+            // 非超级管理员：强制使用当前租户，忽略前端传入的 tenantId 防止越权
+            effectiveTenantId = tenantId;
+        }
+        else if (isSuperAdmin && query?.TenantId.HasValue == true)
+        {
+            // 超级管理员：按传入的 tenantId 筛选
             effectiveTenantId = query.TenantId;
         }
 
@@ -53,22 +84,23 @@ public class OrganizationsController : ControllerBase
     /// 获取组织列表
     /// </summary>
     [HttpGet]
+    [Permission("system:organization:view")]
     public async Task<ApiResponseDto<List<OrganizationDto>>> GetList([FromQuery] OrganizationQueryDto query)
     {
         // 获取当前用户信息进行租户隔离
         var (isSuperAdmin, tenantId) = GetCurrentUserInfo();
 
-        // 租户隔离：非超级管理员只能看到当前租户的组织
-        // 超级管理员如果传了 tenantId，按租户筛选；否则不限制
+        // 租户隔离：非超级管理员强制使用当前租户，忽略 query.TenantId 防止跨租户越权
+        // 仅超级管理员可通过 query.TenantId 跨租户查询
         long? effectiveTenantId = null;
         if (!isSuperAdmin && tenantId.HasValue)
         {
-            // 非超级管理员：如果请求中没有指定租户筛选条件，默认使用当前租户
-            effectiveTenantId = query.TenantId ?? tenantId;
+            // 非超级管理员：强制使用当前租户，忽略前端传入的 tenantId 防止越权
+            effectiveTenantId = tenantId;
         }
         else if (isSuperAdmin && query.TenantId.HasValue)
         {
-            // 超级管理员：只有明确传了 tenantId 才筛选
+            // 超级管理员：按传入的 tenantId 筛选
             effectiveTenantId = query.TenantId;
         }
 
@@ -80,6 +112,7 @@ public class OrganizationsController : ControllerBase
     /// 获取组织详情
     /// </summary>
     [HttpGet("{id}")]
+    [Permission("system:organization:view")]
     public async Task<ApiResponseDto<OrganizationDto>> GetById(long id)
     {
         var result = await _organizationService.GetByIdAsync(id);
@@ -90,6 +123,7 @@ public class OrganizationsController : ControllerBase
     /// 获取子组织列表
     /// </summary>
     [HttpGet("{parentId}/children")]
+    [Permission("system:organization:view")]
     public async Task<ApiResponseDto<List<OrganizationDto>>> GetChildren(long parentId)
     {
         var result = await _organizationService.GetChildrenAsync(parentId);

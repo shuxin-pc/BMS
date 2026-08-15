@@ -36,6 +36,11 @@ public interface ICurrentUser
     long? StoreId { get; }
 
     /// <summary>
+    /// 当前门店编码（由 StoreContextMiddleware 查询 Stores 表并写入 HttpContext.Items，仅 Store 服务 API 可用）
+    /// </summary>
+    string? StoreCode { get; }
+
+    /// <summary>
     /// 是否超级管理员
     /// </summary>
     bool IsSuperAdmin { get; }

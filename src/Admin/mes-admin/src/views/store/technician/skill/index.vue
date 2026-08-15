@@ -12,12 +12,6 @@
               style="width: 200px"
             />
           </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 120px">
-              <el-option label="启用" :value="1" />
-              <el-option label="禁用" :value="0" />
-            </el-select>
-          </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleSearch">
               <el-icon><Search /></el-icon>
@@ -39,14 +33,6 @@
           <el-icon><Plus /></el-icon>
           新增分类
         </el-button>
-        <el-button @click="expandAll">
-          <el-icon><Expand /></el-icon>
-          展开全部
-        </el-button>
-        <el-button @click="collapseAll">
-          <el-icon><Fold /></el-icon>
-          折叠全部
-        </el-button>
       </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
@@ -58,26 +44,14 @@
     <!-- 表格区域 -->
     <div class="card">
       <el-table
-        ref="tableRef"
         v-loading="tableLoading"
         :data="tableData"
         row-key="id"
         :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
-        :default-expand-all="false"
         style="width: 100%"
       >
         <el-table-column prop="name" label="分类名称" min-width="240" />
         <el-table-column prop="code" label="分类编码" width="200" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small" effect="dark">
-              {{ row.status === 1 ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.remark || '-' }}</template>
-        </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
@@ -104,7 +78,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑技能分类' : '新增技能分类'"
-      width="560px"
+      width="500px"
       :close-on-click-modal="false"
     >
       <el-form
@@ -125,26 +99,11 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="分类名称" prop="name">
-              <el-input v-model="formData.name" placeholder="请输入分类名称" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="分类编码" prop="code">
-              <el-input v-model="formData.code" placeholder="如 SKIN-CARE" :disabled="isEdit" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="formData.status">
-            <el-radio :value="1">启用</el-radio>
-            <el-radio :value="0">禁用</el-radio>
-          </el-radio-group>
+        <el-form-item label="分类名称" prop="name">
+          <el-input v-model="formData.name" placeholder="请输入分类名称" />
         </el-form-item>
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入备注" />
+        <el-form-item label="分类编码" prop="code">
+          <el-input v-model="formData.code" placeholder="请输入分类编码" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -158,25 +117,23 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus, Delete, Edit, Expand, Fold } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import {
   getSkillCategoryTree,
   createSkillCategory,
   updateSkillCategory,
   deleteSkillCategory
 } from '@/api/skill'
-import type { SkillCategory, SkillCategoryStatus } from '@/api/skill/types'
+import type { SkillCategory } from '@/api/skill/types'
 
 // 搜索表单
 const searchForm = reactive({
-  name: '',
-  status: undefined as SkillCategoryStatus | undefined
+  name: ''
 })
 
 // 表格数据
 const tableLoading = ref(false)
 const tableData = ref<SkillCategory[]>([])
-const tableRef = ref()
 
 // 弹窗
 const dialogVisible = ref(false)
@@ -188,9 +145,7 @@ const formData = reactive({
   id: 0,
   name: '',
   code: '',
-  parentId: 0,
-  status: 1 as SkillCategoryStatus,
-  remark: ''
+  parentId: 0
 })
 
 const formRules: FormRules = {
@@ -202,9 +157,6 @@ const formRules: FormRules = {
     { required: true, message: '分类编码不能为空', trigger: 'blur' },
     { min: 2, max: 50, message: '分类编码长度为2-50个字符', trigger: 'blur' },
     { pattern: /^[a-zA-Z0-9_-]+$/, message: '分类编码只能包含字母、数字、下划线、横线', trigger: 'blur' }
-  ],
-  status: [
-    { required: true, message: '请选择状态', trigger: 'change' }
   ]
 }
 
@@ -213,17 +165,20 @@ const formRules: FormRules = {
  */
 const categoryOptions = computed<SkillCategory[]>(() => {
   return [
-    { id: 0, name: '顶级分类', code: '', parentId: 0, status: 1 },
+    { id: 0, name: '顶级分类', code: '', parentId: 0 },
     ...tableData.value
   ]
 })
 
 /**
- * 格式化日期时间
+ * 格式化日期时间（标准 ISO 字符串转 YYYY-MM-DD HH:mm:ss）
  */
 const formatDateTime = (dateStr?: string): string => {
   if (!dateStr) return '-'
-  return dateStr.replace('T', ' ')
+  const dt = new Date(dateStr)
+  if (Number.isNaN(dt.getTime())) return dateStr
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
 }
 
 // 加载数据
@@ -231,8 +186,7 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     tableData.value = await getSkillCategoryTree({
-      name: searchForm.name || undefined,
-      status: searchForm.status
+      name: searchForm.name || undefined
     })
   } catch (error: any) {
     ElMessage.error(error.message || '加载数据失败')
@@ -249,34 +203,7 @@ const handleSearch = () => {
 // 重置
 const handleReset = () => {
   searchForm.name = ''
-  searchForm.status = undefined
   loadData()
-}
-
-// 展开全部
-const expandAll = () => {
-  toggleAllExpansion(true)
-}
-
-// 折叠全部
-const collapseAll = () => {
-  toggleAllExpansion(false)
-}
-
-/**
- * 递归切换所有节点展开状态
- * @param expanded 是否展开
- */
-const toggleAllExpansion = (expanded: boolean) => {
-  const traverse = (nodes: SkillCategory[]) => {
-    nodes.forEach(node => {
-      tableRef.value?.toggleRowExpansion(node, expanded)
-      if (node.children && node.children.length > 0) {
-        traverse(node.children)
-      }
-    })
-  }
-  traverse(tableData.value)
 }
 
 // 重置表单
@@ -285,8 +212,6 @@ const resetFormData = () => {
   formData.name = ''
   formData.code = ''
   formData.parentId = 0
-  formData.status = 1
-  formData.remark = ''
 }
 
 // 新增（可指定父节点）
@@ -306,8 +231,6 @@ const handleEdit = (row: SkillCategory) => {
   formData.name = row.name
   formData.code = row.code
   formData.parentId = row.parentId
-  formData.status = row.status
-  formData.remark = row.remark || ''
   dialogVisible.value = true
 }
 
@@ -343,9 +266,7 @@ const handleSubmit = async () => {
         const payload = {
           name: formData.name,
           code: formData.code,
-          parentId: formData.parentId || 0,
-          status: formData.status,
-          remark: formData.remark || undefined
+          parentId: formData.parentId || 0
         }
         if (isEdit.value) {
           await updateSkillCategory({ ...payload, id: formData.id })

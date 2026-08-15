@@ -308,7 +308,7 @@ import { usePasswordPolicy } from '@/composables/usePasswordPolicy'
 const router = useRouter()
 
 // 密码策略
-const { policy, loadPolicy, getPolicyText, validatePassword, getPasswordRules } = usePasswordPolicy()
+const { loadPolicy, getPolicyText, getPasswordRules } = usePasswordPolicy()
 
 // 默认头像 SVG
 const defaultAvatarSvg = ''
@@ -481,7 +481,7 @@ const handleAvatarChange = async (event: Event) => {
 
     // 同步更新 store 中的用户信息
     const userStore = useUserStore()
-    userStore.userInfo.avatar = result.avatar
+    userStore.userInfo.avatar = result.avatar || ''
 
     ElMessage.success('头像上传成功')
   } catch (error: any) {
@@ -549,9 +549,9 @@ const handlePasswordChange = async () => {
         passwordForm.newPassword = ''
         passwordForm.confirmPassword = ''
         // 跳转到登录页
-        setTimeout(() => {
+        setTimeout(async () => {
           const userStore = useUserStore()
-          userStore.logout()
+          await userStore.logout()
           router.push('/login')
         }, 1500)
       } catch (error: any) {

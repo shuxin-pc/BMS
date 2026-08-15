@@ -13,6 +13,11 @@ public interface ISystemApiClient
     Task<ValidateUserResponse> ValidateUserAsync(string userName, string password);
 
     /// <summary>
+    /// 刷新令牌时获取用户最新状态（不验证密码，仅校验用户/租户状态并返回最新角色与权限）
+    /// </summary>
+    Task<ValidateUserResponse> GetUserForRefreshAsync(long userId);
+
+    /// <summary>
     /// 记录登录/登出审计日志
     /// </summary>
     Task RecordLoginAuditAsync(LoginAuditRequest request);

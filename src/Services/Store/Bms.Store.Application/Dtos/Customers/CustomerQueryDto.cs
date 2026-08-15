@@ -13,7 +13,7 @@ public class CustomerQueryDto : PagedRequestDto
     public string? Name { get; set; }
 
     /// <summary>
-    /// 手机号（精确匹配）
+    /// 手机号（模糊匹配）
     /// </summary>
     public string? Phone { get; set; }
 
@@ -21,4 +21,14 @@ public class CustomerQueryDto : PagedRequestDto
     /// 客户等级ID
     /// </summary>
     public long? LevelId { get; set; }
+
+    /// <summary>
+    /// 客户标签ID（按标签筛选关联客户）
+    /// </summary>
+    public long? TagId { get; set; }
+
+    /// <summary>
+    /// 性别（0:未知 1:男 2:女）
+    /// </summary>
+    public int? Gender { get; set; }
 }

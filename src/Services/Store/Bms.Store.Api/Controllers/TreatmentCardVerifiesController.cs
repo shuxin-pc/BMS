@@ -51,4 +51,16 @@ public class TreatmentCardVerifiesController : ControllerBase
         dto.Id = id;
         return await _appService.UpdateAsync(dto);
     }
+
+    /// <summary>
+    /// 核销冲正（规则7）
+    /// 通过状态机实现，不物理删除核销记录
+    /// 冲正时恢复疗程卡剩余次数、取消关联订单、冲减业绩统计
+    /// </summary>
+    [HttpPost("{id:long}/reverse")]
+    public async Task<ApiResponseDto> Reverse(long id, [FromBody] TreatmentCardVerifyReverseDto dto)
+    {
+        dto.Id = id;
+        return await _appService.ReverseAsync(dto);
+    }
 }

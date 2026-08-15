@@ -43,19 +43,13 @@ public static class InventoryLogSourceTypes
     /// <summary>【出库】其他（手工录入或未分类的出库来源，仅用于 Type=2 出库；入库来源已不再使用此值）</summary>
     public const int Other = 11;
 
-    /// <summary>【出库】样品赠品调拨出库（调出门店库存扣减，库存转移非支出，不纳入 IsSampleGiftCategory）</summary>
-    public const int SampleGiftTransferOutbound = 12;
-
-    /// <summary>【入库】样品赠品调拨入库（调入门店库存增加）</summary>
-    public const int SampleGiftTransferInbound = 13;
-
     /// <summary>
     /// 判定来源类型值是否合法
     /// </summary>
     /// <param name="sourceType">来源类型值</param>
     /// <returns>合法返回 true，否则 false</returns>
     public static bool IsValid(int sourceType) =>
-        sourceType >= SalesOutbound && sourceType <= SampleGiftTransferInbound;
+        sourceType >= SalesOutbound && sourceType <= Other;
 
     /// <summary>
     /// 判定来源类型是否属于"销售出库类"（主营成本，必绑订单）

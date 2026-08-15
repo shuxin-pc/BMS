@@ -12,49 +12,58 @@ namespace Bms.Store.Application.Services;
 
 /// <summary>
 /// 采购订单应用服务实现
+/// 采购订单创建即入库，单据不可变，仅支持查询与创建
 /// </summary>
 public class PurchaseOrderAppService : IPurchaseOrderAppService
 {
     private readonly StoreDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
     private readonly IValidator<PurchaseOrderCreateDto> _createValidator;
-    private readonly IValidator<PurchaseOrderUpdateDto> _updateValidator;
+    private readonly IInventoryAlertAppService _alertAppService;
 
     public PurchaseOrderAppService(
         StoreDbContext dbContext,
         ICurrentUser currentUser,
         IValidator<PurchaseOrderCreateDto> createValidator,
-        IValidator<PurchaseOrderUpdateDto> updateValidator)
+        IInventoryAlertAppService alertAppService)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _createValidator = createValidator;
-        _updateValidator = updateValidator;
+        _alertAppService = alertAppService;
     }
 
     /// <summary>
     /// 获取采购订单分页列表
+    /// SupplierId 过滤按明细供应商子查询，支持一个订单含多供应商的场景
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<PurchaseOrderDto>>> GetPagedListAsync(PurchaseOrderQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<PurchaseOrderDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<PurchaseOrderDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.PurchaseOrders
-            .Where(p => p.TenantId == tenantId);
+            .Where(p => p.TenantId == tenantId && p.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.OrderNo))
             queryable = queryable.Where(p => p.OrderNo.Contains(query.OrderNo));
         if (query.SupplierId.HasValue)
-            queryable = queryable.Where(p => p.SupplierId == query.SupplierId.Value);
-        if (query.Status.HasValue)
-            queryable = queryable.Where(p => p.Status == query.Status.Value);
+            queryable = queryable.Where(p => p.OrderItems.Any(i => i.SupplierId == query.SupplierId.Value));
+        if (query.ProductId.HasValue)
+            queryable = queryable.Where(p => p.OrderItems.Any(i => i.ProductId == query.ProductId.Value));
         if (query.PurchaseType.HasValue)
             queryable = queryable.Where(p => p.PurchaseType == query.PurchaseType.Value);
+        if (query.OrderDateStart.HasValue)
+            queryable = queryable.Where(p => p.OrderDate >= query.OrderDateStart.Value);
+        if (query.OrderDateEnd.HasValue)
+            // EndDate 含当日：用次日0点作为上界（exclusive）避免时间部分漏掉当天数据
+            queryable = queryable.Where(p => p.OrderDate < query.OrderDateEnd.Value.AddDays(1));
 
         var total = await queryable.CountAsync();
         var items = await queryable
+            .Include(p => p.OrderItems)
             .OrderByDescending(p => p.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
@@ -71,15 +80,16 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
     }
 
     /// <summary>
-    /// 根据ID获取采购订单详情
+    /// 根据ID获取采购订单详情（含明细）
     /// </summary>
     public async Task<ApiResponseDto<PurchaseOrderDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PurchaseOrderDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PurchaseOrderDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.PurchaseOrders
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .Include(p => p.OrderItems)
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value && p.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<PurchaseOrderDto?>.Fail("采购订单不存在", 404);
         return ApiResponseDto<PurchaseOrderDto?>.Ok(entity.Adapt<PurchaseOrderDto>());
@@ -87,11 +97,12 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
 
     /// <summary>
     /// 创建采购订单（创建即入库，联动库存：创建批次、更新汇总、记录流水）
+    /// 采购单号由后端自动生成（PO{yyyyMMdd}{序号}），批次号统一格式（{yyyyMMdd}-{序号}）
     /// </summary>
     public async Task<ApiResponseDto<PurchaseOrderDto>> CreateAsync(PurchaseOrderCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PurchaseOrderDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PurchaseOrderDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -100,15 +111,6 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
         var tenantId = _currentUser.TenantId.Value;
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
         var storeId = _currentUser.StoreId.Value;
-
-        // 采购单号格式校验：必须为 8 位有效日期格式 YYYYMMDD（如 20260718）
-        if (!PurchaseOrderNoValidator.IsValid(dto.OrderNo))
-            return ApiResponseDto<PurchaseOrderDto>.Fail("采购单号必须为 8 位日期格式 YYYYMMDD（如 20260718）", 400);
-
-        var orderNoExists = await _dbContext.PurchaseOrders
-            .AnyAsync(p => p.OrderNo == dto.OrderNo && p.TenantId == tenantId);
-        if (orderNoExists)
-            return ApiResponseDto<PurchaseOrderDto>.Fail($"采购单号 {dto.OrderNo} 已存在", 400);
 
         if (dto.Items == null || !dto.Items.Any())
             return ApiResponseDto<PurchaseOrderDto>.Fail("采购明细不能为空", 400);
@@ -119,10 +121,16 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
         var entity = dto.Adapt<PurchaseOrderEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = tenantCode;
+        entity.StoreId = storeId;
         entity.CreatedTime = now;
-        entity.Status = 3; // 已入库：创建即入库
+        // 采购单创建即入库，Status 由实体默认值 1（已入库）控制，无需显式赋值
+        // 采购单号在事务内（顾问锁保护下）生成，避免并发重复
+        // 记录操作人员（采购单创建即入库，OperatorId 标识谁执行的此次采购）
+        entity.OperatorId = _currentUser.UserId;
+        entity.OperatorName = _currentUser.RealName ?? _currentUser.UserName;
 
-        // 设置明细审计字段，BatchNo 由 BatchNoGenerator 统一生成（D2 格式 + 唯一性校验）
+        // 设置明细审计字段，SupplierId 取自 DTO 明细
+        // BatchNo 在事务内（顾问锁保护下）统一生成，避免并发重复
         for (var i = 0; i < entity.OrderItems.Count; i++)
         {
             var item = entity.OrderItems[i];
@@ -130,8 +138,9 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
             item.TenantCode = tenantCode;
             item.StoreId = storeId;
             item.CreatedTime = now;
-            item.BatchNo = await BatchNoGenerator.GenerateForPurchaseOrderAsync(
-                _dbContext, tenantId, entity.OrderNo, i + 1);
+            item.SupplierId = dto.Items[i].SupplierId;
+            // 小计金额 = 数量 × 单价，由后端统一计算避免前端传错
+            item.TotalPrice = item.Quantity * item.UnitPrice;
 
             // 过期日期计算：若录入"生产日期+保质期天数"，自动计算过期日期
             if (item.ProductionDate.HasValue && item.ShelfLifeDays.HasValue)
@@ -143,6 +152,18 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
+            // 事务级顾问锁：按 (租户, 门店, 采购日期) 串行化并发请求
+            // OrderNo/BatchNo 采用"查max/count+1"生成模式，并发下需串行化避免唯一约束冲突
+            var lockKey = PurchaseOrderNoGenerator.BuildLockKey(tenantId, storeId, dto.OrderDate);
+            await _dbContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0})", lockKey);
+
+            // 在锁保护下生成单号
+            entity.OrderNo = await PurchaseOrderNoGenerator.GenerateAsync(_dbContext, tenantId, storeId, dto.OrderDate);
+            for (var i = 0; i < entity.OrderItems.Count; i++)
+            {
+                entity.OrderItems[i].BatchNo = await BatchNoGenerator.GenerateAsync(_dbContext, tenantId, storeId, dto.OrderDate, i);
+            }
+
             _dbContext.PurchaseOrders.Add(entity);
             await _dbContext.SaveChangesAsync();
 
@@ -176,7 +197,6 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
                     {
                         ProductId = item.ProductId,
                         Quantity = item.Quantity,
-                        AlertQuantity = 0,
                         TenantId = tenantId,
                         TenantCode = tenantCode,
                         StoreId = storeId,
@@ -195,7 +215,7 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
                     ProductId = item.ProductId,
                     Type = 1, // 入库
                     SourceType = InventoryLogSourceTypes.PurchaseInbound, // 采购入库
-                    SupplierId = dto.SupplierId,
+                    SupplierId = item.SupplierId,
                     UnitPrice = item.UnitPrice,
                     Quantity = item.Quantity,
                     BeforeQuantity = beforeQty,
@@ -203,7 +223,9 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
                     BatchNo = item.BatchNo,
                     ExpirationDate = item.ExpirationDate,
                     RelatedId = entity.Id,
-                    Remark = $"采购入库-{dto.OrderNo}",
+                    Remark = entity.OrderNo,
+                    OperatorId = _currentUser.UserId,
+                    OperatorName = _currentUser.RealName ?? _currentUser.UserName,
                     TenantId = tenantId,
                     TenantCode = tenantCode,
                     StoreId = storeId,
@@ -213,7 +235,7 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
 
                 // 更新商品上次采购价（供下次采购自动带出）
                 var product = await _dbContext.Products
-                    .FirstOrDefaultAsync(p => p.Id == item.ProductId && p.TenantId == tenantId);
+                    .FirstOrDefaultAsync(p => p.Id == item.ProductId && p.TenantId == tenantId && p.StoreId == storeId);
                 if (product != null)
                 {
                     product.LastPurchasePrice = item.UnitPrice;
@@ -223,6 +245,20 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
 
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            // 即时检测预警（失败不影响入库结果，定时任务兜底）
+            foreach (var item in entity.OrderItems)
+            {
+                try
+                {
+                    await _alertAppService.CheckInventoryAlertsAsync(tenantId, storeId, item.ProductId);
+                }
+                catch
+                {
+                    // 预警检测失败不影响主流程
+                }
+            }
+
             return ApiResponseDto<PurchaseOrderDto>.Ok(entity.Adapt<PurchaseOrderDto>(), "创建成功");
         }
         catch
@@ -230,83 +266,5 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
             await transaction.RollbackAsync();
             throw;
         }
-    }
-
-    /// <summary>
-    /// 更新采购订单
-    /// </summary>
-    public async Task<ApiResponseDto<PurchaseOrderDto>> UpdateAsync(PurchaseOrderUpdateDto dto)
-    {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PurchaseOrderDto>.Fail("无法确定当前租户", 401);
-
-        var validation = await _updateValidator.ValidateAsync(dto);
-        if (!validation.IsValid)
-            return ApiResponseDto<PurchaseOrderDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
-
-        var tenantId = _currentUser.TenantId.Value;
-        var entity = await _dbContext.PurchaseOrders
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId);
-        if (entity == null)
-            return ApiResponseDto<PurchaseOrderDto>.Fail("采购订单不存在", 404);
-
-        // 单号变更时检查唯一性
-        if (entity.OrderNo != dto.OrderNo)
-        {
-            var orderNoExists = await _dbContext.PurchaseOrders
-                .AnyAsync(p => p.OrderNo == dto.OrderNo && p.TenantId == tenantId && p.Id != dto.Id);
-            if (orderNoExists)
-                return ApiResponseDto<PurchaseOrderDto>.Fail($"采购单号 {dto.OrderNo} 已存在", 400);
-        }
-
-        entity.OrderNo = dto.OrderNo;
-        entity.SupplierId = dto.SupplierId;
-        entity.OrderDate = dto.OrderDate;
-        entity.TotalAmount = dto.TotalAmount;
-        entity.Status = dto.Status;
-        entity.PurchaseType = dto.PurchaseType;
-        entity.OperatorId = dto.OperatorId;
-        entity.Remark = dto.Remark;
-        entity.UpdatedTime = DateTime.Now;
-
-        await _dbContext.SaveChangesAsync();
-        return ApiResponseDto<PurchaseOrderDto>.Ok(entity.Adapt<PurchaseOrderDto>(), "更新成功");
-    }
-
-    /// <summary>
-    /// 删除采购订单
-    /// </summary>
-    public async Task<ApiResponseDto> DeleteAsync(long id)
-    {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
-
-        var entity = await _dbContext.PurchaseOrders
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
-        if (entity == null)
-            return ApiResponseDto.Fail("采购订单不存在", 404);
-
-        _dbContext.PurchaseOrders.Remove(entity);
-        await _dbContext.SaveChangesAsync();
-        return ApiResponseDto.Success(null, "删除成功");
-    }
-
-    /// <summary>
-    /// 批量删除采购订单
-    /// </summary>
-    public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
-    {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
-        if (ids == null || !ids.Any())
-            return ApiResponseDto.Fail("请选择要删除的数据", 400);
-
-        var entities = await _dbContext.PurchaseOrders
-            .Where(p => ids.Contains(p.Id) && p.TenantId == _currentUser.TenantId.Value)
-            .ToListAsync();
-
-        _dbContext.PurchaseOrders.RemoveRange(entities);
-        await _dbContext.SaveChangesAsync();
-        return ApiResponseDto.Success(null, $"成功删除 {entities.Count} 条数据");
     }
 }

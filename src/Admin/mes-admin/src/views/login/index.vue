@@ -169,10 +169,10 @@ const rules = reactive<FormRules>({
 })
 
 const features = [
-  { icon: markRaw(Operation), text: '生产过程实时监控' },
+  { icon: markRaw(Operation), text: '门店运营实时管控' },
   { icon: markRaw(DataAnalysis), text: '多维数据分析报表' },
   { icon: markRaw(Setting), text: '灵活的系统配置' },
-  { icon: markRaw(Lock), text: '多租户安全隔离' }
+  { icon: markRaw(Lock), text: '权限分级精细管控' }
 ]
 
 // 判断是否为 base64 图片格式

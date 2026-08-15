@@ -1,4 +1,5 @@
 // 商品档案管理 - API服务
+// 复用 storeRequest 的统一 request 函数，自动注入 X-Store-Id 与 Authorization
 import type {
   Product,
   ProductQuery,
@@ -8,6 +9,8 @@ import type {
   ApiResponse,
   PagedResponse
 } from './types'
+import type { ProductSupplier } from '../supplier/types'
+import { request } from '../shared/storeRequest'
 
 // 导出类型供外部使用
 export type {
@@ -20,47 +23,8 @@ export type {
   PagedResponse
 }
 
-// 通过网关访问后端服务
-const API_BASE = '/api/product'
-
-// 获取token
-const getToken = () => localStorage.getItem('token')
-
-// 通用请求方法
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>)
-  }
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: headers as HeadersInit
-  })
-
-  let errorMessage = ''
-  try {
-    const result: ApiResponse<T> = await response.json()
-    if (result.message) {
-      errorMessage = result.message
-    }
-    if (result.code != 200) {
-      throw new Error(errorMessage || '请求失败')
-    }
-    return result.data
-  } catch (err: any) {
-    if (errorMessage) {
-      throw new Error(errorMessage)
-    }
-    throw new Error(`请求失败: ${response.status}`)
-  }
-}
+// Store 子系统下商品档案路由前缀（storeRequest 的 API_BASE 已是 /api/store）
+const API_BASE = '/product'
 
 // ==================== 商品管理 ====================
 
@@ -74,7 +38,6 @@ export async function getProducts(query?: ProductQuery): Promise<PagedResponse<P
   if (query?.name) params.append('name', query.name)
   if (query?.code) params.append('code', query.code)
   if (query?.categoryId !== undefined) params.append('categoryId', String(query.categoryId))
-  if (query?.supplierId !== undefined) params.append('supplierId', String(query.supplierId))
   if (query?.status !== undefined) params.append('status', String(query.status))
   if (query?.type !== undefined) params.append('type', String(query.type))
   params.append('pageIndex', String(query?.pageIndex || 1))
@@ -134,6 +97,16 @@ export async function deleteProducts(ids: number[]): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ ids })
   })
+}
+
+/**
+ * 查询品项关联的供应商列表
+ * 对接后端：GET /api/store/product/products/{productId}/suppliers
+ * @param productId 商品ID
+ * @returns 关联供应商列表（默认供应商排在首位）
+ */
+export async function getSuppliersByProduct(productId: number): Promise<ProductSupplier[]> {
+  return request<ProductSupplier[]>(`${API_BASE}/products/${productId}/suppliers`)
 }
 
 // ==================== 商品分类 ====================

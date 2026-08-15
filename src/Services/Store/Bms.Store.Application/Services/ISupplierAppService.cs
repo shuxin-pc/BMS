@@ -33,6 +33,11 @@ public interface ISupplierAppService
     Task<ApiResponseDto<ProductSupplierDto>> SetDefaultSupplierAsync(SetDefaultSupplierDto dto);
 
     /// <summary>
+    /// 更新品项-供应商关联的参考价与供货周期（不改变默认供应商状态）
+    /// </summary>
+    Task<ApiResponseDto<ProductSupplierDto>> UpdateProductSupplierAsync(UpdateProductSupplierDto dto);
+
+    /// <summary>
     /// 查询供应商关联的品项列表
     /// </summary>
     Task<ApiResponseDto<List<ProductSupplierDto>>> GetProductsBySupplierAsync(long supplierId);
@@ -41,4 +46,9 @@ public interface ISupplierAppService
     /// 获取供应商轻量选项列表（不分页，仅返回 Id/Name，用于下拉选择场景）
     /// </summary>
     Task<ApiResponseDto<List<SupplierOptionDto>>> GetOptionsAsync();
+
+    /// <summary>
+    /// 获取供应商采购统计（按当前门店采购订单聚合，支持筛选条件）
+    /// </summary>
+    Task<ApiResponseDto<List<SupplierPurchaseSummaryDto>>> GetPurchaseSummaryAsync(SupplierPurchaseSummaryQueryDto query);
 }

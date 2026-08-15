@@ -22,7 +22,6 @@ public class InventoryUpdateDtoValidator : AbstractValidator<InventoryUpdateDto>
 {
     public InventoryUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new InventoryCreateDtoValidator());
     }
 }

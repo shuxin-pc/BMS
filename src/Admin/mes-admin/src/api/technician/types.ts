@@ -3,10 +3,10 @@
 
 /**
  * 技师状态
- * - 0: 禁用
- * - 1: 启用
+ * - 1: 在岗
+ * - 2: 休息
  */
-export type TechnicianStatus = 0 | 1
+export type TechnicianStatus = 1 | 2
 
 /**
  * 技师来源
@@ -30,7 +30,7 @@ export interface Technician {
   skillCategoryNames?: string[]
   /** 头像URL */
   avatarUrl?: string
-  /** 状态：0-禁用，1-启用 */
+  /** 状态：1-在岗，2-休息 */
   status: TechnicianStatus
   /** 技师来源：1-商家技师，2-平台技师 */
   source: TechnicianSource

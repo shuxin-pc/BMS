@@ -13,19 +13,15 @@ public static class CustomerPointsLogType
     public const int Consume = 1;
 
     /// <summary>
-    /// 兑换消耗（积分兑换商品/服务时扣减）
+    /// 积分抵扣（订单支付时用积分抵扣金额，由 OrderAppService.DeductPointsAsync 写入）
+    /// 复用已移除的 Exchange=2 位置，当前仅开发环境无历史数据需要区分
     /// </summary>
-    public const int Exchange = 2;
+    public const int PointsDeduct = 2;
 
     /// <summary>
     /// 退款扣减（订单退款时按比例扣减已发积分）
     /// </summary>
     public const int RefundDeduct = 3;
-
-    /// <summary>
-    /// 活动赠送（营销活动赠送积分）
-    /// </summary>
-    public const int ActivityGift = 4;
 
     /// <summary>
     /// 充值获得（储值充值按 PointsRate 计算发放）
@@ -52,5 +48,13 @@ public static class CustomerPointsLogType
     /// </summary>
     /// <param name="type">类型值</param>
     /// <returns>合法返回 true，否则 false</returns>
-    public static bool IsValid(int type) => type >= Consume && type <= ManualAdjust;
+    public static bool IsValid(int type) => ValidTypes.Contains(type);
+
+    /// <summary>
+    /// 合法类型集合（4 为已移除的 ActivityGift 空洞，用集合校验避免误判）
+    /// </summary>
+    private static readonly HashSet<int> ValidTypes = new()
+    {
+        Consume, PointsDeduct, RefundDeduct, Recharge, TreatmentCardPurchase, Expire, ManualAdjust
+    };
 }

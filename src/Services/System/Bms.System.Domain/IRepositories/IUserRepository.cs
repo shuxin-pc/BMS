@@ -31,7 +31,10 @@ public interface IUserRepository
     /// 获取所有用户列表
     /// </summary>
     /// <param name="tenantId">租户ID筛选</param>
-    Task<List<User>> GetListAsync(long? tenantId = null);
+    /// <param name="userId">用户ID筛选（仅本人模式，用于数据权限 Self 范围）</param>
+    /// <param name="organizationIds">组织ID列表筛选（部门及以下/自定义模式，用于数据权限过滤）</param>
+    /// <param name="creatorTenantId">创建者租户ID筛选（屏蔽平台跨租户创建的用户，如 tenant_admin）</param>
+    Task<List<User>> GetListAsync(long? tenantId = null, long? userId = null, List<long>? organizationIds = null, long? creatorTenantId = null);
 
     /// <summary>
     /// 分页查询用户列表
@@ -92,5 +95,5 @@ public interface IUserRepository
     /// <summary>
     /// 获取用户权限列表
     /// </summary>
-    Task<List<Permission>> GetUserPermissionsAsync(long userId);
+    Task<List<string>> GetUserPermissionsAsync(long userId);
 }

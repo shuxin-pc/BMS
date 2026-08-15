@@ -77,7 +77,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage, type UploadRawFile } from 'element-plus'
+import { ElMessage, type UploadFile } from 'element-plus'
 import { Search, Upload } from '@element-plus/icons-vue'
 
 // 图标列表（从 Element Plus 提取常用图标）
@@ -159,10 +159,11 @@ const handleSelectIcon = (icon: string) => {
 
 // 图片大小限制 50KB，Base64 编码会增加约 33% 长度
 const MAX_FILE_SIZE = 50 * 1024
-const MAX_FIELD_LENGTH = Math.floor(MAX_FILE_SIZE * 1.33)
 
 // 上传文件
-const handleFileChange = async (file: UploadRawFile) => {
+const handleFileChange = async (file: UploadFile) => {
+  if (!file.raw) return
+
   const isImage = file.raw.type === 'image/png' ||
                   file.raw.type === 'image/jpeg'
 

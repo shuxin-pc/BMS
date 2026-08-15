@@ -12,6 +12,14 @@
               style="width: 180px"
             />
           </el-form-item>
+          <el-form-item label="批次号">
+            <el-input
+              v-model="searchForm.batchNo"
+              placeholder="请输入批次号"
+              clearable
+              style="width: 180px"
+            />
+          </el-form-item>
           <el-form-item label="入库来源">
             <el-select v-model="searchForm.sourceType" placeholder="全部来源" clearable style="width: 150px">
               <el-option label="采购入库" :value="1" />
@@ -20,7 +28,7 @@
               <el-option label="调拨入库" :value="4" />
             </el-select>
           </el-form-item>
-          <el-form-item label="日期范围">
+          <el-form-item label="入库日期">
             <el-date-picker
               v-model="searchForm.dateRange"
               type="daterange"
@@ -47,12 +55,6 @@
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
-          <el-icon><Plus /></el-icon>
-          新增入库
-        </el-button>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -67,6 +69,7 @@
         :data="tableData"
         style="width: 100%"
       >
+        <el-table-column prop="batchNo" label="批次号" width="120" />
         <el-table-column prop="productName" label="商品名称" min-width="160" />
         <el-table-column prop="productCode" label="商品编码" width="120" />
         <el-table-column label="入库来源" width="110">
@@ -76,7 +79,6 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="supplierName" label="供应商" min-width="160" show-overflow-tooltip />
         <el-table-column label="单价" width="100" align="right">
           <template #default="{ row }">
             {{ row.unitPrice != null ? `¥${formatNumber(row.unitPrice)}` : '-' }}
@@ -97,7 +99,6 @@
             {{ formatNumber(row.afterQuantity) }}
           </template>
         </el-table-column>
-        <el-table-column prop="batchNo" label="批次号" width="120" />
         <el-table-column label="过期日期" width="120">
           <template #default="{ row }">
             {{ row.expirationDate ? formatDate(row.expirationDate) : '-' }}
@@ -109,7 +110,11 @@
             {{ formatDate(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
+        <el-table-column label="操作" width="80" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="handleDetail(row)">详情</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <!-- 分页 -->
@@ -126,154 +131,44 @@
       </div>
     </div>
 
-    <!-- 新增入库弹窗 -->
+    <!-- 入库详情弹窗 -->
     <el-dialog
-      v-model="dialogVisible"
-      title="新增入库"
-      width="600px"
-      :close-on-click-modal="false"
+      v-model="detailDialogVisible"
+      title="入库详情"
+      width="640px"
     >
-      <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="formRules"
-        label-width="100px"
-      >
-        <el-form-item label="商品" prop="productId">
-          <el-select
-            v-model="formData.productId"
-            placeholder="请选择商品"
-            filterable
-            style="width: 100%"
-            @change="handleProductChange"
-          >
-            <el-option
-              v-for="item in productOptions"
-              :key="item.id"
-              :label="`${item.name}（${item.code}）`"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="入库来源" prop="sourceType">
-          <el-radio-group v-model="formData.sourceType">
-            <el-radio :value="1">采购入库</el-radio>
-            <el-radio :value="2">退货入库</el-radio>
-            <el-radio :value="3">盘点入库</el-radio>
-            <el-radio :value="4">调拨入库</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="formData.sourceType === 1" label="供应商" prop="supplierId">
-          <el-select
-            v-model="formData.supplierId"
-            placeholder="请选择供应商"
-            filterable
-            style="width: 100%"
-          >
-            <el-option
-              v-for="item in supplierOptions"
-              :key="item.id"
-              :label="item.name"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="入库数量" prop="quantity">
-              <el-input-number
-                v-model="formData.quantity"
-                :min="0.01"
-                :precision="2"
-                :step="1"
-                placeholder="请输入入库数量"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="单价" prop="unitPrice">
-              <el-input-number
-                v-model="formData.unitPrice"
-                :min="0"
-                :precision="2"
-                :step="1"
-                placeholder="请输入单价"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="批次号" prop="batchNo">
-              <el-input v-model="formData.batchNo" placeholder="请输入批次号" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="生产日期" prop="productionDate">
-              <el-date-picker
-                v-model="formData.productionDate"
-                type="date"
-                placeholder="请选择生产日期"
-                value-format="YYYY-MM-DD"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="保质期天数" prop="shelfLifeDays">
-              <el-input-number
-                v-model="formData.shelfLifeDays"
-                :min="1"
-                :step="1"
-                placeholder="天数"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="过期日期" prop="expirationDate">
-              <el-date-picker
-                v-model="formData.expirationDate"
-                type="date"
-                placeholder="自动计算或手动选择"
-                value-format="YYYY-MM-DD"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <div class="expiry-hint">提示：录入"生产日期+保质期天数"后自动计算过期日期，或直接选择过期日期</div>
-        <el-form-item label="当前库存">
-          <span class="current-stock">{{ currentStock }}</span>
-        </el-form-item>
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入备注信息" />
-        </el-form-item>
-      </el-form>
+      <el-descriptions v-if="detailData" :column="2" border>
+        <el-descriptions-item label="商品名称">{{ detailData.productName }}</el-descriptions-item>
+        <el-descriptions-item label="商品编码">{{ detailData.productCode || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="入库来源">
+          {{ detailData.sourceType ? (inboundSourceTypeMap[detailData.sourceType as InboundSourceType] || '-') : '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="供应商">{{ detailData.supplierName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="单价">{{ detailData.unitPrice != null ? `¥${formatNumber(detailData.unitPrice)}` : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="入库数量">
+          <span class="quantity-positive">+{{ formatNumber(detailData.quantity) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="操作前库存">{{ formatNumber(detailData.beforeQuantity) }}</el-descriptions-item>
+        <el-descriptions-item label="操作后库存">{{ formatNumber(detailData.afterQuantity) }}</el-descriptions-item>
+        <el-descriptions-item label="批次号">{{ detailData.batchNo || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="过期日期">{{ detailData.expirationDate ? formatDate(detailData.expirationDate) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="操作人">{{ detailData.operatorName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="入库时间">{{ formatDate(detailData.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ detailData.remark || '-' }}</el-descriptions-item>
+      </el-descriptions>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">
-          确定
-        </el-button>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh } from '@element-plus/icons-vue'
 import {
   getInventoryLogList,
-  createInbound,
-  getProductOptions,
-  getSupplierOptions,
-  getProductStock,
   inboundSourceTypeMap
 } from '@/api/inventory-ops'
 import { useSystemConfigStore } from '@/stores/systemConfig'
@@ -284,6 +179,7 @@ const systemConfigStore = useSystemConfigStore()
 // 搜索表单
 const searchForm = reactive({
   productName: '',
+  batchNo: '',
   sourceType: undefined as InboundSourceType | undefined,
   dateRange: [] as string[]
 })
@@ -299,16 +195,13 @@ const pagination = reactive({
   total: 0
 })
 
-// 下拉选项
-const productOptions = ref<{ id: number; name: string; code: string; unit: string }[]>([])
-const supplierOptions = ref<{ id: number; name: string }[]>([])
-
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getInventoryLogList({
       productName: searchForm.productName || undefined,
+      batchNo: searchForm.batchNo || undefined,
       type: 1,
       sourceType: searchForm.sourceType,
       startDate: searchForm.dateRange?.[0] || undefined,
@@ -325,20 +218,6 @@ const loadData = async () => {
   }
 }
 
-// 加载下拉选项
-const loadOptions = async () => {
-  try {
-    const [products, suppliers] = await Promise.all([
-      getProductOptions(),
-      getSupplierOptions()
-    ])
-    productOptions.value = products
-    supplierOptions.value = suppliers
-  } catch (error) {
-    ElMessage.error('加载选项数据失败')
-  }
-}
-
 // 搜索
 const handleSearch = () => {
   pagination.pageIndex = 1
@@ -348,130 +227,20 @@ const handleSearch = () => {
 // 重置
 const handleReset = () => {
   searchForm.productName = ''
+  searchForm.batchNo = ''
   searchForm.sourceType = undefined
   searchForm.dateRange = []
   handleSearch()
 }
 
-// 弹窗
-const dialogVisible = ref(false)
-const submitLoading = ref(false)
-const formRef = ref<FormInstance>()
-const currentStock = ref<number | string>('--')
+// 详情弹窗
+const detailDialogVisible = ref(false)
+const detailData = ref<InventoryLog | null>(null)
 
-const formData = reactive({
-  productId: undefined as number | undefined,
-  sourceType: 1 as InboundSourceType,
-  supplierId: undefined as number | undefined,
-  quantity: 0,
-  unitPrice: undefined as number | undefined,
-  batchNo: '',
-  productionDate: '',
-  shelfLifeDays: undefined as number | undefined,
-  expirationDate: '',
-  remark: ''
-})
-
-// 生产日期+保质期天数变化时自动计算过期日期
-watch(
-  () => [formData.productionDate, formData.shelfLifeDays],
-  ([prodDate, shelfLife]) => {
-    if (prodDate && shelfLife && shelfLife > 0) {
-      const date = new Date(prodDate)
-      date.setDate(date.getDate() + shelfLife)
-      formData.expirationDate = date.toISOString().split('T')[0]
-    }
-  }
-)
-
-const formRules: FormRules = {
-  productId: [
-    { required: true, message: '请选择商品', trigger: 'change' }
-  ],
-  sourceType: [
-    { required: true, message: '请选择入库来源', trigger: 'change' }
-  ],
-  supplierId: [
-    {
-      validator: (_rule, value, callback) => {
-        if (formData.sourceType === 1 && !value) {
-          callback(new Error('采购入库时必须选择供应商'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change'
-    }
-  ],
-  quantity: [
-    { required: true, message: '请输入入库数量', trigger: 'blur' },
-    { type: 'number', min: 0.01, message: '入库数量必须大于0', trigger: 'blur' }
-  ],
-  // 到期日期为可选字段：未填到期日期的批次视为"无效期限制"批次，效期选择界面排末尾展示
-  // 仍支持由"生产日期+保质期天数"自动计算填充，但允许留空
-  expirationDate: []
-}
-
-// 商品选择变化时加载当前库存
-const handleProductChange = async (productId: number) => {
-  try {
-    const stock = await getProductStock(productId)
-    currentStock.value = stock
-  } catch (error) {
-    currentStock.value = '--'
-  }
-}
-
-// 重置表单
-const resetFormData = () => {
-  formData.productId = undefined
-  formData.sourceType = 1
-  formData.supplierId = undefined
-  formData.quantity = 0
-  formData.unitPrice = undefined
-  formData.batchNo = ''
-  formData.productionDate = ''
-  formData.shelfLifeDays = undefined
-  formData.expirationDate = ''
-  formData.remark = ''
-  currentStock.value = '--'
-}
-
-// 新增
-const handleAdd = () => {
-  resetFormData()
-  dialogVisible.value = true
-}
-
-// 提交表单
-const handleSubmit = async () => {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (valid) {
-      submitLoading.value = true
-      try {
-        await createInbound({
-          productId: formData.productId!,
-          sourceType: formData.sourceType,
-          supplierId: formData.sourceType === 1 ? formData.supplierId : undefined,
-          quantity: formData.quantity,
-          unitPrice: formData.unitPrice || undefined,
-          batchNo: formData.batchNo || undefined,
-          productionDate: formData.productionDate || undefined,
-          shelfLifeDays: formData.shelfLifeDays || undefined,
-          expirationDate: formData.expirationDate || undefined,
-          remark: formData.remark || undefined
-        })
-        ElMessage.success('入库成功')
-        dialogVisible.value = false
-        loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '入库失败')
-      } finally {
-        submitLoading.value = false
-      }
-    }
-  })
+// 查看详情
+const handleDetail = (row: InventoryLog) => {
+  detailData.value = row
+  detailDialogVisible.value = true
 }
 
 // 格式化数字
@@ -495,7 +264,6 @@ onMounted(async () => {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
-  await loadOptions()
   loadData()
 })
 </script>
@@ -571,6 +339,7 @@ onMounted(async () => {
 .toolbar-right {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 /* 分页 */

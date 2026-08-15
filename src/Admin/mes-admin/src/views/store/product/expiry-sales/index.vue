@@ -307,14 +307,16 @@ onMounted(() => {
 
 <style scoped>
 .expiry-sales-stat {
-  padding: 0;
+  width: 100%;
 }
 
+/* 卡片样式 - 对齐项目深色科技风规范 */
 .card {
-  background: #fff;
-  border-radius: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
   padding: 16px 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .mb-20 {
@@ -328,7 +330,7 @@ onMounted(() => {
 .card-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 /* 效期区间分布概览 */
@@ -340,38 +342,38 @@ onMounted(() => {
 
 .bucket-item {
   padding: 12px 16px;
-  border-radius: 6px;
-  background: #f5f7fa;
-  border-left: 3px solid #c0c4cc;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--border-secondary);
 }
 
-.bucket-item.bucket-1 { border-left-color: #f56c6c; }
-.bucket-item.bucket-2 { border-left-color: #f56c6c; }
-.bucket-item.bucket-3 { border-left-color: #e6a23c; }
-.bucket-item.bucket-4 { border-left-color: #67c23a; }
-.bucket-item.bucket-5 { border-left-color: #909399; }
+.bucket-item.bucket-1 { border-left-color: var(--danger); }
+.bucket-item.bucket-2 { border-left-color: var(--danger); }
+.bucket-item.bucket-3 { border-left-color: var(--warning); }
+.bucket-item.bucket-4 { border-left-color: var(--success); }
+.bucket-item.bucket-5 { border-left-color: var(--text-tertiary); }
 
 .bucket-name {
   font-size: 13px;
-  color: #606266;
+  color: var(--text-tertiary);
   margin-bottom: 6px;
 }
 
 .bucket-quantity {
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .bucket-amount {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin-top: 2px;
 }
 
 .bucket-bar {
   height: 4px;
-  background: #e4e7ed;
+  background: var(--border-primary);
   border-radius: 2px;
   margin-top: 8px;
   overflow: hidden;
@@ -379,20 +381,20 @@ onMounted(() => {
 
 .bucket-bar-inner {
   height: 100%;
-  background: #409eff;
+  background: var(--primary);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
 
-.bucket-item.bucket-1 .bucket-bar-inner { background: #f56c6c; }
-.bucket-item.bucket-2 .bucket-bar-inner { background: #f56c6c; }
-.bucket-item.bucket-3 .bucket-bar-inner { background: #e6a23c; }
-.bucket-item.bucket-4 .bucket-bar-inner { background: #67c23a; }
-.bucket-item.bucket-5 .bucket-bar-inner { background: #909399; }
+.bucket-item.bucket-1 .bucket-bar-inner { background: var(--danger); }
+.bucket-item.bucket-2 .bucket-bar-inner { background: var(--danger); }
+.bucket-item.bucket-3 .bucket-bar-inner { background: var(--warning); }
+.bucket-item.bucket-4 .bucket-bar-inner { background: var(--success); }
+.bucket-item.bucket-5 .bucket-bar-inner { background: var(--text-tertiary); }
 
 .bucket-percent {
   font-size: 11px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
@@ -407,7 +409,7 @@ onMounted(() => {
 .table-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .toolbar-right {
@@ -417,10 +419,36 @@ onMounted(() => {
 }
 
 .percent-text {
-  color: #409eff;
+  color: var(--primary);
   font-weight: 600;
 }
 
+/* 表格 - 对齐项目深色科技风规范 */
+:deep(.el-table) {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: var(--text-primary) !important;
+  --el-table-border-color: transparent !important;
+  --el-table-header-bg-color: var(--bg-tertiary) !important;
+  --el-table-row-hover-bg-color: var(--bg-hover) !important;
+}
+
+:deep(.el-table th.el-table__cell) {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-table td.el-table__cell) {
+  background-color: var(--bg-tertiary) !important;
+  border-bottom: 1px solid var(--border-primary) !important;
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--bg-hover) !important;
+}
+
+/* 分页 */
 .pagination-container {
   margin-top: 16px;
   display: flex;

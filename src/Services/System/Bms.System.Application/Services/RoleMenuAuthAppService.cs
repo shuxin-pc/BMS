@@ -94,8 +94,100 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
         }
     }
 
+    /// <summary>
+    /// 校验当前用户能否查询目标角色的菜单权限配置
+    /// 修复 H1：角色详情与菜单权限信息泄露
+    /// 查询场景校验：super_admin 放行 + ProtectedCode 保护 + 租户隔离
+    /// </summary>
+    private async Task CheckCanReadRoleMenuAuthAsync(long roleId)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        // 允许查看自己的角色：目标角色属于当前用户已拥有的角色集合时放行
+        if (ctx.RoleIds.Contains(roleId))
+        {
+            return;
+        }
+
+        var targetRole = await _roleRepository.GetByIdAsync(roleId);
+        if (targetRole == null)
+        {
+            throw new InvalidOperationException("目标角色不存在");
+        }
+
+        // ProtectedCode 保护：非 super_admin 不得查看系统保留角色的菜单权限配置
+        if (ProtectedRoleCodes.Contains(targetRole.Code))
+        {
+            throw new PermissionDeniedException("无权查看系统保留角色的菜单权限");
+        }
+
+        // 租户隔离
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        if (targetRole.TenantId != currentTenantId)
+        {
+            throw new PermissionDeniedException("无权查看其他租户角色的菜单权限");
+        }
+    }
+
+    /// <summary>
+    /// 校验当前用户能否为角色分配指定菜单（修复 S3：权限不放大原则）
+    /// 原 AssignMenusAsync 只校验目标角色，未校验 dto.MenuIds 是否在操作者自身菜单范围内，
+    /// 导致操作者可给下级角色分配自己没有的菜单权限，形成权限放大。
+    /// 规则：
+    /// - super_admin：放行
+    /// - 其他用户：menuIds 必须是操作者自身所有角色已拥有菜单 ID 集合的子集
+    /// </summary>
+    private async Task CheckCanAssignMenusAsync(List<long> menuIds)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        if (menuIds == null || !menuIds.Any())
+        {
+            return;
+        }
+
+        // 查询操作者自身所有角色已拥有的菜单 ID 集合
+        var ownRoles = await _roleRepository.GetByUserIdAsync(_currentUser.UserId.Value);
+        var ownRoleIds = ownRoles.Select(r => r.Id).ToList();
+        var ownMenuAuths = await _roleMenuAuthRepository.GetByRoleIdsAsync(ownRoleIds);
+        var ownMenuIds = ownMenuAuths.Select(x => x.MenuId).ToHashSet();
+
+        var unauthorizedIds = menuIds.Distinct().Where(id => !ownMenuIds.Contains(id)).ToList();
+        if (unauthorizedIds.Any())
+        {
+            // 查询菜单名称，用于在错误信息中直观展示超出权限的菜单
+            var allMenus = await _menuRepository.GetListAsync();
+            var menuDict = allMenus.ToDictionary(x => x.Id);
+            var unauthorizedNames = unauthorizedIds
+                .Select(id => menuDict.TryGetValue(id, out var m) ? m.Name : $"[未知菜单:{id}]")
+                .ToList();
+            throw new PermissionDeniedException($"无权分配以下菜单（超出自身菜单权限范围）：{string.Join(",", unauthorizedNames)}");
+        }
+    }
+
     public async Task<ApiResponseDto<List<long>>> GetByRoleIdAsync(long roleId)
     {
+        // 修复 H1：校验当前用户能否查询此角色的菜单权限（租户隔离 + ProtectedCode 保护）
+        await CheckCanReadRoleMenuAuthAsync(roleId);
+
         var roleMenuAuths = await _roleMenuAuthRepository.GetByRoleIdAsync(roleId);
         var menuIds = roleMenuAuths.Select(x => x.MenuId).ToList();
         return ApiResponseDto<List<long>>.Success(menuIds);
@@ -103,6 +195,9 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
 
     public async Task<ApiResponseDto<List<RoleMenuGroupedDto>>> GetGroupedByRoleIdAsync(long roleId, long? tenantId = null, bool isSuperAdmin = false)
     {
+        // 修复 H1：校验当前用户能否查询此角色的菜单权限（租户隔离 + ProtectedCode 保护）
+        await CheckCanReadRoleMenuAuthAsync(roleId);
+
         var roleMenuAuths = await _roleMenuAuthRepository.GetByRoleIdAsync(roleId);
         var selectedMenuIds = roleMenuAuths.Select(x => x.MenuId).ToList();
 
@@ -203,6 +298,8 @@ public class RoleMenuAuthAppService : IRoleMenuAuthAppService
     {
         // 权限校验：目标角色租户隔离 + 系统保留角色保护
         await CheckCanModifyRoleMenuAuthAsync(roleId);
+        // 权限校验：分配的菜单不得超出操作者自身菜单权限范围（修复 S3 权限放大）
+        await CheckCanAssignMenusAsync(dto.MenuIds);
 
         var existingRoleMenuAuths = await _roleMenuAuthRepository.GetByRoleIdAsync(roleId);
         var existingMenuIds = existingRoleMenuAuths.Select(x => x.MenuId).ToList();

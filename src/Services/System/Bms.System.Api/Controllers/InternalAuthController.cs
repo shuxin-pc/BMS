@@ -9,11 +9,12 @@ namespace Bms.System.Api.Controllers;
 
 /// <summary>
 /// 内部认证控制器（供Identity.Api调用）
+/// 通过 InternalServiceAuthMiddleware 校验 X-Internal-Service headers
 /// </summary>
 [ApiController]
 [Route("api/internal/auth")]
 [ApiExplorerSettings(IgnoreApi = true)] // 不在Swagger中显示
-[AllowAnonymous] // 允许匿名访问（供Identity.Api内部调用）
+[Authorize] // 内部接口需认证（由 InternalServiceAuthMiddleware 设置身份）
 public class InternalAuthController : ControllerBase
 {
     private readonly IAuthAppService _authAppService;
@@ -122,5 +123,16 @@ public class InternalAuthController : ControllerBase
             _logger.LogError(ex, "更新最后登录信息失败，UserId={UserId}", request.UserId);
             return StatusCode(500, new { success = false, error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// 刷新令牌时获取用户最新状态（内部接口）
+    /// 供 Identity.Api 在处理 refresh_token 授权类型时调用，确保用户被禁用或权限变更后旧 Token 无法刷新
+    /// </summary>
+    [HttpPost("refresh-user-info")]
+    public async Task<ValidateUserResponseDto> RefreshUserInfo([FromBody] RefreshUserInfoRequestDto request)
+    {
+        _logger.LogInformation("刷新令牌获取用户最新状态，UserId={UserId}", request.UserId);
+        return await _authAppService.GetUserForRefreshAsync(request.UserId);
     }
 }

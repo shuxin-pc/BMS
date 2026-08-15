@@ -10,10 +10,9 @@ import type {
   InventoryQuery,
   InventoryAlert,
   InventoryAlertQuery,
+  InventoryAlertScanResult,
   ExpiryInfo,
   ExpiryQuery,
-  ExpiryAlert,
-  ExpiryAlertQuery,
   ProductExpiryOption,
   InventoryBatch,
   InventoryBatchQuery
@@ -25,10 +24,9 @@ export type {
   InventoryQuery,
   InventoryAlert,
   InventoryAlertQuery,
+  InventoryAlertScanResult,
   ExpiryInfo,
   ExpiryQuery,
-  ExpiryAlert,
-  ExpiryAlertQuery,
   ProductExpiryOption,
   InventoryBatch,
   InventoryBatchQuery,
@@ -40,12 +38,16 @@ export type {
 /**
  * 获取库存分页列表
  * 对接后端：GET /api/store/inventories
- * @param query 查询参数（商品ID、分页）
+ * @param query 查询参数（商品ID、分类ID、商品名称、商品类型、库存状态、分页）
  * @returns 分页库存列表
  */
 export async function getInventoryList(query?: InventoryQuery): Promise<PagedResponse<Inventory>> {
   const qs = buildQuery({
     productId: query?.productId,
+    categoryId: query?.categoryId,
+    productName: query?.productName,
+    productType: query?.productType,
+    inventoryStatus: query?.inventoryStatus,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })
@@ -61,6 +63,7 @@ export async function getInventoryList(query?: InventoryQuery): Promise<PagedRes
 export async function getInventoryAlerts(query?: InventoryAlertQuery): Promise<PagedResponse<InventoryAlert>> {
   const qs = buildQuery({
     productId: query?.productId,
+    productName: query?.productName,
     alertType: query?.alertType,
     isProcessed: query?.isProcessed === undefined ? undefined : String(query.isProcessed),
     pageIndex: query?.pageIndex,
@@ -69,8 +72,19 @@ export async function getInventoryAlerts(query?: InventoryAlertQuery): Promise<P
   return request<PagedResponse<InventoryAlert>>(`/inventoryAlerts${qs}`)
 }
 
+/**
+ * 手动触发库存预警扫描（低库存/效期/积压）
+ * 对接后端：POST /api/store/inventoryAlerts/scan
+ * @returns 扫描结果（各类型新生成预警数量）
+ */
+export async function scanInventoryAlerts(): Promise<InventoryAlertScanResult> {
+  return request<InventoryAlertScanResult>(`/inventoryAlerts/scan`, {
+    method: 'POST'
+  })
+}
+
 // ==================== 效期管理 ====================
-// 对接后端 InventoryBatchesController 的 expiries / expiryAlerts 接口
+// 对接后端 InventoryBatchesController 的 expiries 接口
 
 /**
  * 获取效期信息分页列表
@@ -86,21 +100,6 @@ export async function getExpiryList(query?: ExpiryQuery): Promise<PagedResponse<
     pageSize: query?.pageSize
   })
   return request<PagedResponse<ExpiryInfo>>(`/inventoryBatches/expiries${qs}`)
-}
-
-/**
- * 获取效期预警列表（即将过期或已过期的商品）
- * 对接后端：GET /api/store/inventoryBatches/expiryAlerts
- * @param query 查询参数（商品名称、分页）
- * @returns 分页预警列表
- */
-export async function getExpiryAlerts(query?: ExpiryAlertQuery): Promise<PagedResponse<ExpiryAlert>> {
-  const qs = buildQuery({
-    productName: query?.productName,
-    pageIndex: query?.pageIndex,
-    pageSize: query?.pageSize
-  })
-  return request<PagedResponse<ExpiryAlert>>(`/inventoryBatches/expiryAlerts${qs}`)
 }
 
 /**

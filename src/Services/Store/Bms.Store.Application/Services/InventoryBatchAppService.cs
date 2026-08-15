@@ -37,7 +37,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto<PagedResponseDto<InventoryBatchDto>>> GetPagedListAsync(InventoryBatchQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PagedResponseDto<InventoryBatchDto>>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PagedResponseDto<InventoryBatchDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
@@ -74,7 +74,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto<InventoryBatchDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryBatchDto?>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryBatchDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.InventoryBatches
             .FirstOrDefaultAsync(b => b.Id == id && b.TenantId == _currentUser.TenantId.Value && b.StoreId == _currentUser.StoreId.Value);
@@ -89,7 +89,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto<InventoryBatchDto>> CreateAsync(InventoryBatchCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryBatchDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryBatchDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -121,7 +121,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto<InventoryBatchDto>> UpdateAsync(InventoryBatchUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryBatchDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryBatchDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -166,7 +166,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.InventoryBatches
             .FirstOrDefaultAsync(b => b.Id == id && b.TenantId == _currentUser.TenantId.Value && b.StoreId == _currentUser.StoreId.Value);
@@ -184,7 +184,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -198,51 +198,21 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     }
 
     /// <summary>
-    /// 获取效期信息分页列表
+    /// 获取效期信息分页列表（仅包含已设置过期日期的批次）
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<ExpiryDto>>> GetExpiryListAsync(ExpiryQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PagedResponseDto<ExpiryDto>>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PagedResponseDto<ExpiryDto>>.Fail("登录状态异常，请重新登录", 401);
 
-        var allItems = await QueryExpiryDataAsync(query.ProductName, query.Status);
+        var allItems = (await QueryExpiryDataAsync(query.ProductName, query.Status))
+            .Where(d => d.ExpirationDate.HasValue)
+            .ToList();
 
         var total = allItems.Count;
         var pagedItems = allItems
-            .OrderBy(d => d.ExpirationDate.HasValue ? 0 : 1)  // 无效期批次排末尾
-            .ThenBy(d => d.ExpirationDate)                     // 近效期优先
-            .ThenBy(d => d.CreatedTime)                        // 无效期批次按 CreatedTime 升序，兜底稳定排序
-            .Skip((query.PageIndex - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .ToList();
-
-        var result = new PagedResponseDto<ExpiryDto>
-        {
-            List = pagedItems,
-            Total = total,
-            PageIndex = query.PageIndex,
-            PageSize = query.PageSize
-        };
-        return ApiResponseDto<PagedResponseDto<ExpiryDto>>.Ok(result);
-    }
-
-    /// <summary>
-    /// 获取效期预警列表（即将过期或已过期的商品）
-    /// </summary>
-    public async Task<ApiResponseDto<PagedResponseDto<ExpiryDto>>> GetExpiryAlertsAsync(ExpiryQueryDto query)
-    {
-        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PagedResponseDto<ExpiryDto>>.Fail("无法确定当前租户或门店", 401);
-
-        // 预警只显示即将过期和已过期的记录（无效期批次 Status 为 normal，已被过滤）
-        var allItems = await QueryExpiryDataAsync(query.ProductName, null);
-        var alertItems = allItems.Where(d => d.Status != "normal").ToList();
-
-        var total = alertItems.Count;
-        var pagedItems = alertItems
-            .OrderBy(d => d.ExpirationDate.HasValue ? 0 : 1)
-            .ThenBy(d => d.ExpirationDate)
-            .ThenBy(d => d.CreatedTime)
+            .OrderBy(d => d.ExpirationDate)     // 近效期优先
+            .ThenBy(d => d.CreatedTime)          // 兜底稳定排序
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToList();
@@ -273,14 +243,14 @@ public class InventoryBatchAppService : IInventoryBatchAppService
                         select new { b, p };
 
         if (!string.IsNullOrWhiteSpace(productName))
-            queryable = queryable.Where(x => x.p.Name.Contains(productName));
+            queryable = queryable.Where(x => x.p.Master.Name.Contains(productName));
 
         var rawData = await queryable
             .Select(x => new
             {
                 x.b.Id,
-                ProductName = x.p.Name,
-                ProductCode = x.p.Code,
+                ProductName = x.p.Master.Name,
+                ProductCode = x.p.Master.Code,
                 x.b.BatchNo,
                 x.b.ExpirationDate,
                 x.b.PurchaseDate,
@@ -364,7 +334,7 @@ public class InventoryBatchAppService : IInventoryBatchAppService
     public async Task<ApiResponseDto<List<ProductExpiryOptionDto>>> GetExpiryOptionsByProductIdAsync(long productId)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<List<ProductExpiryOptionDto>>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<List<ProductExpiryOptionDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;

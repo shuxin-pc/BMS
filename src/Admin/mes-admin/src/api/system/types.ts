@@ -117,7 +117,7 @@ export interface SubsystemMenuAssign {
  */
 export interface TenantSubsystemAssign {
   /** 子系统ID列表 */
-  subsystemIds: number[]
+  subsystemIds?: number[]
   /** 后端期望的字段名 */
   SubsystemIds?: number[]
 }
@@ -304,8 +304,6 @@ export interface Role {
   status: UserStatus
   /** 角色等级（2-99，数字越小权限越大；0/1 为系统保留角色） */
   level: number
-  /** 权限列表 */
-  permissions?: Permission[]
   /** 创建时间 */
   createdTime: string
   /** 更新时间 */
@@ -348,8 +346,6 @@ export interface RoleCreate {
   status: UserStatus
   /** 角色等级（2-99，数字越小权限越大；0/1 为系统保留角色） */
   level: number
-  /** 权限ID列表 */
-  permissionIds: number[]
 }
 
 /**
@@ -372,8 +368,6 @@ export interface RoleUpdate {
   status: UserStatus
   /** 角色等级（2-99，数字越小权限越大；0/1 为系统保留角色） */
   level: number
-  /** 权限ID列表 */
-  permissionIds: number[]
 }
 
 // ==========================================
@@ -480,31 +474,6 @@ export interface MenuUpdate extends MenuCreate {
 }
 
 // ==========================================
-// 权限相关类型定义
-// ==========================================
-
-/**
- * 权限信息
- */
-/**
- * 权限信息
- */
-export interface Permission {
-  /** 权限ID */
-  id: number
-  /** 权限编码（唯一） */
-  code: string
-  /** 权限名称 */
-  name: string
-  /** 权限类型 */
-  type: number
-  /** 权限描述 */
-  description?: string
-  /** 创建时间 */
-  createdAt: string
-}
-
-// ==========================================
 // 统一响应类型
 // ==========================================
 
@@ -555,8 +524,8 @@ export interface Organization {
   name: string
   /** 组织编码（唯一） */
   code: string
-  /** 组织类型：company-公司，department-部门，group-小组 */
-  type: OrganizationType
+  /** 组织类型：company-公司，department-部门，group-小组（后端使用 int: 1-公司, 2-部门, 3-小组） */
+  type: number
   /** 负责人姓名 */
   managerName?: string
   /** 负责人ID */
@@ -581,22 +550,22 @@ export interface Organization {
  * 创建组织请求
  */
 export interface OrganizationCreate {
-  /** 父组织ID（顶级组织为0） */
-  parentId: number
+  /** 父组织ID（顶级组织为0或undefined） */
+  parentId?: number
   /** 组织名称 */
   name: string
   /** 组织编码（唯一） */
   code: string
-  /** 组织类型 */
-  type: OrganizationType
+  /** 组织类型（后端 int: 1-公司, 2-部门, 3-小组） */
+  type: number
   /** 负责人ID */
   managerId?: number
   /** 状态：0-禁用，1-启用 */
   status: UserStatus
   /** 排序号 */
   sort: number
-  /** 租户ID */
-  tenantId: number
+  /** 租户ID（后端从当前用户获取，前端传 string 避免大数精度丢失） */
+  tenantId?: number | string
 }
 
 /**
@@ -611,8 +580,8 @@ export interface OrganizationUpdate {
   name: string
   /** 组织编码（不可修改） */
   code: string
-  /** 组织类型 */
-  type: OrganizationType
+  /** 组织类型（后端 int: 1-公司, 2-部门, 3-小组） */
+  type: number
   /** 负责人ID */
   managerId?: number
   /** 状态：0-禁用，1-启用 */

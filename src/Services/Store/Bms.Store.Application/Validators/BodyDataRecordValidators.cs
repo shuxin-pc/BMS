@@ -20,7 +20,6 @@ public class BodyDataRecordUpdateDtoValidator : AbstractValidator<BodyDataRecord
 {
     public BodyDataRecordUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new BodyDataRecordCreateDtoValidator());
     }
 }

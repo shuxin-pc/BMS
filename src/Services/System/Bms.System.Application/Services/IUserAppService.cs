@@ -12,11 +12,14 @@ public interface IUserAppService
     Task<ApiResponseDto<PagedResponseDto<UserDto>>> GetPagedListAsync(PagedRequestDto request);
 
     /// <summary>
-    /// 获取用户列表（带租户隔离）
+    /// 获取用户列表（带租户隔离和数据权限过滤）
     /// </summary>
-    /// <param name="tenantId">租户ID</param>
+    /// <param name="tenantId">租户ID筛选</param>
     /// <param name="realNameFilter">姓名筛选</param>
-    Task<ApiResponseDto<List<UserDto>>> GetAllListAsync(long? tenantId, string? realNameFilter);
+    /// <param name="userId">用户ID筛选（仅本人模式，数据权限 ScopeType=Self）</param>
+    /// <param name="organizationIds">组织ID列表筛选（部门及以下/自定义模式）</param>
+    /// <param name="creatorTenantId">创建者租户ID筛选（屏蔽平台跨租户创建的用户）</param>
+    Task<ApiResponseDto<List<UserDto>>> GetAllListAsync(long? tenantId, string? realNameFilter, long? userId = null, List<long>? organizationIds = null, long? creatorTenantId = null);
 
     /// <summary>
     /// 获取用户详情

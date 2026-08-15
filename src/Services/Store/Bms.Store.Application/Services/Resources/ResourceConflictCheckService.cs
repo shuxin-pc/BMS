@@ -91,15 +91,23 @@ public class ResourceConflictCheckService : IResourceConflictCheckService
             var orderItems = await orderItemQuery.ToListAsync();
             if (orderItems.Any())
             {
-                // 预加载 ServiceProduct.Duration（按 ProductId）
+                // 预加载 ServiceProduct.Duration（按 MasterId 关联）
+                // ServiceProduct 关联字段从 ProductId 改为 MasterId（设计文档 3.4 节）
+                // 查询链路：OrderItem.ProductId -> Product.MasterId -> ServiceProduct.MasterId
                 var productIds = orderItems.Select(oi => oi.ProductId).Distinct().ToList();
-                var durations = await _dbContext.ServiceProducts
-                    .Where(sp => productIds.Contains(sp.ProductId))
-                    .ToDictionaryAsync(sp => sp.ProductId, sp => sp.Duration ?? 0);
+                var productMasterMap = await _dbContext.Products
+                    .Where(p => productIds.Contains(p.Id))
+                    .Select(p => new { p.Id, p.MasterId })
+                    .ToDictionaryAsync(p => p.Id, p => p.MasterId);
+                var masterIds = productMasterMap.Values.Distinct().ToList();
+                var durationsByMaster = await _dbContext.ServiceProducts
+                    .Where(sp => masterIds.Contains(sp.MasterId))
+                    .ToDictionaryAsync(sp => sp.MasterId, sp => sp.Duration ?? 0);
 
                 foreach (var oi in orderItems)
                 {
-                    if (!durations.TryGetValue(oi.ProductId, out var duration) || duration <= 0) continue;
+                    if (!productMasterMap.TryGetValue(oi.ProductId, out var masterId)) continue;
+                    if (!durationsByMaster.TryGetValue(masterId, out var duration) || duration <= 0) continue;
                     var oStart = oi.Order!.OrderTime;
                     var oEnd = oStart.AddMinutes(duration);
 

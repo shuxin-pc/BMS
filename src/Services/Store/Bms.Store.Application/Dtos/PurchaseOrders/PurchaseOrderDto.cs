@@ -7,12 +7,17 @@ public class PurchaseOrderDto
 {
     public long Id { get; set; }
     public string OrderNo { get; set; } = string.Empty;
-    public long SupplierId { get; set; }
     public DateTime OrderDate { get; set; }
     public decimal TotalAmount { get; set; }
     public int Status { get; set; }
     public int PurchaseType { get; set; }
     public long? OperatorId { get; set; }
+
+    /// <summary>
+    /// 操作员姓名（冗余存储，展示用）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
     public string? Remark { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

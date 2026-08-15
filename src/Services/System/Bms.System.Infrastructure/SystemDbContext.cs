@@ -16,9 +16,7 @@ public class SystemDbContext : TenantDbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Menu> Menus => Set<Menu>();
-    public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
-    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
@@ -55,9 +53,7 @@ public class SystemDbContext : TenantDbContext
         ConfigureUser(modelBuilder);
         ConfigureRole(modelBuilder);
         ConfigureMenu(modelBuilder);
-        ConfigurePermission(modelBuilder);
         ConfigureUserRole(modelBuilder);
-        ConfigureRolePermission(modelBuilder);
         ConfigureOrganization(modelBuilder);
         ConfigureAuditLog(modelBuilder);
         ConfigureSystemConfig(modelBuilder);
@@ -123,9 +119,6 @@ public class SystemDbContext : TenantDbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(500);
-            // 角色等级，默认 100（普通角色），super_admin=0, tenant_admin=1
-            entity.Property(e => e.Level).HasDefaultValue(100);
-
             entity.HasIndex(e => e.Code);
 
             entity.HasOne(e => e.DataPermission)
@@ -157,26 +150,6 @@ public class SystemDbContext : TenantDbContext
         });
     }
 
-    private void ConfigurePermission(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Permission>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Description).HasMaxLength(500);
-            entity.Property(e => e.HttpMethod).HasMaxLength(10);
-            entity.Property(e => e.ApiPath).HasMaxLength(500);
-
-            entity.HasIndex(e => e.Code);
-
-            entity.HasOne(e => e.Menu)
-                .WithMany(m => m.Permissions)
-                .HasForeignKey(e => e.MenuId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
     private void ConfigureUserRole(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<UserRole>(entity =>
@@ -193,26 +166,6 @@ public class SystemDbContext : TenantDbContext
             entity.HasOne(e => e.Role)
                 .WithMany(r => r.UserRoles)
                 .HasForeignKey(e => e.RoleId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private void ConfigureRolePermission(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<RolePermission>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-
-            entity.HasIndex(e => new { e.RoleId, e.PermissionId }).IsUnique();
-
-            entity.HasOne(e => e.Role)
-                .WithMany(r => r.RolePermissions)
-                .HasForeignKey(e => e.RoleId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Permission)
-                .WithMany(p => p.RolePermissions)
-                .HasForeignKey(e => e.PermissionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -390,9 +343,13 @@ public class SystemDbContext : TenantDbContext
             entity.Property(e => e.SenderName).HasMaxLength(50);
             entity.Property(e => e.TargetUrl).HasMaxLength(500);
             entity.Property(e => e.TenantCode).HasMaxLength(20);
+            entity.Property(e => e.BizType).HasMaxLength(50);
+            entity.Property(e => e.BizKey).HasMaxLength(200);
 
             // 支撑管理端按租户分页查询
             entity.HasIndex(e => new { e.TenantId, e.CreatedTime });
+            // 支撑按业务类型+业务键去重查询（CheckBizExistsAsync 使用）
+            entity.HasIndex(e => new { e.BizType, e.BizKey });
         });
     }
 

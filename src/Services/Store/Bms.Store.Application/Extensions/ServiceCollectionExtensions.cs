@@ -14,10 +14,12 @@ public static class ServiceCollectionExtensions
         // 注册应用服务
         services.AddScoped<IStoreAppService, StoreAppService>();
         services.AddScoped<IProductAppService, ProductAppService>();
+        services.AddScoped<IProductMasterAppService, ProductMasterAppService>();
         services.AddScoped<IProductCategoryAppService, ProductCategoryAppService>();
         services.AddScoped<IServiceBomAppService, ServiceBomAppService>();
         services.AddScoped<IRoomAppService, RoomAppService>();
         services.AddScoped<IEquipmentAppService, EquipmentAppService>();
+        services.AddScoped<IEquipmentTypeAppService, EquipmentTypeAppService>();
         services.AddScoped<IInventoryBatchAppService, InventoryBatchAppService>();
         services.AddScoped<IStockTransferAppService, StockTransferAppService>();
         services.AddScoped<IStockTransferItemAppService, StockTransferItemAppService>();
@@ -37,9 +39,11 @@ public static class ServiceCollectionExtensions
         // 客户模块
         services.AddScoped<ICustomerAppService, CustomerAppService>();
         services.AddScoped<ICustomerLevelAppService, CustomerLevelAppService>();
+        services.AddScoped<ICustomerTagAppService, CustomerTagAppService>();
         services.AddScoped<ICustomerBeautyProfileAppService, CustomerBeautyProfileAppService>();
         services.AddScoped<ICustomerPointsLogAppService, CustomerPointsLogAppService>();
         services.AddScoped<IConsumeLogAppService, ConsumeLogAppService>();
+        services.AddScoped<ICustomerCareAppService, CustomerCareAppService>();
 
         // 订单与预约模块
         services.AddScoped<IOrderAppService, OrderAppService>();
@@ -69,6 +73,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISupplierAppService, SupplierAppService>();
         services.AddScoped<ITechnicianAppService, TechnicianAppService>();
         services.AddScoped<ITechnicianPermissionService, TechnicianPermissionService>();
+        // 技师技能树形匹配服务（服务项目技能 ↔ 技师技能标签，树形展开求交集）
+        services.AddScoped<TechnicianSkillMatchService>();
 
         // 资源冲突检测与可用性查询（技师/房间/设备）
         services.AddScoped<IResourceConflictCheckService, ResourceConflictCheckService>();
@@ -77,6 +83,12 @@ public static class ServiceCollectionExtensions
         // 跨店权益操作审计日志（文档 6.1 节）
         services.AddHttpContextAccessor();
         services.AddScoped<ICrossStoreOperationAuditService, CrossStoreOperationAuditService>();
+
+        // 积分规则领域服务：统一封装生效规则查询与积分计算（含生日当天双倍），供积分发放场景共用
+        services.AddScoped<IPointsRuleService, PointsRuleService>();
+
+        // 储值赠送规则领域服务：统一封装充值赠送金额计算，供实际充值与前端试算共用
+        services.AddScoped<IStoredValueGiftRuleService, StoredValueGiftRuleService>();
 
         // 租户级跨店权益配置（规则2：AllowCrossStoreVerify 开关）
         services.AddScoped<IStoreTenantSettingAppService, StoreTenantSettingAppService>();
@@ -92,7 +104,6 @@ public static class ServiceCollectionExtensions
         // 样品赠品档案、领用模块
         services.AddScoped<ISampleGiftAppService, SampleGiftAppService>();
         services.AddScoped<ISampleGiftReceiveAppService, SampleGiftReceiveAppService>();
-        services.AddScoped<ISampleGiftTransferAppService, SampleGiftTransferAppService>();
         services.AddScoped<IServiceProductAppService, ServiceProductAppService>();
 
         // 注册 FluentValidation

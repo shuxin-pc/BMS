@@ -29,6 +29,27 @@ public class InventoryChecksController : ControllerBase
         => await _appService.GetPagedListAsync(query);
 
     /// <summary>
+    /// 获取盘点专用商品选项（含账面库存和成本价，用于新增盘点下拉选择）
+    /// </summary>
+    [HttpGet("product-options")]
+    public async Task<ApiResponseDto<List<InventoryCheckProductOptionDto>>> GetProductOptions()
+        => await _appService.GetProductOptionsForCheckAsync();
+
+    /// <summary>
+    /// 盘盈批次号查询：校验批次号在当前商品/门店的存在性，找到返回批次详情（含生产日期/保质期/过期日期），找不到返回 null
+    /// </summary>
+    [HttpGet("batch-lookup")]
+    public async Task<ApiResponseDto<InventoryCheckBatchLookupDto?>> GetBatchLookup([FromQuery] long productId, [FromQuery] string batchNo)
+        => await _appService.GetBatchLookupForCheckAsync(productId, batchNo);
+
+    /// <summary>
+    /// 查询当日该商品是否已有非取消状态的盘点记录（用于前端软约束提示）
+    /// </summary>
+    [HttpGet("today-check")]
+    public async Task<ApiResponseDto<bool>> HasProductCheckedToday([FromQuery] long productId)
+        => await _appService.HasProductCheckedTodayAsync(productId);
+
+    /// <summary>
     /// 获取库存盘点记录详情
     /// </summary>
     [HttpGet("{id:long}")]
@@ -41,6 +62,13 @@ public class InventoryChecksController : ControllerBase
     [HttpPost]
     public async Task<ApiResponseDto<InventoryCheckDto>> Create([FromBody] InventoryCheckCreateDto dto)
         => await _appService.CreateAsync(dto);
+
+    /// <summary>
+    /// 创建并提交盘点单（原子操作）：事务内完成创建+提交，不产生草稿残留
+    /// </summary>
+    [HttpPost("create-and-submit")]
+    public async Task<ApiResponseDto<InventoryCheckDto>> CreateAndSubmit([FromBody] CreateAndSubmitCheckDto dto)
+        => await _appService.CreateAndSubmitAsync(dto);
 
     /// <summary>
     /// 更新库存盘点记录

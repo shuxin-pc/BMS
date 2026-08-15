@@ -4,11 +4,6 @@
 // ==========================================
 
 /**
- * 账户状态（前端保留类型别名，后端 DTO 无此字段）
- */
-export type AccountStatus = number
-
-/**
  * 储值账户
  * 对齐后端 StoredValueAccountDto
  */
@@ -17,6 +12,10 @@ export interface MemberAccount {
   id: number
   /** 客户ID */
   customerId: number
+  /** 客户名称（客户已删除时为空） */
+  customerName?: string
+  /** 客户手机号（客户已删除时为空） */
+  phone?: string
   /** 当前余额（总余额 = 实收余额 + 赠送余额） */
   balance: number
   /** 实收余额 */
@@ -33,55 +32,49 @@ export interface MemberAccount {
   createdAt: string
   /** 更新时间 */
   updatedAt?: string
-
-  // ---- 以下字段后端 DTO 不返回，保留为可选供前端页面使用 ----
-  /** 客户名称（后端不返回，需前端 join） */
-  customerName?: string
-  /** 手机号（后端不返回） */
-  phone?: string
-  /** 账户状态（后端 DTO 无此字段） */
-  status?: AccountStatus
-  /** 开卡时间（后端用 createdAt） */
-  openTime?: string
-  /** 备注（后端 DTO 无此字段） */
-  remark?: string
 }
 
 /**
  * 储值账户查询参数
- * 对齐后端 StoredValueAccountQueryDto（仅支持 customerId + 分页）
+ * 对齐后端 StoredValueAccountQueryDto
  */
 export interface MemberAccountQuery {
   /** 客户ID */
   customerId?: number
+  /** 客户名称（模糊匹配） */
+  customerName?: string
+  /** 手机号（模糊匹配） */
+  phone?: string
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
   pageSize?: number
-
-  // ---- 以下参数后端不支持，保留但不会传递 ----
-  /** 客户名称（后端不支持） */
-  customerName?: string
-  /** 手机号（后端不支持） */
-  phone?: string
-  /** 账户状态（后端不支持） */
-  status?: AccountStatus
 }
 
 /**
- * 充值请求（前端业务参数，由 index.ts 转换为后端 StoredValueLogCreateDto）
+ * 充值请求
+ * 对齐后端 StoredValueRechargeDto。赠送金额由后端按储值规则计算，前端不传
  */
 export interface RechargeRequest {
-  /** 账户ID */
-  accountId: number
+  /** 客户ID */
+  customerId: number
   /** 充值金额（实收） */
   amount: number
-  /** 赠送金额 */
-  bonusAmount: number
-  /** 支付方式：1-现金，2-微信，3-支付宝 */
-  paymentMethod: number
+  /** 支付方式：1-现金，2-支付宝，3-微信，4-银行卡 */
+  payMethod?: number
   /** 备注 */
   remark?: string
+}
+
+/**
+ * 充值赠送金额试算结果
+ * 对齐后端 StoredValueGiftPreviewDto
+ */
+export interface RechargeGiftPreview {
+  /** 充值金额 */
+  amount: number
+  /** 按储值规则计算出的赠送金额 */
+  giftAmount: number
 }
 
 /**
@@ -93,16 +86,16 @@ export interface RechargeRule {
   id: number
   /** 规则名称 */
   name: string
-  /** 规则编码 */
-  code: string
-  /** 充值金额 */
+  /** 充值金额（同租户内唯一） */
   amount: number
   /** 赠送金额 */
   giftAmount: number
-  /** 赠送比例 */
-  giftRate?: number
   /** 是否启用 */
   isEnabled: boolean
+  /** 生效日期（含当天） */
+  startDate: string
+  /** 失效日期（含当天，为空表示长期有效） */
+  endDate?: string
   /** 排序 */
   sort: number
   /** 备注 */
@@ -117,14 +110,8 @@ export interface RechargeRule {
   rechargeAmount?: number
   /** @deprecated 使用 giftAmount 替代 */
   bonusAmount?: number
-  /** @deprecated 使用 giftRate 替代 */
-  bonusRate?: number
   /** @deprecated 使用 isEnabled 替代 */
   status?: number
-  /** @deprecated 后端无此字段 */
-  startDate?: string
-  /** @deprecated 后端无此字段 */
-  endDate?: string
 }
 
 /**
@@ -153,16 +140,16 @@ export interface RechargeRuleQuery {
 export interface RechargeRuleCreate {
   /** 规则名称 */
   name: string
-  /** 规则编码 */
-  code: string
-  /** 充值金额 */
+  /** 充值金额（同租户内唯一） */
   amount: number
   /** 赠送金额 */
   giftAmount: number
-  /** 赠送比例 */
-  giftRate?: number
   /** 是否启用 */
   isEnabled: boolean
+  /** 生效日期（含当天） */
+  startDate: string
+  /** 失效日期（含当天，为空表示长期有效） */
+  endDate?: string
   /** 排序 */
   sort: number
   /** 备注 */
@@ -221,7 +208,7 @@ export interface MemberTransaction {
   afterGiftBalance: number
   /** 关联订单ID */
   orderId?: number
-  /** 支付方式（1:现金 2:支付宝 3:微信 4:银行卡） */
+  /** 支付方式（1:现金 2:支付宝 3:微信 4:银行卡 5:储值） */
   payMethod?: number
   /** 备注 */
   remark?: string
@@ -229,18 +216,14 @@ export interface MemberTransaction {
   createdAt: string
   /** 更新时间 */
   updatedAt?: string
-
-  // ---- 以下字段后端 DTO 不返回，保留为可选供前端页面使用 ----
-  /** @deprecated 后端无此字段 */
-  transactionNo?: string
-  /** @deprecated 后端不返回 */
+  /** 客户姓名（后端关联 Customer 查询返回） */
   customerName?: string
-  /** @deprecated 后端不返回 */
+  /** 客户手机号（后端关联 Customer 查询返回） */
   phone?: string
-  /** @deprecated 使用 payMethod 替代 */
-  paymentMethod?: number
-  /** @deprecated 使用 createdAt 替代 */
-  operationTime?: string
+  /** 操作人ID */
+  operatorId?: number
+  /** 操作人姓名（写入时的姓名快照） */
+  operatorName?: string
 }
 
 /**
@@ -252,18 +235,18 @@ export interface MemberTransactionQuery {
   customerId?: number
   /** 流水类型 */
   type?: TransactionType
+  /** 客户姓名（模糊匹配） */
+  customerName?: string
+  /** 客户手机号（模糊匹配） */
+  phone?: string
+  /** 开始日期 */
+  startDate?: string
+  /** 结束日期（含当日） */
+  endDate?: string
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
   pageSize?: number
-
-  // ---- 以下参数后端不支持，保留但不会传递 ----
-  /** @deprecated 后端用 customerId */
-  customerName?: string
-  /** @deprecated 后端不支持 */
-  startDate?: string
-  /** @deprecated 后端不支持 */
-  endDate?: string
 }
 
 /**

@@ -43,13 +43,32 @@ public class UserRepository : IUserRepository
             .FirstOrDefaultAsync(u => u.Email == email && !u.IsDeleted);
     }
 
-    public async Task<List<User>> GetListAsync(long? tenantId = null)
+    public async Task<List<User>> GetListAsync(long? tenantId = null, long? userId = null, List<long>? organizationIds = null, long? creatorTenantId = null)
     {
         var query = _context.Users.Where(u => !u.IsDeleted);
 
+        // 按租户ID筛选
         if (tenantId.HasValue)
         {
             query = query.Where(u => u.TenantId == tenantId.Value);
+        }
+
+        // 按用户ID筛选（仅本人模式，数据权限 ScopeType=Self）
+        if (userId.HasValue)
+        {
+            query = query.Where(u => u.Id == userId.Value);
+        }
+
+        // 按组织ID列表筛选（部门及以下/自定义模式，数据权限 ScopeType=DepartmentAndBelow/Custom）
+        if (organizationIds != null && organizationIds.Any())
+        {
+            query = query.Where(u => u.OrganizationId.HasValue && organizationIds.Contains(u.OrganizationId.Value));
+        }
+
+        // 按创建者租户ID筛选（屏蔽平台跨租户创建的用户，如 tenant_admin）
+        if (creatorTenantId.HasValue)
+        {
+            query = query.Where(u => u.CreatorTenantId == creatorTenantId.Value);
         }
 
         return await query
@@ -244,51 +263,27 @@ public class UserRepository : IUserRepository
         return roles.OfType<Role>().ToList();
     }
 
-    public async Task<List<Permission>> GetUserPermissionsAsync(long userId)
+    public async Task<List<string>> GetUserPermissionsAsync(long userId)
     {
         var roleIds = await _context.UserRoles
             .Where(ur => ur.UserId == userId)
             .Select(ur => ur.RoleId)
             .ToListAsync();
 
-        // 1. 获取角色对应的API权限（Permission表）
-        var permissions = await _context.RolePermissions
-            .Where(rp => roleIds.Contains(rp.RoleId))
-            .Include(rp => rp.Permission)
-            .Where(rp => rp.Permission != null && !rp.Permission.IsDeleted)
-            .Select(rp => rp.Permission)
-            .ToListAsync();
-
-        var result = permissions.OfType<Permission>().ToList();
-
-        // 2. 获取角色授权的按钮菜单权限（从RoleMenuAuth获取type=2的菜单）
+        // 获取角色授权的按钮菜单权限码（从 RoleMenuAuths -> Menu.Code）
         var buttonMenuIds = await _context.RoleMenuAuths
             .Where(rma => roleIds.Contains(rma.RoleId))
             .Select(rma => rma.MenuId)
             .Distinct()
             .ToListAsync();
 
-        var buttonMenus = await _context.Menus
+        var permissionCodes = await _context.Menus
             .Where(m => buttonMenuIds.Contains(m.Id) && m.Type == 2 && !m.IsDeleted)
+            .Select(m => m.Code)
+            .Where(c => !string.IsNullOrEmpty(c))
+            .Distinct()
             .ToListAsync();
 
-        // 将按钮菜单的权限码转为Permission对象加入结果
-        foreach (var menu in buttonMenus)
-        {
-            // 按钮类型：Code 和 PermissionCode 已统一，直接使用 Code 即可
-            if (!string.IsNullOrEmpty(menu.Code) && !result.Any(p => p.Code == menu.Code))
-            {
-                result.Add(new Permission
-                {
-                    Id = menu.Id,
-                    Code = menu.Code,
-                    Name = menu.Name,
-                    MenuId = menu.Id,
-                    IsDeleted = false
-                });
-            }
-        }
-
-        return result;
+        return permissionCodes;
     }
 }

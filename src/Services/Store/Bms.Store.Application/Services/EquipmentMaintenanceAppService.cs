@@ -37,7 +37,7 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
     public async Task<ApiResponseDto<PagedResponseDto<EquipmentMaintenanceDto>>> GetPagedListAsync(EquipmentMaintenanceQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<EquipmentMaintenanceDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<EquipmentMaintenanceDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.EquipmentMaintenances
@@ -90,7 +90,7 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
     public async Task<ApiResponseDto<EquipmentMaintenanceDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<EquipmentMaintenanceDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<EquipmentMaintenanceDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.EquipmentMaintenances
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
@@ -116,7 +116,7 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
     public async Task<ApiResponseDto<EquipmentMaintenanceDto>> CreateAsync(EquipmentMaintenanceCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<EquipmentMaintenanceDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<EquipmentMaintenanceDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -174,7 +174,7 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
     public async Task<ApiResponseDto<EquipmentMaintenanceDto>> UpdateAsync(EquipmentMaintenanceUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<EquipmentMaintenanceDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<EquipmentMaintenanceDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -226,7 +226,7 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.EquipmentMaintenances
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
@@ -244,7 +244,7 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

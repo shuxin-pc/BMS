@@ -2,8 +2,7 @@ namespace Bms.Store.Domain.Entities;
 
 /// <summary>
 /// 客户等级
-/// 系统仅允许创建普通会员(Level=1)和会员(Level=2)两个等级
-/// 依据：G5.2 客户等级仅支持普通/会员两级
+/// 等级数量与等级值由门店自由管理，同租户内 Level 值唯一
 /// </summary>
 public class CustomerLevel : StoreEntity
 {
@@ -18,8 +17,7 @@ public class CustomerLevel : StoreEntity
     public string Code { get; set; } = string.Empty;
 
     /// <summary>
-    /// 等级值（1:普通会员 2:会员），创建后不可修改
-    /// 参见 <see cref="Constants.CustomerLevelTypes"/>
+    /// 等级值（同租户内唯一，由门店自定义，表示等级高低）
     /// </summary>
     public int Level { get; set; }
 
@@ -27,11 +25,6 @@ public class CustomerLevel : StoreEntity
     /// 折扣率
     /// </summary>
     public decimal DiscountRate { get; set; } = 1.0m;
-
-    /// <summary>
-    /// 排序
-    /// </summary>
-    public int Sort { get; set; }
 
     /// <summary>
     /// 备注

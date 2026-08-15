@@ -8,6 +8,17 @@ namespace Bms.Store.Application.Dtos.Equipments;
 public class EquipmentDto
 {
     public long Id { get; set; }
+
+    /// <summary>
+    /// 所属设备类型 ID
+    /// </summary>
+    public long EquipmentTypeId { get; set; }
+
+    /// <summary>
+    /// 所属设备类型名称（展示用）
+    /// </summary>
+    public string? EquipmentTypeName { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string? Model { get; set; }

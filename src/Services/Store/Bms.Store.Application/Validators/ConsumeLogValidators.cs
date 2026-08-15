@@ -17,7 +17,6 @@ public class ConsumeLogUpdateDtoValidator : AbstractValidator<ConsumeLogUpdateDt
 {
     public ConsumeLogUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new ConsumeLogCreateDtoValidator());
     }
 }

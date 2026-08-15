@@ -35,8 +35,8 @@ export type OrderType = 1 | 2 | 3 | 4
 
 /**
  * 技师来源
- * - 1: 平台技师
- * - 2: 商家技师
+ * - 1: 商家技师
+ * - 2: 平台技师
  */
 export type TechnicianSource = 1 | 2
 
@@ -56,7 +56,7 @@ export interface OrderItem {
   productCode: string
   /** 技师ID（服务商品时选择） */
   technicianId?: number
-  /** 技师来源：1-平台技师，2-商家技师 */
+  /** 技师来源：1-商家技师，2-平台技师 */
   technicianSource?: TechnicianSource
   /** 技师姓名（后端关联查询填充） */
   technicianName?: string
@@ -290,10 +290,12 @@ export interface OrderItemCreate {
   discountRate?: number
   discountedAmount: number
   technicianFee?: number
-  /** 店员选择的效期列表（按扣减顺序），为空表示系统自动按近效期扣减（FEFO） */
-  expirationDates?: string[]
+  /** 店员选择的效期列表（按扣减顺序），为空表示系统自动按近效期扣减（FEFO）；null 元素表示"无效期限制"批次 */
+  expirationDates?: (string | null)[]
   /** 选中效期库存不足时，是否允许系统自动从近效期补足（默认 false） */
   allowAutoFillBeyondSelection?: boolean
+  /** 关联活动ID（可选，仅赠品项 Type=5 有意义，用于活动维度归因统计） */
+  activityId?: number | null
   remark?: string
 }
 

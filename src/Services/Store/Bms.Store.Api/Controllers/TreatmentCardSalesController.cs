@@ -72,4 +72,16 @@ public class TreatmentCardSalesController : ControllerBase
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
+
+    /// <summary>
+    /// 退卡（规则6）
+    /// 全额冲减发卡门店销售业绩，已发生的核销业绩不冲回
+    /// 退卡金额 = 售价 - 已核销金额
+    /// </summary>
+    [HttpPost("{id:long}/refund")]
+    public async Task<ApiResponseDto<TreatmentCardSaleRefundResultDto>> Refund(long id, [FromBody] TreatmentCardSaleRefundDto dto)
+    {
+        dto.Id = id;
+        return await _appService.RefundAsync(dto);
+    }
 }

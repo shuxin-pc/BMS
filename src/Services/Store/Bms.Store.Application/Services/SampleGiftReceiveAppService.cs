@@ -22,17 +22,20 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     private readonly ICurrentUser _currentUser;
     private readonly IValidator<SampleGiftReceiveCreateDto> _createValidator;
     private readonly IValidator<SampleGiftReceiveUpdateDto> _updateValidator;
+    private readonly IInventoryAlertAppService _alertAppService;
 
     public SampleGiftReceiveAppService(
         StoreDbContext dbContext,
         ICurrentUser currentUser,
         IValidator<SampleGiftReceiveCreateDto> createValidator,
-        IValidator<SampleGiftReceiveUpdateDto> updateValidator)
+        IValidator<SampleGiftReceiveUpdateDto> updateValidator,
+        IInventoryAlertAppService alertAppService)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
+        _alertAppService = alertAppService;
     }
 
     /// <summary>
@@ -41,16 +44,20 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     public async Task<ApiResponseDto<PagedResponseDto<SampleGiftReceiveDto>>> GetPagedListAsync(SampleGiftReceiveQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<SampleGiftReceiveDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<SampleGiftReceiveDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.SampleGiftReceives
-            .Where(r => r.TenantId == tenantId);
+            .Include(r => r.Activity)
+            .Where(r => r.TenantId == tenantId && r.StoreId == storeId);
 
         if (query.ProductId.HasValue)
             queryable = queryable.Where(r => r.ProductId == query.ProductId.Value);
         if (query.CustomerId.HasValue)
             queryable = queryable.Where(r => r.CustomerId == query.CustomerId.Value);
+        if (query.ActivityId.HasValue)
+            queryable = queryable.Where(r => r.ActivityId == query.ActivityId.Value);
 
         var total = await queryable.CountAsync();
         var items = await queryable
@@ -59,9 +66,17 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
             .Take(query.PageSize)
             .ToListAsync();
 
+        var dtos = items.Adapt<List<SampleGiftReceiveDto>>();
+        // Adapt 无法自动映射导航属性 Activity.Name -> ActivityName，手动填充
+        foreach (var dto in dtos)
+        {
+            var entity = items.FirstOrDefault(e => e.Id == dto.Id);
+            dto.ActivityName = entity?.Activity?.Name;
+        }
+
         var result = new PagedResponseDto<SampleGiftReceiveDto>
         {
-            List = items.Adapt<List<SampleGiftReceiveDto>>(),
+            List = dtos,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -75,13 +90,16 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     public async Task<ApiResponseDto<SampleGiftReceiveDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SampleGiftReceiveDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<SampleGiftReceiveDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.SampleGiftReceives
-            .FirstOrDefaultAsync(r => r.Id == id && r.TenantId == _currentUser.TenantId.Value);
+            .Include(r => r.Activity)
+            .FirstOrDefaultAsync(r => r.Id == id && r.TenantId == _currentUser.TenantId.Value && r.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<SampleGiftReceiveDto?>.Fail("样品领用记录不存在", 404);
-        return ApiResponseDto<SampleGiftReceiveDto?>.Ok(entity.Adapt<SampleGiftReceiveDto>());
+        var dto = entity.Adapt<SampleGiftReceiveDto>();
+        dto.ActivityName = entity.Activity?.Name;
+        return ApiResponseDto<SampleGiftReceiveDto?>.Ok(dto);
     }
 
     /// <summary>
@@ -91,7 +109,7 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     public async Task<ApiResponseDto<SampleGiftReceiveDto>> CreateAsync(SampleGiftReceiveCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<SampleGiftReceiveDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<SampleGiftReceiveDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -102,9 +120,14 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
 
         // 验证商品存在且为样品/赠品类型
         var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == dto.ProductId && !p.IsDeleted && p.TenantId == tenantId);
+            .Include(p => p.Master)
+            .FirstOrDefaultAsync(p => p.Id == dto.ProductId && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
             return ApiResponseDto<SampleGiftReceiveDto>.Fail("商品档案不存在", 404);
+
+        // 修复遗留隐患：补充商品类型校验，仅允许样品(4)或赠品(5)类型商品创建领用记录
+        if (product.Master.Type != 4 && product.Master.Type != 5)
+            return ApiResponseDto<SampleGiftReceiveDto>.Fail("仅支持样品或赠品类型的商品", 400);
 
         // 验证 InventoryBatch 存在且属于该商品的该门店
         var batch = await _dbContext.InventoryBatches
@@ -116,13 +139,23 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
         if (batch == null)
             return ApiResponseDto<SampleGiftReceiveDto>.Fail("库存批次不存在或不可用", 404);
 
-        // 客户可选：传入值时校验客户存在且属本租户
+        // 客户可选：传入值时校验客户存在且属本租户，同时获取客户信息用于流水备注展示
+        Customer? customer = null;
         if (dto.CustomerId.HasValue)
         {
-            var customerExists = await _dbContext.Customers
-                .AnyAsync(c => c.Id == dto.CustomerId.Value && !c.IsDeleted && c.TenantId == tenantId);
-            if (!customerExists)
+            customer = await _dbContext.Customers
+                .FirstOrDefaultAsync(c => c.Id == dto.CustomerId.Value && !c.IsDeleted && c.TenantId == tenantId);
+            if (customer == null)
                 return ApiResponseDto<SampleGiftReceiveDto>.Fail("客户不存在", 404);
+        }
+
+        // 关联活动可选：传入值时校验活动存在且未删除（软删除活动历史记录仍可显示）
+        if (dto.ActivityId.HasValue)
+        {
+            var activityExists = await _dbContext.Activities
+                .AnyAsync(a => a.Id == dto.ActivityId.Value && !a.IsDeleted && a.TenantId == tenantId && a.StoreId == storeId);
+            if (!activityExists)
+                return ApiResponseDto<SampleGiftReceiveDto>.Fail("关联活动不存在", 404);
         }
 
         // 验证批次库存充足
@@ -158,9 +191,12 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
             AfterQuantity = batch.Quantity,
             BatchNo = batch.BatchNo,
             ExpirationDate = batch.ExpirationDate,
-            Remark = dto.CustomerId.HasValue
-                ? $"样品领用-客户ID:{dto.CustomerId}"
-                : "样品领用-无客户",
+            ActivityId = dto.ActivityId,
+            Remark = customer != null
+                ? $"{customer.Name}({customer.Phone})"
+                : null,
+            OperatorId = _currentUser.UserId,
+            OperatorName = _currentUser.RealName ?? _currentUser.UserName,
             TenantId = tenantId,
             TenantCode = _currentUser.TenantCode ?? string.Empty,
             StoreId = storeId,
@@ -176,6 +212,17 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
 
         _dbContext.SampleGiftReceives.Add(entity);
         await _dbContext.SaveChangesAsync();
+
+        // 即时检测预警（失败不影响领用结果，定时任务兜底）
+        try
+        {
+            await _alertAppService.CheckInventoryAlertsAsync(tenantId, storeId, dto.ProductId);
+        }
+        catch
+        {
+            // 预警检测失败不影响主流程
+        }
+
         return ApiResponseDto<SampleGiftReceiveDto>.Ok(entity.Adapt<SampleGiftReceiveDto>(), "创建成功");
     }
 
@@ -185,15 +232,16 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     public async Task<ApiResponseDto<SampleGiftReceiveDto>> UpdateAsync(SampleGiftReceiveUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SampleGiftReceiveDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<SampleGiftReceiveDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<SampleGiftReceiveDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.SampleGiftReceives
-            .FirstOrDefaultAsync(r => r.Id == dto.Id && r.TenantId == tenantId);
+            .FirstOrDefaultAsync(r => r.Id == dto.Id && r.TenantId == tenantId && r.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<SampleGiftReceiveDto>.Fail("样品领用记录不存在", 404);
 
@@ -216,10 +264,10 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.SampleGiftReceives
-            .FirstOrDefaultAsync(r => r.Id == id && r.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(r => r.Id == id && r.TenantId == _currentUser.TenantId.Value && r.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto.Fail("样品领用记录不存在", 404);
 
@@ -234,12 +282,12 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.SampleGiftReceives
-            .Where(r => ids.Contains(r.Id) && r.TenantId == _currentUser.TenantId.Value)
+            .Where(r => ids.Contains(r.Id) && r.TenantId == _currentUser.TenantId.Value && r.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         _dbContext.SampleGiftReceives.RemoveRange(entities);

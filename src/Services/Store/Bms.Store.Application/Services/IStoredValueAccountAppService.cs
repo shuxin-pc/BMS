@@ -42,4 +42,11 @@ public interface IStoredValueAccountAppService
         long storeId, string storeCode,
         decimal amount, long orderId, string orderNo,
         int? payMethod, DateTime now);
+
+    /// <summary>
+    /// 储值退款（规则8）
+    /// 冲减原充值发生门店的充值业绩；门店关店则冲减当前操作门店
+    /// 退款金额冲减实收余额(RealBalance)，不足冲减赠送余额(GiftBalance)
+    /// </summary>
+    Task<ApiResponseDto<StoredValueAccountDto>> RefundAsync(StoredValueRefundDto dto);
 }

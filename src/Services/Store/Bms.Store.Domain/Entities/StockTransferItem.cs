@@ -16,6 +16,21 @@ public class StockTransferItem : StoreBusinessEntityBase
     public long ProductId { get; set; }
 
     /// <summary>
+    /// 商品名称（冗余存储，便于展示）
+    /// </summary>
+    public string? ProductName { get; set; }
+
+    /// <summary>
+    /// 商品编码（冗余存储，便于展示）
+    /// </summary>
+    public string? ProductCode { get; set; }
+
+    /// <summary>
+    /// 商品单位（冗余存储，便于展示）
+    /// </summary>
+    public string? Unit { get; set; }
+
+    /// <summary>
     /// 调拨数量
     /// </summary>
     public decimal Quantity { get; set; }

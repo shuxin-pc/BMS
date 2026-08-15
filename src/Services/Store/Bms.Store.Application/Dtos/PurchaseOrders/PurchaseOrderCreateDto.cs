@@ -2,14 +2,12 @@ namespace Bms.Store.Application.Dtos.PurchaseOrders;
 
 /// <summary>
 /// 创建采购订单DTO
+/// 状态由实体默认值控制（1=已入库），不由前端传入
 /// </summary>
 public class PurchaseOrderCreateDto
 {
-    public string OrderNo { get; set; } = string.Empty;
-    public long SupplierId { get; set; }
     public DateTime OrderDate { get; set; }
     public decimal TotalAmount { get; set; }
-    public int Status { get; set; } = 1;
     public int PurchaseType { get; set; }
     public long? OperatorId { get; set; }
     public string? Remark { get; set; }

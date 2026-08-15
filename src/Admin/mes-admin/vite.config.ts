@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [
     vue(),
   ],
+  build: {
+    // es2022 支持 top-level await（main.ts 中预加载用户信息使用）
+    target: 'es2022'
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))

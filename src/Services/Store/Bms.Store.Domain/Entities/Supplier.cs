@@ -36,9 +36,15 @@ public class Supplier : StoreEntity
     public string? BankAccount { get; set; }
 
     /// <summary>
-    /// 状态（0:禁用 1:启用）
+    /// 状态（1:合作中 2:已停止）
     /// </summary>
     public int Status { get; set; } = 1;
+
+    /// <summary>
+    /// 数据范围（1:门店通用 2:门店私用）
+    /// 通用时 StoreId=0，全部门店可见；私用时 StoreId 为具体门店
+    /// </summary>
+    public int Scope { get; set; } = 2;
 
     /// <summary>
     /// 备注

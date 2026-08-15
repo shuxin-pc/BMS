@@ -20,7 +20,15 @@ public class ServiceProductDto
     /// </summary>
     public List<string> EquipmentTypeNames { get; set; } = new();
 
-    public string? ApplicableSkills { get; set; }
+    /// <summary>
+    /// 适用技师技能分类 ID 列表（由服务层填充）
+    /// </summary>
+    public List<long> SkillCategoryIds { get; set; } = new();
+
+    /// <summary>
+    /// 适用技师技能分类名称列表（展示用，由服务层填充）
+    /// </summary>
+    public List<string> SkillCategoryNames { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

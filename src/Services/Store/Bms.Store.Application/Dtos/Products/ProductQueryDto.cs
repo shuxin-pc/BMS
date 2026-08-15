@@ -23,11 +23,6 @@ public class ProductQueryDto : PagedRequestDto
     public long? CategoryId { get; set; }
 
     /// <summary>
-    /// 供应商ID
-    /// </summary>
-    public long? SupplierId { get; set; }
-
-    /// <summary>
     /// 商品状态
     /// </summary>
     public int? Status { get; set; }

@@ -33,29 +33,53 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
 
     /// <summary>
     /// 获取客户美容档案分页列表
+    /// 支持按客户姓名、手机号模糊搜索和肤质类型过滤
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<CustomerBeautyProfileDto>>> GetPagedListAsync(CustomerBeautyProfileQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<CustomerBeautyProfileDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<CustomerBeautyProfileDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
-        var queryable = _dbContext.CustomerBeautyProfiles
-            .Where(p => !p.IsDeleted && p.TenantId == tenantId);
+        var storeId = _currentUser.StoreId ?? 0;
+        var queryable = from p in _dbContext.CustomerBeautyProfiles
+                        join c in _dbContext.Customers on p.CustomerId equals c.Id
+                        where !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId && !c.IsDeleted
+                        select new { p, c };
 
         if (query.CustomerId.HasValue)
-            queryable = queryable.Where(p => p.CustomerId == query.CustomerId.Value);
+            queryable = queryable.Where(x => x.p.CustomerId == query.CustomerId.Value);
+        if (!string.IsNullOrWhiteSpace(query.CustomerName))
+            queryable = queryable.Where(x => x.c.Name.Contains(query.CustomerName));
+        if (!string.IsNullOrWhiteSpace(query.CustomerPhone))
+            queryable = queryable.Where(x => x.c.Phone.Contains(query.CustomerPhone));
+        if (!string.IsNullOrWhiteSpace(query.SkinType))
+            queryable = queryable.Where(x => x.p.SkinType == query.SkinType);
 
         var total = await queryable.CountAsync();
         var items = await queryable
-            .OrderByDescending(p => p.CreatedTime)
+            .OrderByDescending(x => x.p.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(x => new CustomerBeautyProfileDto
+            {
+                Id = x.p.Id,
+                CustomerId = x.p.CustomerId,
+                CustomerName = x.c.Name,
+                CustomerPhone = x.c.Phone,
+                SkinType = x.p.SkinType,
+                Sensitivity = x.p.Sensitivity,
+                HairType = x.p.HairType,
+                AllergyHistory = x.p.AllergyHistory,
+                Remark = x.p.Remark,
+                CreatedAt = x.p.CreatedTime,
+                UpdatedAt = x.p.UpdatedTime
+            })
             .ToListAsync();
 
         var result = new PagedResponseDto<CustomerBeautyProfileDto>
         {
-            List = items.Adapt<List<CustomerBeautyProfileDto>>(),
+            List = items,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -69,13 +93,12 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
     public async Task<ApiResponseDto<CustomerBeautyProfileDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerBeautyProfileDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerBeautyProfileDto?>.Fail("登录状态异常，请重新登录", 401);
 
-        var entity = await _dbContext.CustomerBeautyProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
-        if (entity == null)
+        var dto = await GetDtoByIdAsync(id);
+        if (dto == null)
             return ApiResponseDto<CustomerBeautyProfileDto?>.Fail("客户美容档案不存在", 404);
-        return ApiResponseDto<CustomerBeautyProfileDto?>.Ok(entity.Adapt<CustomerBeautyProfileDto>());
+        return ApiResponseDto<CustomerBeautyProfileDto?>.Ok(dto);
     }
 
     /// <summary>
@@ -84,21 +107,34 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
     public async Task<ApiResponseDto<CustomerBeautyProfileDto>> CreateAsync(CustomerBeautyProfileCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerBeautyProfileDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerBeautyProfileDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<CustomerBeautyProfileDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
+
+        // 唯一性校验：同租户同门店下每个客户仅允许一份未删除的美容档案
+        var exists = await _dbContext.CustomerBeautyProfiles
+            .AnyAsync(p => !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId && p.CustomerId == dto.CustomerId);
+        if (exists)
+            return ApiResponseDto<CustomerBeautyProfileDto>.Fail("该客户已存在美容档案", 400);
+
         var entity = dto.Adapt<CustomerBeautyProfileEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = storeId;
+        entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.CustomerBeautyProfiles.Add(entity);
         await _dbContext.SaveChangesAsync();
-        return ApiResponseDto<CustomerBeautyProfileDto>.Ok(entity.Adapt<CustomerBeautyProfileDto>(), "创建成功");
+
+        // 保存后重新查询以填充客户姓名和手机号
+        var result = await GetDtoByIdAsync(entity.Id);
+        return ApiResponseDto<CustomerBeautyProfileDto>.Ok(result!, "创建成功");
     }
 
     /// <summary>
@@ -107,15 +143,16 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
     public async Task<ApiResponseDto<CustomerBeautyProfileDto>> UpdateAsync(CustomerBeautyProfileUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerBeautyProfileDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerBeautyProfileDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<CustomerBeautyProfileDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.CustomerBeautyProfiles
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<CustomerBeautyProfileDto>.Fail("客户美容档案不存在", 404);
 
@@ -128,7 +165,10 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
         entity.UpdatedTime = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
-        return ApiResponseDto<CustomerBeautyProfileDto>.Ok(entity.Adapt<CustomerBeautyProfileDto>(), "更新成功");
+
+        // 保存后重新查询以填充客户姓名和手机号
+        var result = await GetDtoByIdAsync(entity.Id);
+        return ApiResponseDto<CustomerBeautyProfileDto>.Ok(result!, "更新成功");
     }
 
     /// <summary>
@@ -137,10 +177,12 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.CustomerBeautyProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto.Fail("客户美容档案不存在", 404);
 
@@ -156,12 +198,14 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entities = await _dbContext.CustomerBeautyProfiles
-            .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value)
+            .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId)
             .ToListAsync();
 
         foreach (var entity in entities)
@@ -171,5 +215,31 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
         }
         await _dbContext.SaveChangesAsync();
         return ApiResponseDto.Success(null, $"成功删除 {entities.Count} 条数据");
+    }
+
+    /// <summary>
+    /// 通过 JOIN Customer 查询完整 DTO（含客户姓名和手机号）
+    /// </summary>
+    private async Task<CustomerBeautyProfileDto?> GetDtoByIdAsync(long id)
+    {
+        var tenantId = _currentUser.TenantId!.Value;
+        var storeId = _currentUser.StoreId ?? 0;
+        return await (from p in _dbContext.CustomerBeautyProfiles
+                      join c in _dbContext.Customers on p.CustomerId equals c.Id
+                      where p.Id == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId && !c.IsDeleted
+                      select new CustomerBeautyProfileDto
+                      {
+                          Id = p.Id,
+                          CustomerId = p.CustomerId,
+                          CustomerName = c.Name,
+                          CustomerPhone = c.Phone,
+                          SkinType = p.SkinType,
+                          Sensitivity = p.Sensitivity,
+                          HairType = p.HairType,
+                          AllergyHistory = p.AllergyHistory,
+                          Remark = p.Remark,
+                          CreatedAt = p.CreatedTime,
+                          UpdatedAt = p.UpdatedTime
+                      }).FirstOrDefaultAsync();
     }
 }

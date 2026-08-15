@@ -14,4 +14,9 @@ public interface IStoredValueRuleAppService
     Task<ApiResponseDto<StoredValueRuleDto>> UpdateAsync(StoredValueRuleUpdateDto dto);
     Task<ApiResponseDto> DeleteAsync(long id);
     Task<ApiResponseDto> BatchDeleteAsync(List<long> ids);
+
+    /// <summary>
+    /// 试算充值赠送金额（与实际充值使用同一计算口径）
+    /// </summary>
+    Task<ApiResponseDto<StoredValueGiftPreviewDto>> PreviewGiftAmountAsync(decimal amount);
 }

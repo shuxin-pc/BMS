@@ -44,11 +44,6 @@ public class Role : TenantEntity
     public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 
     /// <summary>
-    /// 导航属性：角色权限关联
-    /// </summary>
-    public virtual ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
-
-    /// <summary>
     /// 导航属性：数据权限
     /// </summary>
     public virtual DataPermission? DataPermission { get; set; }

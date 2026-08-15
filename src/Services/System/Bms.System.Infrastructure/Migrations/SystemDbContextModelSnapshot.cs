@@ -212,6 +212,14 @@ namespace Bms.System.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("BizKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BizType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<int>("Category")
                         .HasColumnType("integer");
 
@@ -279,6 +287,8 @@ namespace Bms.System.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BizType", "BizKey");
 
                     b.HasIndex("TenantId", "CreatedTime");
 
@@ -409,66 +419,6 @@ namespace Bms.System.Infrastructure.Migrations
                     b.HasAnnotation("IsTenantEntity", true);
                 });
 
-            modelBuilder.Entity("Bms.System.Domain.Entities.Permission", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ApiPath")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedTime")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("HttpMethod")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<long>("MenuId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("TenantCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<long>("TenantId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("UpdatedTime")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code");
-
-                    b.HasIndex("MenuId");
-
-                    b.ToTable("Permissions", "bms_system");
-
-                    b.HasAnnotation("IsTenantEntity", true);
-                });
-
             modelBuilder.Entity("Bms.System.Domain.Entities.Role", b =>
                 {
                     b.Property<long>("Id")
@@ -496,9 +446,7 @@ namespace Bms.System.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int>("Level")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(100);
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -562,36 +510,6 @@ namespace Bms.System.Infrastructure.Migrations
                     b.HasIndex("RoleId", "SubsystemId");
 
                     b.ToTable("RoleMenuAuths", "bms_system");
-                });
-
-            modelBuilder.Entity("Bms.System.Domain.Entities.RolePermission", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CreatedTime")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<long>("PermissionId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("RoleId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("UpdatedTime")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PermissionId");
-
-                    b.HasIndex("RoleId", "PermissionId")
-                        .IsUnique();
-
-                    b.ToTable("RolePermissions", "bms_system");
                 });
 
             modelBuilder.Entity("Bms.System.Domain.Entities.Subsystem", b =>
@@ -981,17 +899,6 @@ namespace Bms.System.Infrastructure.Migrations
                     b.Navigation("Parent");
                 });
 
-            modelBuilder.Entity("Bms.System.Domain.Entities.Permission", b =>
-                {
-                    b.HasOne("Bms.System.Domain.Entities.Menu", "Menu")
-                        .WithMany("Permissions")
-                        .HasForeignKey("MenuId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Menu");
-                });
-
             modelBuilder.Entity("Bms.System.Domain.Entities.RoleMenuAuth", b =>
                 {
                     b.HasOne("Bms.System.Domain.Entities.Menu", "Menu")
@@ -1017,25 +924,6 @@ namespace Bms.System.Infrastructure.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("Subsystem");
-                });
-
-            modelBuilder.Entity("Bms.System.Domain.Entities.RolePermission", b =>
-                {
-                    b.HasOne("Bms.System.Domain.Entities.Permission", "Permission")
-                        .WithMany("RolePermissions")
-                        .HasForeignKey("PermissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Bms.System.Domain.Entities.Role", "Role")
-                        .WithMany("RolePermissions")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Permission");
-
-                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Bms.System.Domain.Entities.SubsystemMenu", b =>
@@ -1108,8 +996,6 @@ namespace Bms.System.Infrastructure.Migrations
             modelBuilder.Entity("Bms.System.Domain.Entities.Menu", b =>
                 {
                     b.Navigation("Children");
-
-                    b.Navigation("Permissions");
                 });
 
             modelBuilder.Entity("Bms.System.Domain.Entities.Organization", b =>
@@ -1119,16 +1005,9 @@ namespace Bms.System.Infrastructure.Migrations
                     b.Navigation("Users");
                 });
 
-            modelBuilder.Entity("Bms.System.Domain.Entities.Permission", b =>
-                {
-                    b.Navigation("RolePermissions");
-                });
-
             modelBuilder.Entity("Bms.System.Domain.Entities.Role", b =>
                 {
                     b.Navigation("DataPermission");
-
-                    b.Navigation("RolePermissions");
 
                     b.Navigation("UserRoles");
                 });

@@ -21,9 +21,4 @@ public class SkillCategoryQueryDto : PagedRequestDto
     /// 父分类ID
     /// </summary>
     public long? ParentId { get; set; }
-
-    /// <summary>
-    /// 状态筛选（0:禁用 1:启用）
-    /// </summary>
-    public int? Status { get; set; }
 }

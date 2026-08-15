@@ -201,12 +201,15 @@
         <el-form-item label="自定义组织" v-if="formData.dataScopeType === 4">
           <div class="permission-tree">
             <el-tree
+              :key="orgTreeKey"
               ref="orgTreeRef"
               :data="organizationTree"
               :props="treeProps"
               show-checkbox
+              check-strictly
               node-key="id"
               :default-checked-keys="formData.customOrganizationIds"
+              :default-expanded-keys="orgExpandedKeys"
               @check="handleOrgCheck"
             />
           </div>
@@ -341,7 +344,7 @@ import {
   updateRole,
   deleteRole,
   deleteRoles,
-  getOrganizations,
+  getOrganizationOptions,
   getRoleMenuAuthsGrouped,
   assignRoleMenuAuths,
   getTenants
@@ -460,6 +463,31 @@ const treeProps = {
   children: 'children',
   label: 'name'
 }
+// 组织树展开节点（回显时展开勾选节点所在路径）
+const orgExpandedKeys = ref<string[]>([])
+// 组织树渲染 key，编辑时递增以强制 el-tree 重新渲染，使 default-* 属性重新生效
+const orgTreeKey = ref(0)
+
+// 根据勾选节点 ID 计算需要展开的祖先节点 ID 列表
+const calcOrgExpandedKeys = (tree: any[], checkedIds: string[]): string[] => {
+  const expandedKeys = new Set<string>()
+  const findPath = (nodes: any[], targetId: string): boolean => {
+    for (const node of nodes) {
+      if (String(node.id) === targetId) {
+        return true
+      }
+      if (node.children && node.children.length > 0) {
+        if (findPath(node.children, targetId)) {
+          expandedKeys.add(String(node.id))
+          return true
+        }
+      }
+    }
+    return false
+  }
+  checkedIds.forEach(id => findPath(tree, id))
+  return Array.from(expandedKeys)
+}
 
 // 详情弹窗
 const detailVisible = ref(false)
@@ -562,31 +590,15 @@ const loadData = async () => {
 }
 
 // 加载组织树（用于自定义数据范围）
+// 使用下拉专用接口 getOrganizationOptions，避免依赖组织架构页面权限
 const loadOrganizationTree = async () => {
   try {
-    const res = await getOrganizations()
-    // 后端 /organizations/tree 已返回树形结构，直接使用
+    const res = await getOrganizationOptions()
+    // 后端 /organizations/options 已返回树形结构，直接使用
     organizationTree.value = res || []
   } catch (error) {
     // 加载组织树失败
   }
-}
-
-// 构建树形结构
-const buildTree = (list: any[]): any[] => {
-  const map: Record<number, any> = {}
-  const result: any[] = []
-  list.forEach(item => {
-    map[item.id] = { ...item, children: [] }
-  })
-  list.forEach(item => {
-    if (item.parentId === 0 || !item.parentId) {
-      result.push(map[item.id])
-    } else if (map[item.parentId]) {
-      map[item.parentId].children.push(map[item.id])
-    }
-  })
-  return result
 }
 
 // 搜索
@@ -633,6 +645,9 @@ const handleEdit = (row: Role) => {
   } else {
     formData.customOrganizationIds = []
   }
+  // 计算回显时需要展开的祖先节点，并强制 el-tree 重新渲染使 default-* 属性生效
+  orgExpandedKeys.value = calcOrgExpandedKeys(organizationTree.value, formData.customOrganizationIds)
+  orgTreeKey.value++
   dialogVisible.value = true
   detailVisible.value = false
 }
@@ -755,9 +770,11 @@ const handleBatchDelete = async () => {
 }
 
 // 组织树选择（自定义数据范围）
+// check-strictly 模式：勾选独立不级联，getCheckedKeys 返回用户实际勾选的节点
+// 避免级联勾选下"勾选全部子节点导致父节点被自动授权"的问题
 const handleOrgCheck = () => {
-  const checkedNodes = orgTreeRef.value?.getCheckedNodes(false) || []
-  formData.customOrganizationIds = checkedNodes.map((n: any) => String(n.id))
+  const checkedKeys = orgTreeRef.value?.getCheckedKeys() || []
+  formData.customOrganizationIds = checkedKeys.map((id: any) => String(id))
 }
 
 // 提交表单
@@ -776,8 +793,7 @@ const handleSubmit = async () => {
             dataScopeType: formData.dataScopeType,
             status: formData.status,
             level: formData.level!,
-            customOrganizationIds: formData.customOrganizationIds,
-            permissionIds: []
+            customOrganizationIds: formData.customOrganizationIds
           }
           await updateRole(data)
           ElMessage.success('更新成功')
@@ -789,8 +805,7 @@ const handleSubmit = async () => {
             dataScopeType: formData.dataScopeType,
             status: formData.status,
             level: formData.level!,
-            customOrganizationIds: formData.customOrganizationIds,
-            permissionIds: []
+            customOrganizationIds: formData.customOrganizationIds
           }
           await createRole(data)
           ElMessage.success('创建成功')
@@ -822,6 +837,9 @@ const resetForm = () => {
   // 默认设为当前用户可设置的最低权限等级（数字最大），提升体验
   formData.level = minLevel.value
   formData.customOrganizationIds = []
+  // 重置组织树展开状态并强制重新渲染，避免残留上次编辑的勾选/展开
+  orgExpandedKeys.value = []
+  orgTreeKey.value++
 }
 
 // 格式化日期

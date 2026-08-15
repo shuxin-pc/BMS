@@ -79,9 +79,4 @@ public class Menu : BaseEntity
     /// 导航属性：父菜单
     /// </summary>
     public virtual Menu? Parent { get; set; }
-
-    /// <summary>
-    /// 导航属性：权限
-    /// </summary>
-    public virtual ICollection<Permission> Permissions { get; set; } = new List<Permission>();
 }

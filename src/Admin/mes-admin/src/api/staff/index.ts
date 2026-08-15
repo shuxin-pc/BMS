@@ -11,6 +11,7 @@ import type {
   TechnicianStatisticsQuery,
   TechnicianStatisticReport,
   TechnicianStatReport,
+  TechnicianServiceItem,
   TechnicianSource
 } from './types'
 
@@ -24,6 +25,7 @@ export type {
   TechnicianStatisticsQuery,
   TechnicianStatisticReport,
   TechnicianStatReport,
+  TechnicianServiceItem,
   TechnicianSource,
   PagedResponse
 }
@@ -75,10 +77,9 @@ export async function createTechnician(data: TechnicianCreate): Promise<Technici
  * @returns 更新后的技师信息
  */
 export async function updateTechnician(data: TechnicianUpdate): Promise<Technician> {
-  const { id, ...rest } = data
-  return request<Technician>(`/technicians/${id}`, {
+  return request<Technician>(`/technicians/${data.id}`, {
     method: 'PUT',
-    body: JSON.stringify(rest)
+    body: JSON.stringify(data)
   })
 }
 
@@ -99,6 +100,37 @@ export async function deleteTechnicians(ids: number[]): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ ids })
   })
+}
+
+/**
+ * 按服务项目查询可用技师（预约时技能匹配过滤 + 服务项目页展示可服务技师）
+ * 技能匹配：服务项目适用技能与技师技能标签沿技能分类树展开求交集，
+ * 选父级分类时自动匹配其所有子级技能。
+ * @param serviceProductId 服务项目ID（预约页语境，为空时返回指定来源全部启用技师）
+ * @param masterId 商品主档ID（服务项目页语境，自动反查租户内 ServiceProduct）
+ * @param source 技师来源（1:商家 2:平台，可选）
+ * @returns 可用技师列表
+ */
+export async function getTechniciansAvailableByService(
+  serviceProductId?: number,
+  masterId?: number,
+  source?: number
+): Promise<Technician[]> {
+  const qs = buildQuery({
+    serviceProductId: serviceProductId,
+    masterId: masterId,
+    source: source
+  })
+  return request<Technician[]>(`/technicians/available-by-service${qs}`)
+}
+
+/**
+ * 查询技师可服务的服务项目列表（技师页展示擅长项目，双向匹配展示用）
+ * @param id 技师ID
+ * @returns 可服务项目列表
+ */
+export async function getTechnicianServices(id: number): Promise<TechnicianServiceItem[]> {
+  return request<TechnicianServiceItem[]>(`/technicians/${id}/services`)
 }
 
 // ==================== 技师统计 ====================

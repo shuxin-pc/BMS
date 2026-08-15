@@ -25,7 +25,6 @@ public class MonthlyStatUpdateDtoValidator : AbstractValidator<MonthlyStatUpdate
 {
     public MonthlyStatUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new MonthlyStatCreateDtoValidator());
     }
 }

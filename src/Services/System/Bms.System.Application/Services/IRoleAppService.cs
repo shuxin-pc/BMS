@@ -14,5 +14,4 @@ public interface IRoleAppService
     Task<ApiResponseDto> DeleteAsync(long id);
     Task<ApiResponseDto> BatchDeleteAsync(List<long> ids);
     Task<ApiResponseDto<List<Dtos.Menus.MenuDto>>> GetRoleMenusAsync(long roleId);
-    Task<ApiResponseDto> AssignPermissionsAsync(long roleId, List<long> permissionIds);
 }

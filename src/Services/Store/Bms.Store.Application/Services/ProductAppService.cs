@@ -1,21 +1,18 @@
-using Mapster;
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
 using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.Store.Application.Dtos;
 using Bms.Store.Application.Dtos.Products;
 using Bms.Store.Application.Dtos.Suppliers;
-using ProductEntity = Bms.Store.Domain.Entities.Product;
-using ServiceProductEntity = Bms.Store.Domain.Entities.ServiceProduct;
 using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
 
 namespace Bms.Store.Application.Services;
 
 /// <summary>
-/// 商品档案应用服务实现
-/// 商品多态模型：主表 Product 区分类型（Type=1实物/2服务/3耗材/4样品/5赠品）
-/// 仅服务项目（Type=2）有 ServiceProduct 子表存储特有字段
+/// 门店商品档案应用服务（门店隔离，承载分店差异化属性）
+/// Master 字段通过 MasterId 关联 ProductMaster 获取，本服务仅管理 Store 字段
+/// 服务商品子表（ServiceProduct）由 ProductMasterAppService 管理
 /// </summary>
 public class ProductAppService : IProductAppService
 {
@@ -37,41 +34,50 @@ public class ProductAppService : IProductAppService
     }
 
     /// <summary>
-    /// 获取商品分页列表（含子表字段）
+    /// 获取门店商品档案分页列表（Join Master 获取 Master 字段）
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<ProductDto>>> GetPagedListAsync(ProductQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto<PagedResponseDto<ProductDto>>.Fail("无法确定当前租户", 401);
-        }
+            return ApiResponseDto<PagedResponseDto<ProductDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.Products
-            .Include(p => p.Category)
+            .Include(p => p.Master).ThenInclude(m => m.Category)
             .Where(p => !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
 
+        // Name/Code/Type/CategoryId 改为查 Master
         if (!string.IsNullOrWhiteSpace(query.Name))
-        {
-            queryable = queryable.Where(p => p.Name.Contains(query.Name));
-        }
+            queryable = queryable.Where(p => p.Master.Name.Contains(query.Name));
         if (!string.IsNullOrWhiteSpace(query.Code))
-        {
-            queryable = queryable.Where(p => p.Code.Contains(query.Code));
-        }
+            queryable = queryable.Where(p => p.Master.Code.Contains(query.Code));
+        if (query.Type.HasValue)
+            queryable = queryable.Where(p => p.Master.Type == query.Type.Value);
         if (query.CategoryId.HasValue)
         {
-            queryable = queryable.Where(p => p.CategoryId == query.CategoryId.Value);
+            // 选中父级分类时包含其所有子孙分类（分类改租户级，不再按 StoreId 过滤）
+            var targetId = query.CategoryId.Value;
+            var allCategories = await _dbContext.ProductCategories
+                .Where(c => c.TenantId == tenantId && !c.IsDeleted)
+                .Select(c => new { c.Id, c.ParentId })
+                .ToListAsync();
+            var categoryIds = new HashSet<long> { targetId };
+            var queue = new Queue<long>();
+            queue.Enqueue(targetId);
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                foreach (var child in allCategories.Where(c => c.ParentId == current))
+                {
+                    if (categoryIds.Add(child.Id))
+                        queue.Enqueue(child.Id);
+                }
+            }
+            queryable = queryable.Where(p => categoryIds.Contains(p.Master.CategoryId));
         }
         if (query.Status.HasValue)
-        {
             queryable = queryable.Where(p => p.Status == query.Status.Value);
-        }
-        if (query.Type.HasValue)
-        {
-            queryable = queryable.Where(p => p.Type == query.Type.Value);
-        }
 
         var total = await queryable.CountAsync();
         var items = await queryable
@@ -80,162 +86,130 @@ public class ProductAppService : IProductAppService
             .Take(query.PageSize)
             .ToListAsync();
 
-        // 先 Adapt 为 DTO 列表，再批量填充子表字段，避免子表字段丢失
-        var dtoList = items.Adapt<List<ProductDto>>();
+        var dtoList = items.Select(MapToDto).ToList();
         await FillSubTableFieldsAsync(dtoList, tenantId);
 
-        var result = new PagedResponseDto<ProductDto>
+        return ApiResponseDto<PagedResponseDto<ProductDto>>.Ok(new PagedResponseDto<ProductDto>
         {
             List = dtoList,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
-        };
-        return ApiResponseDto<PagedResponseDto<ProductDto>>.Ok(result);
+        });
     }
 
     /// <summary>
-    /// 根据ID获取商品详情（含子表字段）
+    /// 根据ID获取门店商品档案详情（含 Master 字段 + 子表字段）
     /// </summary>
     public async Task<ApiResponseDto<ProductDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto<ProductDto?>.Fail("无法确定当前租户", 401);
-        }
+            return ApiResponseDto<ProductDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
         var product = await _dbContext.Products
-            .Include(p => p.Category)
+            .Include(p => p.Master).ThenInclude(m => m.Category)
             .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
-        {
             return ApiResponseDto<ProductDto?>.Fail("商品不存在", 404);
-        }
 
-        var dto = product.Adapt<ProductDto>();
-        await FillSubTableFieldsForProductAsync(dto, product.Id, tenantId);
+        var dto = MapToDto(product);
+        await FillSubTableFieldsForProductAsync(dto, product.MasterId, tenantId);
         return ApiResponseDto<ProductDto?>.Ok(dto);
     }
 
     /// <summary>
-    /// 创建商品（同时创建对应子表记录）
+    /// 创建门店商品档案（基于已有 Master，仅 Store 字段）
+    /// 业务约定：先建 Master，再建门店档案（设计文档 6.1 节）
     /// </summary>
     public async Task<ApiResponseDto<ProductDto>> CreateAsync(ProductCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto<ProductDto>.Fail("无法确定当前租户", 401);
-        }
-
+            return ApiResponseDto<ProductDto>.Fail("登录状态异常，请重新登录", 401);
         if (!_currentUser.StoreId.HasValue)
-        {
             return ApiResponseDto<ProductDto>.Fail("无法确定当前门店", 401);
-        }
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
-        {
             return ApiResponseDto<ProductDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
-        }
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
-        var codeExists = await _dbContext.Products
-            .AnyAsync(p => p.Code == dto.Code && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted);
-        if (codeExists)
+
+        // 校验 Master 存在
+        var master = await _dbContext.ProductMasters
+            .FirstOrDefaultAsync(m => m.Id == dto.MasterId && !m.IsDeleted && m.TenantId == tenantId);
+        if (master == null)
+            return ApiResponseDto<ProductDto>.Fail("商品主档不存在，请先创建主档", 404);
+
+        // 校验同一门店同一 Master 不重复（唯一约束 TenantId+StoreId+MasterId）
+        var exists = await _dbContext.Products
+            .AnyAsync(p => p.MasterId == dto.MasterId && p.TenantId == tenantId
+                && p.StoreId == storeId && !p.IsDeleted);
+        if (exists)
+            return ApiResponseDto<ProductDto>.Fail("该门店已存在此商品档案", 400);
+
+        var product = new Product
         {
-            return ApiResponseDto<ProductDto>.Fail($"商品编码 {dto.Code} 已存在", 400);
-        }
-
-        var product = dto.Adapt<ProductEntity>();
-        product.TenantId = tenantId;
-        product.TenantCode = _currentUser.TenantCode ?? string.Empty;
-        product.StoreId = storeId;
-        product.StoreCode = _currentUser.StoreCode ?? string.Empty;
-        product.CreatedTime = DateTime.Now;
-        // 样品/赠品（Type=4/5）强制不可销售，其他类型默认可销售（B6.1 "不可销售"标识）
-        product.IsSalable = dto.Type != 4 && dto.Type != 5;
-
+            MasterId = dto.MasterId,
+            Price = dto.Price,
+            CostPrice = dto.CostPrice,
+            LowStockThreshold = dto.LowStockThreshold,
+            ExpiryAlertDays = dto.ExpiryAlertDays,
+            OverstockThreshold = dto.OverstockThreshold,
+            Status = dto.Status,
+            Remark = dto.Remark,
+            TenantId = tenantId,
+            TenantCode = _currentUser.TenantCode ?? string.Empty,
+            StoreId = storeId,
+            StoreCode = _currentUser.StoreCode ?? string.Empty,
+            CreatedTime = DateTime.Now
+        };
         _dbContext.Products.Add(product);
         await _dbContext.SaveChangesAsync();
 
-        // 重新加载导航属性以获取 CategoryName
-        await _dbContext.Entry(product).Reference(p => p.Category).LoadAsync();
+        // 重新加载 Master + Category
+        await _dbContext.Entry(product).Reference(p => p.Master).LoadAsync();
+        await _dbContext.Entry(product.Master).Reference(m => m.Category).LoadAsync();
 
-        // 根据类型创建子表记录
-        await CreateSubTableAsync(dto, product.Id, tenantId);
-
-        var dtoResult = product.Adapt<ProductDto>();
-        await FillSubTableFieldsForProductAsync(dtoResult, product.Id, tenantId);
+        var dtoResult = MapToDto(product);
+        await FillSubTableFieldsForProductAsync(dtoResult, product.MasterId, tenantId);
         return ApiResponseDto<ProductDto>.Ok(dtoResult, "创建成功");
     }
 
     /// <summary>
-    /// 更新商品（同时更新对应子表记录，处理类型变更）
+    /// 更新门店商品档案（仅 Store 字段，Master 字段由 ProductMasterAppService 管理）
     /// </summary>
     public async Task<ApiResponseDto<ProductDto>> UpdateAsync(ProductUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto<ProductDto>.Fail("无法确定当前租户", 401);
-        }
+            return ApiResponseDto<ProductDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
-        {
             return ApiResponseDto<ProductDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
-        }
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
         var product = await _dbContext.Products
-            .Include(p => p.Category)
+            .Include(p => p.Master).ThenInclude(m => m.Category)
             .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
-        {
             return ApiResponseDto<ProductDto>.Fail("商品不存在", 404);
-        }
 
-        // 编码变更时检查唯一性
-        if (product.Code != dto.Code)
-        {
-            var codeExists = await _dbContext.Products
-                .AnyAsync(p => p.Code == dto.Code && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted && p.Id != dto.Id);
-            if (codeExists)
-            {
-                return ApiResponseDto<ProductDto>.Fail($"商品编码 {dto.Code} 已存在", 400);
-            }
-        }
-
-        // 记录原始类型，用于判断是否需要清理旧子表
-        var oldType = product.Type;
-        // 记录原始价格，用于价格变更日志
         var oldPrice = product.Price;
-
-        // 手动更新主表字段（避免覆盖审计字段）
-        // 注意：SupplierId 不再由商品编辑维护，仅由 SupplierAppService 的 Bind/Unbind/SetDefault 维护，确保双写一致
-        product.Name = dto.Name;
-        product.Code = dto.Code;
-        product.CategoryId = dto.CategoryId;
-        product.Type = dto.Type;
-        product.Specification = dto.Spec;
-        product.Unit = dto.Unit;
-        product.Brand = dto.Brand;
+        // 仅更新 Store 字段
         product.Price = dto.Price;
         product.CostPrice = dto.CostPrice;
         product.LowStockThreshold = dto.LowStockThreshold;
         product.ExpiryAlertDays = dto.ExpiryAlertDays;
         product.OverstockThreshold = dto.OverstockThreshold;
-        product.ImageUrl = dto.ImageUrl;
         product.Status = dto.Status;
-        product.Remark = dto.Description;
-        // 样品/赠品（Type=4/5）强制不可销售，与类型保持一致（B6.1 "不可销售"标识）
-        product.IsSalable = dto.Type != 4 && dto.Type != 5;
+        product.Remark = dto.Remark;
         product.UpdatedTime = DateTime.Now;
 
-        // 价格变更时自动记录 PriceChangeLog（G2.5）
+        // 价格变更记录（G2.5）
         if (oldPrice != dto.Price)
         {
             _dbContext.PriceChangeLogs.Add(new PriceChangeLog
@@ -245,6 +219,7 @@ public class ProductAppService : IProductAppService
                 NewPrice = dto.Price,
                 ChangeTime = DateTime.Now,
                 OperatorId = _currentUser.UserId,
+                OperatorName = _currentUser.RealName ?? _currentUser.UserName,
                 Remark = "商品编辑自动记录",
                 TenantId = tenantId,
                 CreatedTime = DateTime.Now
@@ -253,66 +228,50 @@ public class ProductAppService : IProductAppService
 
         await _dbContext.SaveChangesAsync();
 
-        // 类型变更时清理旧子表，再创建新子表；类型不变时更新现有子表
-        if (oldType != dto.Type)
-        {
-            await DeleteSubTableAsync(oldType, dto.Id, tenantId);
-            await CreateSubTableAsync(dto, dto.Id, tenantId);
-        }
-        else
-        {
-            await UpdateSubTableAsync(dto, dto.Id, tenantId);
-        }
-
-        var dtoResult = product.Adapt<ProductDto>();
-        await FillSubTableFieldsForProductAsync(dtoResult, dto.Id, tenantId);
+        var dtoResult = MapToDto(product);
+        await FillSubTableFieldsForProductAsync(dtoResult, product.MasterId, tenantId);
         return ApiResponseDto<ProductDto>.Ok(dtoResult, "更新成功");
     }
 
     /// <summary>
-    /// 删除商品（软删除，同时软删除子表）
+    /// 删除门店商品档案（软删除）
+    /// 设计文档 8.3 节：Inventory.Quantity > 0 禁止删除，需先清空库存
     /// </summary>
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
-        }
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
         var product = await _dbContext.Products
             .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
-        {
             return ApiResponseDto.Fail("商品不存在", 404);
-        }
+
+        // 库存检查：有库存禁止删除（设计文档 8.3 节）
+        var hasStock = await _dbContext.Inventories
+            .AnyAsync(inv => inv.ProductId == id && inv.TenantId == tenantId && inv.StoreId == storeId && inv.Quantity > 0);
+        if (hasStock)
+            return ApiResponseDto.Fail("该商品仍有库存，请先清空后再删除", 400);
 
         product.IsDeleted = true;
         product.UpdatedTime = DateTime.Now;
-
-        // 软删除子表
-        await SoftDeleteSubTableAsync(product.Type, id, tenantId);
-
         await _dbContext.SaveChangesAsync();
-
         return ApiResponseDto.Success(null, "删除成功");
     }
 
     /// <summary>
-    /// 批量删除商品（软删除，同时软删除子表）
+    /// 批量删除门店商品档案（软删除）
+    /// 设计文档 8.3 节：有库存的商品跳过并提示
     /// </summary>
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
-        }
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         if (ids == null || !ids.Any())
-        {
             return ApiResponseDto.Fail("请选择要删除的商品", 400);
-        }
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
@@ -320,16 +279,30 @@ public class ProductAppService : IProductAppService
             .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId)
             .ToListAsync();
 
-        foreach (var product in products)
+        // 批量查询有库存的商品 ID（设计文档 8.3 节：有库存禁止删除）
+        var productIds = products.Select(p => p.Id).ToList();
+        var inStockIds = await _dbContext.Inventories
+            .Where(inv => productIds.Contains(inv.ProductId) && inv.TenantId == tenantId && inv.StoreId == storeId && inv.Quantity > 0)
+            .Select(inv => inv.ProductId)
+            .ToListAsync();
+        var inStockSet = inStockIds.ToHashSet();
+
+        var deletable = products.Where(p => !inStockSet.Contains(p.Id)).ToList();
+        var skipped = products.Count - deletable.Count;
+
+        foreach (var product in deletable)
         {
             product.IsDeleted = true;
             product.UpdatedTime = DateTime.Now;
-            await SoftDeleteSubTableAsync(product.Type, product.Id, tenantId);
         }
 
         await _dbContext.SaveChangesAsync();
 
-        return ApiResponseDto.Success(null, $"成功删除 {products.Count} 个商品");
+        var message = $"成功删除 {deletable.Count} 个商品";
+        if (skipped > 0)
+            message += $"，跳过 {skipped} 个仍有库存的商品（请先清空库存）";
+
+        return ApiResponseDto.Success(null, message);
     }
 
     // ========== 品项-供应商关联（G2.6.2）==========
@@ -340,18 +313,14 @@ public class ProductAppService : IProductAppService
     public async Task<ApiResponseDto<List<ProductSupplierDto>>> GetSuppliersByProductAsync(long productId)
     {
         if (!_currentUser.TenantId.HasValue)
-        {
-            return ApiResponseDto<List<ProductSupplierDto>>.Fail("无法确定当前租户", 401);
-        }
+            return ApiResponseDto<List<ProductSupplierDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
         var productExists = await _dbContext.Products
             .AnyAsync(p => p.Id == productId && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (!productExists)
-        {
             return ApiResponseDto<List<ProductSupplierDto>>.Fail("商品不存在", 404);
-        }
 
         var relations = await _dbContext.ProductSuppliers
             .Where(ps => ps.ProductId == productId && ps.TenantId == tenantId && ps.StoreId == storeId)
@@ -359,14 +328,13 @@ public class ProductAppService : IProductAppService
             .ThenByDescending(ps => ps.CreatedTime)
             .ToListAsync();
         if (!relations.Any())
-        {
             return ApiResponseDto<List<ProductSupplierDto>>.Ok(new List<ProductSupplierDto>());
-        }
 
         var supplierIds = relations.Select(ps => ps.SupplierId).ToList();
-        // 过滤已软删除供应商，避免展示无效关联；按租户隔离查询
+        // 过滤已软删除供应商，避免展示无效关联；含门店通用（Scope=1）和本门店私用（Scope=2）
         var suppliersInfo = await _dbContext.Suppliers
-            .Where(s => supplierIds.Contains(s.Id) && s.TenantId == tenantId && s.StoreId == storeId && !s.IsDeleted)
+            .Where(s => supplierIds.Contains(s.Id) && s.TenantId == tenantId && !s.IsDeleted
+                && (s.Scope == 1 || s.StoreId == storeId))
             .Select(s => new { s.Id, s.Code, s.Name })
             .ToListAsync();
 
@@ -391,94 +359,88 @@ public class ProductAppService : IProductAppService
     }
 
     /// <summary>
-    /// 获取商品轻量选项列表（不分页，仅返回 Id/Name/Code/Unit）
-    /// 仅按 TenantId + StoreId 过滤，排除已软删除商品
+    /// 获取门店商品轻量选项列表（Join Master 获取 Name/Code/Unit）
     /// </summary>
     public async Task<ApiResponseDto<List<ProductOptionDto>>> GetOptionsAsync()
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<ProductOptionDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<ProductOptionDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
 
         var options = await _dbContext.Products
             .Where(p => !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId)
-            .OrderBy(p => p.Name)
-            .Select(p => new ProductOptionDto
-            {
-                Id = p.Id,
-                Name = p.Name,
-                Code = p.Code,
-                Unit = p.Unit
-            })
+            .Join(_dbContext.ProductMasters,
+                p => p.MasterId,
+                m => m.Id,
+                (p, m) => new ProductOptionDto
+                {
+                    Id = p.Id,
+                    Name = m.Name,
+                    Code = m.Code,
+                    Unit = m.Unit,
+                    Type = m.Type
+                })
+            .OrderBy(x => x.Name)
             .ToListAsync();
 
         return ApiResponseDto<List<ProductOptionDto>>.Ok(options);
     }
 
-    // ========== 子表辅助方法 ==========
+    // ========== 辅助方法 ==========
 
     /// <summary>
-    /// 批量填充子表字段到商品 DTO 列表
-    /// 包括：服务项目子表字段、默认供应商（从 ProductSupplier.IsDefault=true 派生）
+    /// 将 Product 实体映射为 ProductDto（Master 字段从 Master 导航填充）
+    /// </summary>
+    private static ProductDto MapToDto(Product product)
+    {
+        return new ProductDto
+        {
+            Id = product.Id,
+            MasterId = product.MasterId,
+            // Master 字段
+            Name = product.Master?.Name ?? string.Empty,
+            Code = product.Master?.Code ?? string.Empty,
+            Type = product.Master?.Type ?? 0,
+            CategoryId = product.Master?.CategoryId ?? 0,
+            CategoryName = product.Master?.Category?.Name,
+            Unit = product.Master?.Unit,
+            Spec = product.Master?.Specification,
+            Brand = product.Master?.Brand,
+            ImageUrl = product.Master?.ImageUrl,
+            IsSalable = product.Master?.IsSalable ?? true,
+            // Store 字段
+            Price = product.Price,
+            CostPrice = product.CostPrice,
+            LastPurchasePrice = product.LastPurchasePrice,
+            LowStockThreshold = product.LowStockThreshold,
+            ExpiryAlertDays = product.ExpiryAlertDays,
+            OverstockThreshold = product.OverstockThreshold,
+            Status = product.Status,
+            Remark = product.Remark,
+            CreatedAt = product.CreatedTime,
+            UpdatedAt = product.UpdatedTime
+        };
+    }
+
+    /// <summary>
+    /// 批量填充子表字段：默认供应商 + 服务项目子表（从 Master.ServiceProduct 获取）
     /// </summary>
     private async Task FillSubTableFieldsAsync(List<ProductDto> dtos, long tenantId)
     {
         if (!dtos.Any()) return;
 
-        // 按类型分组，批量查询子表数据，避免 N+1 查询
-        var type2Ids = dtos.Where(d => d.Type == 2).Select(d => d.Id).ToList();
-
-        if (type2Ids.Any())
-        {
-            var services = await _dbContext.ServiceProducts
-                .Where(p => type2Ids.Contains(p.ProductId) && !p.IsDeleted && p.TenantId == tenantId)
-                .ToListAsync();
-            var serviceDict = services.ToDictionary(p => p.ProductId);
-            var serviceIds = services.Select(s => s.Id).ToList();
-
-            // 批量查询所需设备类型关联 + 设备类型名称
-            var equipmentTypes = await _dbContext.ServiceProductEquipments
-                .Where(r => serviceIds.Contains(r.ServiceProductId) && !r.IsDeleted)
-                .Join(_dbContext.EquipmentTypes,
-                    r => r.EquipmentTypeId,
-                    e => e.Id,
-                    (r, e) => new { r.ServiceProductId, EquipmentTypeId = r.EquipmentTypeId, EquipmentTypeName = e.Name })
-                .ToListAsync();
-
-            var equipmentTypesByService = equipmentTypes.GroupBy(x => x.ServiceProductId)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            foreach (var dto in dtos.Where(d => d.Type == 2))
-            {
-                if (serviceDict.TryGetValue(dto.Id, out var s))
-                {
-                    dto.Duration = s.Duration;
-                    dto.RequiredRoomType = s.RequiredRoomType;
-                    dto.ApplicableSkills = s.ApplicableSkills;
-
-                    if (equipmentTypesByService.TryGetValue(s.Id, out var list))
-                    {
-                        dto.EquipmentTypeIds = list.Select(x => x.EquipmentTypeId).ToList();
-                        dto.EquipmentTypeNames = list.Select(x => x.EquipmentTypeName).ToList();
-                    }
-                }
-            }
-        }
-
         // 批量填充默认供应商（从 ProductSupplier.IsDefault=true 派生）
         var productIds = dtos.Select(d => d.Id).ToList();
         var defaultRelations = await _dbContext.ProductSuppliers
-            .Where(ps => productIds.Contains(ps.ProductId) && ps.IsDefault
-                && ps.TenantId == tenantId)
+            .Where(ps => productIds.Contains(ps.ProductId) && ps.IsDefault && ps.TenantId == tenantId)
             .ToListAsync();
         if (defaultRelations.Any())
         {
             var defaultSupplierIds = defaultRelations.Select(ps => ps.SupplierId).Distinct().ToList();
             var suppliersInfo = await _dbContext.Suppliers
-                .Where(s => defaultSupplierIds.Contains(s.Id) && !s.IsDeleted
-                    && s.TenantId == tenantId)
+                .Where(s => defaultSupplierIds.Contains(s.Id) && !s.IsDeleted && s.TenantId == tenantId)
                 .Select(s => new { s.Id, s.Name })
                 .ToListAsync();
             var supplierDict = suppliersInfo.ToDictionary(s => s.Id);
@@ -493,42 +455,67 @@ public class ProductAppService : IProductAppService
                 }
             }
         }
+
+        // 批量填充服务子表字段（Type=2，从 Master.ServiceProduct 获取）
+        var type2MasterIds = dtos.Where(d => d.Type == 2).Select(d => d.MasterId).Distinct().ToList();
+        if (!type2MasterIds.Any()) return;
+
+        var services = await _dbContext.ServiceProducts
+            .Where(s => type2MasterIds.Contains(s.MasterId) && !s.IsDeleted && s.TenantId == tenantId)
+            .ToListAsync();
+        var serviceDict = services.ToDictionary(s => s.MasterId);
+        var serviceIds = services.Select(s => s.Id).ToList();
+
+        var equipmentTypes = await _dbContext.ServiceProductEquipments
+            .Where(r => serviceIds.Contains(r.ServiceProductId))
+            .Join(_dbContext.EquipmentTypes,
+                r => r.EquipmentTypeId,
+                e => e.Id,
+                (r, e) => new { r.ServiceProductId, EquipmentTypeId = r.EquipmentTypeId, EquipmentTypeName = e.Name })
+            .ToListAsync();
+        var equipmentByService = equipmentTypes.GroupBy(x => x.ServiceProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // 适用技能关联（门店语境：仅当前门店的配置）
+        var storeId = _currentUser.StoreId ?? 0;
+        var skillRelations = await _dbContext.ServiceProductSkills
+            .Where(r => serviceIds.Contains(r.ServiceProductId) && r.StoreId == storeId)
+            .Join(_dbContext.SkillCategories,
+                r => r.SkillCategoryId,
+                c => c.Id,
+                (r, c) => new { r.ServiceProductId, SkillCategoryId = r.SkillCategoryId, SkillCategoryName = c.Name })
+            .ToListAsync();
+        var skillByService = skillRelations.GroupBy(x => x.ServiceProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var dto in dtos.Where(d => d.Type == 2))
+        {
+            if (serviceDict.TryGetValue(dto.MasterId, out var s))
+            {
+                dto.Duration = s.Duration;
+                dto.RequiredRoomType = s.RequiredRoomType;
+                if (equipmentByService.TryGetValue(s.Id, out var list))
+                {
+                    dto.EquipmentTypeIds = list.Select(x => x.EquipmentTypeId).ToList();
+                    dto.EquipmentTypeNames = list.Select(x => x.EquipmentTypeName).ToList();
+                }
+                if (skillByService.TryGetValue(s.Id, out var skillList))
+                {
+                    dto.SkillCategoryIds = skillList.Select(x => x.SkillCategoryId).ToList();
+                    dto.SkillCategoryNames = skillList.Select(x => x.SkillCategoryName).ToList();
+                }
+            }
+        }
     }
 
     /// <summary>
-    /// 填充单个商品的子表字段
-    /// 包括：服务项目子表字段、默认供应商（从 ProductSupplier.IsDefault=true 派生）
+    /// 填充单个商品的子表字段：默认供应商 + 服务项目子表
     /// </summary>
-    private async Task FillSubTableFieldsForProductAsync(ProductDto dto, long productId, long tenantId)
+    private async Task FillSubTableFieldsForProductAsync(ProductDto dto, long masterId, long tenantId)
     {
-        switch (dto.Type)
-        {
-            case 2: // 服务项目
-                var service = await _dbContext.ServiceProducts
-                    .FirstOrDefaultAsync(p => p.ProductId == productId && !p.IsDeleted && p.TenantId == tenantId);
-                if (service != null)
-                {
-                    dto.Duration = service.Duration;
-                    dto.RequiredRoomType = service.RequiredRoomType;
-                    dto.ApplicableSkills = service.ApplicableSkills;
-
-                    // 查询所需设备类型关联 + 设备类型名称
-                    var equipmentTypes = await _dbContext.ServiceProductEquipments
-                        .Where(r => r.ServiceProductId == service.Id && !r.IsDeleted)
-                        .Join(_dbContext.EquipmentTypes,
-                            r => r.EquipmentTypeId,
-                            e => e.Id,
-                            (r, e) => new { EquipmentTypeId = r.EquipmentTypeId, EquipmentTypeName = e.Name })
-                        .ToListAsync();
-                    dto.EquipmentTypeIds = equipmentTypes.Select(x => x.EquipmentTypeId).ToList();
-                    dto.EquipmentTypeNames = equipmentTypes.Select(x => x.EquipmentTypeName).ToList();
-                }
-                break;
-        }
-
-        // 填充默认供应商（从 ProductSupplier.IsDefault=true 派生）
+        // 填充默认供应商
         var defaultRelation = await _dbContext.ProductSuppliers
-            .Where(ps => ps.ProductId == productId && ps.IsDefault && ps.TenantId == tenantId)
+            .Where(ps => ps.ProductId == dto.Id && ps.IsDefault && ps.TenantId == tenantId)
             .FirstOrDefaultAsync();
         if (defaultRelation != null)
         {
@@ -539,167 +526,37 @@ public class ProductAppService : IProductAppService
                 .FirstOrDefaultAsync();
             dto.DefaultSupplierName = supplierInfo?.Name;
         }
-    }
 
-    /// <summary>
-    /// 根据商品类型创建子表记录
-    /// </summary>
-    private async Task CreateSubTableAsync(ProductCreateDto dto, long productId, long tenantId)
-    {
-        var tenantCode = _currentUser.TenantCode ?? string.Empty;
+        // 服务子表字段（Type=2）
+        if (dto.Type != 2) return;
+
+        var service = await _dbContext.ServiceProducts
+            .FirstOrDefaultAsync(s => s.MasterId == masterId && !s.IsDeleted && s.TenantId == tenantId);
+        if (service == null) return;
+
+        dto.Duration = service.Duration;
+        dto.RequiredRoomType = service.RequiredRoomType;
+
+        var equipmentTypes = await _dbContext.ServiceProductEquipments
+            .Where(r => r.ServiceProductId == service.Id)
+            .Join(_dbContext.EquipmentTypes,
+                r => r.EquipmentTypeId,
+                e => e.Id,
+                (r, e) => new { EquipmentTypeId = r.EquipmentTypeId, EquipmentTypeName = e.Name })
+            .ToListAsync();
+        dto.EquipmentTypeIds = equipmentTypes.Select(x => x.EquipmentTypeId).ToList();
+        dto.EquipmentTypeNames = equipmentTypes.Select(x => x.EquipmentTypeName).ToList();
+
+        // 适用技能关联（门店语境：仅当前门店的配置）
         var storeId = _currentUser.StoreId ?? 0;
-        var storeCode = _currentUser.StoreCode ?? string.Empty;
-        switch (dto.Type)
-        {
-            case 2: // 服务项目
-                var service = new ServiceProductEntity
-                {
-                    ProductId = productId,
-                    Duration = dto.Duration,
-                    RequiredRoomType = dto.RequiredRoomType,
-                    ApplicableSkills = dto.ApplicableSkills,
-                    TenantId = tenantId,
-                    TenantCode = tenantCode,
-                    StoreId = storeId,
-                    StoreCode = storeCode,
-                    CreatedTime = DateTime.Now
-                };
-                _dbContext.ServiceProducts.Add(service);
-                await _dbContext.SaveChangesAsync();
-
-                // 级联创建所需设备类型关联
-                if (dto.EquipmentTypeIds != null && dto.EquipmentTypeIds.Any())
-                {
-                    foreach (var equipmentTypeId in dto.EquipmentTypeIds.Distinct())
-                    {
-                        _dbContext.ServiceProductEquipments.Add(new ServiceProductEquipment
-                        {
-                            ServiceProductId = service.Id,
-                            EquipmentTypeId = equipmentTypeId,
-                            TenantId = tenantId,
-                            TenantCode = tenantCode,
-                            StoreId = storeId,
-                            StoreCode = storeCode,
-                            CreatedTime = DateTime.Now
-                        });
-                    }
-                    await _dbContext.SaveChangesAsync();
-                }
-                break;
-        }
-    }
-
-    /// <summary>
-    /// 根据商品类型更新子表记录（类型不变场景）
-    /// </summary>
-    private async Task UpdateSubTableAsync(ProductCreateDto dto, long productId, long tenantId)
-    {
-        switch (dto.Type)
-        {
-            case 2: // 服务项目
-                var service = await _dbContext.ServiceProducts
-                    .FirstOrDefaultAsync(p => p.ProductId == productId && !p.IsDeleted && p.TenantId == tenantId);
-                if (service != null)
-                {
-                    service.Duration = dto.Duration;
-                    service.RequiredRoomType = dto.RequiredRoomType;
-                    service.ApplicableSkills = dto.ApplicableSkills;
-                    service.UpdatedTime = DateTime.Now;
-
-                    // 替换所需设备类型关联：软删除旧记录 + 创建新记录
-                    var oldRelations = await _dbContext.ServiceProductEquipments
-                        .Where(r => r.ServiceProductId == service.Id && !r.IsDeleted)
-                        .ToListAsync();
-                    foreach (var old in oldRelations)
-                    {
-                        old.IsDeleted = true;
-                        old.UpdatedTime = DateTime.Now;
-                    }
-
-                    if (dto.EquipmentTypeIds != null && dto.EquipmentTypeIds.Any())
-                    {
-                        var tenantCode = _currentUser.TenantCode ?? string.Empty;
-                        var storeId = _currentUser.StoreId ?? 0;
-                        var storeCode = _currentUser.StoreCode ?? string.Empty;
-                        foreach (var equipmentTypeId in dto.EquipmentTypeIds.Distinct())
-                        {
-                            _dbContext.ServiceProductEquipments.Add(new ServiceProductEquipment
-                            {
-                                ServiceProductId = service.Id,
-                                EquipmentTypeId = equipmentTypeId,
-                                TenantId = tenantId,
-                                TenantCode = tenantCode,
-                                StoreId = storeId,
-                                StoreCode = storeCode,
-                                CreatedTime = DateTime.Now
-                            });
-                        }
-                    }
-                }
-                else
-                {
-                    await CreateSubTableAsync(dto, productId, tenantId);
-                }
-                break;
-        }
-        await _dbContext.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// 根据旧的商品类型软删除子表记录（类型变更场景）
-    /// </summary>
-    private async Task DeleteSubTableAsync(int oldType, long productId, long tenantId)
-    {
-        switch (oldType)
-        {
-            case 2: // 服务项目
-                var service = await _dbContext.ServiceProducts
-                    .FirstOrDefaultAsync(p => p.ProductId == productId && !p.IsDeleted && p.TenantId == tenantId);
-                if (service != null)
-                {
-                    service.IsDeleted = true;
-                    service.UpdatedTime = DateTime.Now;
-
-                    // 级联软删除所需设备类型关联
-                    var relations = await _dbContext.ServiceProductEquipments
-                        .Where(r => r.ServiceProductId == service.Id && !r.IsDeleted)
-                        .ToListAsync();
-                    foreach (var r in relations)
-                    {
-                        r.IsDeleted = true;
-                        r.UpdatedTime = DateTime.Now;
-                    }
-                }
-                break;
-        }
-        await _dbContext.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// 软删除子表记录（删除商品时调用）
-    /// </summary>
-    private async Task SoftDeleteSubTableAsync(int type, long productId, long tenantId)
-    {
-        switch (type)
-        {
-            case 2:
-                var service = await _dbContext.ServiceProducts
-                    .FirstOrDefaultAsync(p => p.ProductId == productId && !p.IsDeleted && p.TenantId == tenantId);
-                if (service != null)
-                {
-                    service.IsDeleted = true;
-                    service.UpdatedTime = DateTime.Now;
-
-                    var relations = await _dbContext.ServiceProductEquipments
-                        .Where(r => r.ServiceProductId == service.Id && !r.IsDeleted)
-                        .ToListAsync();
-                    foreach (var r in relations)
-                    {
-                        r.IsDeleted = true;
-                        r.UpdatedTime = DateTime.Now;
-                    }
-                }
-                break;
-        }
+        var skillRelations = await _dbContext.ServiceProductSkills
+            .Where(r => r.ServiceProductId == service.Id && r.StoreId == storeId)
+            .Join(_dbContext.SkillCategories,
+                r => r.SkillCategoryId,
+                c => c.Id,
+                (r, c) => new { SkillCategoryId = r.SkillCategoryId, SkillCategoryName = c.Name })
+            .ToListAsync();
+        dto.SkillCategoryIds = skillRelations.Select(x => x.SkillCategoryId).ToList();
+        dto.SkillCategoryNames = skillRelations.Select(x => x.SkillCategoryName).ToList();
     }
 }

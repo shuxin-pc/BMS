@@ -30,7 +30,6 @@ public class RoomUpdateDtoValidator : AbstractValidator<RoomUpdateDto>
 {
     public RoomUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new RoomCreateDtoValidator());
     }
 }

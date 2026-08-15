@@ -20,10 +20,10 @@ export interface PriceChangeLog {
   id: number
   /** 商品ID */
   productId: number
-  /** 商品名称 */
-  productName: string
-  /** 商品编码 */
-  productCode: string
+  /** 商品名称（关联 Master 查询填充） */
+  productName?: string
+  /** 商品编码（关联 Master 查询填充） */
+  productCode?: string
   /** 原价格 */
   oldPrice: number
   /** 新价格 */

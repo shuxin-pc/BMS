@@ -7,7 +7,10 @@ using Bms.System.Domain.Interfaces;
 namespace Bms.System.Infrastructure.SeedData;
 
 /// <summary>
-/// 系统种子数据
+/// 系统种子数据（代码动态生成路径）
+/// <para>与 TestSeedData 目录下的 JSON 是两条独立路径：本类在全新库（Users 表为空）时用雪花 Id 动态生成菜单/角色/用户；</para>
+/// <para>而 SeedTestData:Enabled=true 时会 TRUNCATE 后从 JSON 加载并覆盖。修改菜单权限前先确认当前环境走哪条路径，</para>
+/// <para>TestSeedData JSON 的 Id 修改规则见同目录 TestSeedData.cs 类注释。</para>
 /// </summary>
 public static class SystemSeedData
 {
@@ -70,6 +73,18 @@ public static class SystemSeedData
             CreatedTime = DateTime.Now
         };
         context.DataPermissions.Add(tenantAdminDataPermission);
+
+        // 为超级管理员角色创建默认数据权限（全部数据）
+        // 修复 H7 隐患：super_admin 角色也必须存在 DataPermission 记录，
+        // 否则 DataPermissionFilter 会将"无记录"视为 Self，导致 CurrentUserPermissionContext.DataScope 计算错误
+        var superAdminDataPermission = new DataPermission
+        {
+            RoleId = superAdminRoleId,
+            DataScopeType = (int)DataScopeType.All, // 全部数据
+            CustomOrganizationIds = null,
+            CreatedTime = DateTime.Now
+        };
+        context.DataPermissions.Add(superAdminDataPermission);
 
         // 创建超级管理员用户（属于平台租户）
         var adminUserId = idGenerator.NewId();
@@ -311,6 +326,146 @@ public static class SystemSeedData
             superAdminMenuIds.Add(buttonId);
 
             existingButtonCodes.Add(buttonCode);
+            hasChanges = true;
+        }
+
+        if (hasChanges)
+        {
+            context.SaveChanges();
+        }
+    }
+
+    /// <summary>
+    /// 为超级管理员授权商品主档相关菜单（商品主档分离改造新增）
+    /// 授权范围：商品主档页面菜单 + 编辑主档按钮 + 编辑档案按钮
+    /// 页面查看按钮（:view）由 EnsurePageViewButtons 自动创建并授权，此处不重复
+    /// 幂等，可安全重复调用，用于已有数据库的增量补全
+    /// </summary>
+    public static void EnsureProductMasterMenuAuths(SystemDbContext context)
+    {
+        var superAdminRole = context.Roles.FirstOrDefault(r => r.Code == "super_admin" && !r.IsDeleted);
+        if (superAdminRole == null)
+        {
+            return;
+        }
+
+        // 目标菜单 Code（不含 :view 按钮，由 EnsurePageViewButtons 处理）
+        var targetCodes = new[]
+        {
+            "store:product:master",
+            "store:product:master:edit",
+            "store:product:profile:edit"
+        };
+
+        var menus = context.Menus
+            .Where(m => targetCodes.Contains(m.Code) && !m.IsDeleted)
+            .ToList();
+        if (menus.Count == 0)
+        {
+            return;
+        }
+
+        var existingMenuIds = context.RoleMenuAuths
+            .Where(rma => rma.RoleId == superAdminRole.Id)
+            .Select(rma => rma.MenuId)
+            .ToHashSet();
+
+        // 查询菜单所属子系统映射
+        var menuIds = menus.Select(m => m.Id).ToList();
+        var subsystemMap = context.SubsystemMenus
+            .Where(sm => menuIds.Contains(sm.MenuId))
+            .ToDictionary(sm => sm.MenuId, sm => sm.SubsystemId);
+
+        var now = DateTime.Now;
+        var hasChanges = false;
+
+        foreach (var menu in menus)
+        {
+            if (existingMenuIds.Contains(menu.Id))
+            {
+                continue;
+            }
+
+            subsystemMap.TryGetValue(menu.Id, out var subsystemId);
+
+            context.RoleMenuAuths.Add(new RoleMenuAuth
+            {
+                RoleId = superAdminRole.Id,
+                MenuId = menu.Id,
+                SubsystemId = subsystemId,
+                CreatedTime = now
+            });
+            hasChanges = true;
+        }
+
+        if (hasChanges)
+        {
+            context.SaveChanges();
+        }
+    }
+
+    /// <summary>
+    /// 为超级管理员授权服务档案相关菜单（4 页面整合改造新增）
+    /// 授权范围：服务档案页面菜单 + 4 个选项卡查看按钮
+    /// 页面查看按钮（:view）由 EnsurePageViewButtons 自动创建并授权，此处不重复
+    /// 幂等，可安全重复调用，用于已有数据库的增量补全
+    /// </summary>
+    public static void EnsureCustomerArchiveMenuAuths(SystemDbContext context)
+    {
+        var superAdminRole = context.Roles.FirstOrDefault(r => r.Code == "super_admin" && !r.IsDeleted);
+        if (superAdminRole == null)
+        {
+            return;
+        }
+
+        // 目标菜单 Code（不含 :view 按钮，由 EnsurePageViewButtons 处理）
+        var targetCodes = new[]
+        {
+            "store:customer:archive",
+            "store:customer:archive:beauty",
+            "store:customer:archive:body-data",
+            "store:customer:archive:reaction",
+            "store:customer:archive:photo"
+        };
+
+        var menus = context.Menus
+            .Where(m => targetCodes.Contains(m.Code) && !m.IsDeleted)
+            .ToList();
+        if (menus.Count == 0)
+        {
+            return;
+        }
+
+        var existingMenuIds = context.RoleMenuAuths
+            .Where(rma => rma.RoleId == superAdminRole.Id)
+            .Select(rma => rma.MenuId)
+            .ToHashSet();
+
+        // 查询菜单所属子系统映射
+        var menuIds = menus.Select(m => m.Id).ToList();
+        var subsystemMap = context.SubsystemMenus
+            .Where(sm => menuIds.Contains(sm.MenuId))
+            .ToDictionary(sm => sm.MenuId, sm => sm.SubsystemId);
+
+        var now = DateTime.Now;
+        var hasChanges = false;
+
+        foreach (var menu in menus)
+        {
+            if (existingMenuIds.Contains(menu.Id))
+            {
+                continue;
+            }
+
+            subsystemMap.TryGetValue(menu.Id, out var subsystemId);
+
+            context.RoleMenuAuths.Add(new RoleMenuAuth
+            {
+                RoleId = superAdminRole.Id,
+                MenuId = menu.Id,
+                SubsystemId = subsystemId,
+                CreatedTime = now
+            });
             hasChanges = true;
         }
 

@@ -31,7 +31,7 @@ public class TechnicianCreateDto
     public string? AvatarUrl { get; set; }
 
     /// <summary>
-    /// 状态（0:禁用 1:启用）
+    /// 状态（1:在岗 2:休息）
     /// </summary>
     public int Status { get; set; } = 1;
 

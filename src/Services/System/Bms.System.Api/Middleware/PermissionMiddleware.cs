@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Security.Claims;
-using Bms.System.Domain.Attributes;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Domain.IRepositories;
 
 namespace Bms.System.Api.Middleware;
@@ -87,15 +87,9 @@ public class PermissionMiddleware
         }
 
         // super_admin 自动放行所有权限检查
-        // super_admin 通过 RoleMenuAuth 拥有所有菜单，不依赖 RolePermission 显式记录
+        // super_admin 是平台级管理员，通过角色 Code 判断（不依赖菜单授权）
+        // tenant_admin 不自动放行：菜单权限由 super_admin 通过 UI 配置（RoleMenuAuth 表），无种子数据
         if (roles.Any(r => string.Equals(r.Code, "super_admin", StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        // tenant_admin 在本租户内等同管理员，自动放行权限检查
-        // 业务层（UserPermissionChecker）会进一步校验 tenant_admin 的操作范围
-        if (roles.Any(r => string.Equals(r.Code, "tenant_admin", StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }

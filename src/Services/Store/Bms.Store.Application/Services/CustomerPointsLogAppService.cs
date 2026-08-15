@@ -34,31 +34,61 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
 
     /// <summary>
     /// 获取客户积分流水分页列表
+    /// 关联 Customer 表填充客户姓名、手机号，并支持模糊查询；
+    /// 关联 Order 表填充订单号（无订单时为 null）
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<CustomerPointsLogDto>>> GetPagedListAsync(CustomerPointsLogQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<CustomerPointsLogDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<CustomerPointsLogDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
-        var queryable = _dbContext.CustomerPointsLogs
-            .Where(p => p.TenantId == tenantId);
+
+        // 左连接 Customer（软删除客户的历史流水仍需展示）和 Order（OrderId 可空）
+        var queryable = from log in _dbContext.CustomerPointsLogs
+                        where log.TenantId == tenantId
+                        join customer in _dbContext.Customers on log.CustomerId equals customer.Id
+                        join order in _dbContext.Orders on log.OrderId equals order.Id into orders
+                        from order in orders.DefaultIfEmpty()
+                        select new { log, customer, order };
 
         if (query.CustomerId.HasValue)
-            queryable = queryable.Where(p => p.CustomerId == query.CustomerId.Value);
+            queryable = queryable.Where(x => x.log.CustomerId == query.CustomerId.Value);
         if (query.Type.HasValue)
-            queryable = queryable.Where(p => p.Type == query.Type.Value);
+            queryable = queryable.Where(x => x.log.Type == query.Type.Value);
+        if (!string.IsNullOrWhiteSpace(query.CustomerName))
+            queryable = queryable.Where(x => x.customer.Name.Contains(query.CustomerName));
+        if (!string.IsNullOrWhiteSpace(query.Phone))
+            queryable = queryable.Where(x => x.customer.Phone.Contains(query.Phone));
 
         var total = await queryable.CountAsync();
         var items = await queryable
-            .OrderByDescending(p => p.CreatedTime)
+            .OrderByDescending(x => x.log.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(x => new CustomerPointsLogDto
+            {
+                Id = x.log.Id,
+                CustomerId = x.log.CustomerId,
+                CustomerName = x.customer.Name,
+                Phone = x.customer.Phone,
+                Type = x.log.Type,
+                Points = x.log.Points,
+                BeforePoints = x.log.BeforePoints,
+                AfterPoints = x.log.AfterPoints,
+                OrderId = x.log.OrderId,
+                OrderNo = x.order != null ? x.order.OrderNo : null,
+                OperatorId = x.log.OperatorId,
+                ExpireDate = x.log.ExpireDate,
+                Remark = x.log.Remark,
+                ChangeTime = x.log.CreatedTime,
+                UpdatedAt = x.log.UpdatedTime
+            })
             .ToListAsync();
 
         var result = new PagedResponseDto<CustomerPointsLogDto>
         {
-            List = items.Adapt<List<CustomerPointsLogDto>>(),
+            List = items,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -72,7 +102,7 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
     public async Task<ApiResponseDto<CustomerPointsLogDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerPointsLogDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerPointsLogDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CustomerPointsLogs
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
@@ -87,11 +117,17 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
     public async Task<ApiResponseDto<CustomerPointsLogDto>> CreateAsync(CustomerPointsLogCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerPointsLogDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerPointsLogDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<CustomerPointsLogDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
+
+        // 安全防护：通用创建入口仅允许手动调整类型，其他类型必须由各自业务流程写入
+        // 防止前端伪造 Type=1（消费获得）等积分流水，绕过订单流程
+        if (dto.Type != CustomerPointsLogType.ManualAdjust)
+            return ApiResponseDto<CustomerPointsLogDto>.Fail(
+                $"不支持手动创建类型 {dto.Type} 的积分流水，请通过对应业务流程操作", 400);
 
         var tenantId = _currentUser.TenantId.Value;
 
@@ -131,7 +167,7 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
     public async Task<ApiResponseDto<CustomerPointsLogDto>> UpdateAsync(CustomerPointsLogUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerPointsLogDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerPointsLogDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -149,7 +185,7 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
         entity.BeforePoints = dto.BeforePoints;
         entity.AfterPoints = dto.AfterPoints;
         entity.OrderId = dto.OrderId;
-        entity.OperatorId = dto.OperatorId;
+        // OperatorId 保留创建时记录的操作人，更新不覆盖，避免丢失原始操作人
         entity.ExpireDate = dto.ExpireDate;
         entity.Remark = dto.Remark;
         entity.UpdatedTime = DateTime.Now;
@@ -164,7 +200,7 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CustomerPointsLogs
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
@@ -182,7 +218,7 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -202,7 +238,7 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
     public async Task<ApiResponseDto<List<ExpiringPointsDto>>> GetExpiringPointsAsync(long customerId, int days = 7)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<ExpiringPointsDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<ExpiringPointsDto>>.Fail("登录状态异常，请重新登录", 401);
 
         if (days <= 0)
             return ApiResponseDto<List<ExpiringPointsDto>>.Fail("查询天数必须大于0", 400);

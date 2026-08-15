@@ -22,7 +22,7 @@ public class TechnicianCreateDtoValidator : AbstractValidator<TechnicianCreateDt
             .InclusiveBetween(0, 2).WithMessage("性别只能为0(未知)、1(男)或2(女)");
 
         RuleFor(x => x.Status)
-            .InclusiveBetween(0, 1).WithMessage("状态只能为0(禁用)或1(启用)");
+            .InclusiveBetween(1, 2).WithMessage("状态只能为1(在岗)或2(休息)");
 
         // 技师来源(Source)不由 DTO 决定，由后端根据当前租户强制赋值，无需校验
     }

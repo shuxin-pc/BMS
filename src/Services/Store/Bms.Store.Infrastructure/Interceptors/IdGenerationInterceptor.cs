@@ -64,6 +64,10 @@ public class SoftDeleteInterceptor : SaveChangesInterceptor
     {
         if (eventData.Context is null) return base.SavingChangesAsync(eventData, result, cancellationToken);
 
+        // 永久删除场景：DbContext 显式声明跳过软删除，直接执行物理 DELETE
+        if (eventData.Context is StoreDbContext { SkipSoftDelete: true })
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+
         SetSoftDeletes(eventData.Context.ChangeTracker.Entries());
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }

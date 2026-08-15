@@ -70,6 +70,12 @@ public class Order : StoreBusinessEntityBase
     public int Points { get; set; }
 
     /// <summary>
+    /// 下单时的积分抵扣比例快照（来自 PointsRule.DeductRate）
+    /// 用于退款时折算积分不足部分的现金，避免规则变更后计算错误
+    /// </summary>
+    public decimal DeductRate { get; set; }
+
+    /// <summary>
     /// 支付方式（1:现金 2:支付宝 3:微信 4:银行卡 5:储值卡 6:积分抵扣 7:组合支付）
     /// 单一支付方式时使用 1-6；组合支付使用 7，并通过 CashAmount/StoredValueAmount/PointsAmount 拆分。
     /// 历史订单 PayMethod=1~6 保持向后兼容。

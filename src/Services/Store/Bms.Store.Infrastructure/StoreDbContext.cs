@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.BuildingBlocks.MultiTenant.Data;
 using Bms.Store.Domain.Entities;
 
@@ -9,9 +10,13 @@ namespace Bms.Store.Infrastructure;
 /// </summary>
 public class StoreDbContext : TenantDbContext
 {
-    public StoreDbContext(DbContextOptions<StoreDbContext> options)
+    // 当前租户ID（运行时由 DI 注入 ICurrentUser 提供；设计时迁移为 null，HasQueryFilter 退化为仅过滤软删除）
+    private readonly long? _currentTenantId;
+
+    public StoreDbContext(DbContextOptions<StoreDbContext> options, ICurrentUser? currentUser = null)
         : base(options)
     {
+        _currentTenantId = currentUser?.TenantId;
     }
 
     // DbSets - 门店管理
@@ -23,8 +28,10 @@ public class StoreDbContext : TenantDbContext
     // DbSets - 商品管理
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductMaster> ProductMasters => Set<ProductMaster>();
     public DbSet<ServiceProduct> ServiceProducts => Set<ServiceProduct>();
     public DbSet<ServiceProductEquipment> ServiceProductEquipments => Set<ServiceProductEquipment>();
+    public DbSet<ServiceProductSkill> ServiceProductSkills => Set<ServiceProductSkill>();
     public DbSet<ServiceBom> ServiceBoms => Set<ServiceBom>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<ProductSupplier> ProductSuppliers => Set<ProductSupplier>();
@@ -40,20 +47,22 @@ public class StoreDbContext : TenantDbContext
     public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<StockTransferItem> StockTransferItems => Set<StockTransferItem>();
-    public DbSet<SampleGiftTransfer> SampleGiftTransfers => Set<SampleGiftTransfer>();
-    public DbSet<SampleGiftTransferItem> SampleGiftTransferItems => Set<SampleGiftTransferItem>();
 
     // DbSets - 客户管理
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerLevel> CustomerLevels => Set<CustomerLevel>();
+    public DbSet<CustomerTag> CustomerTags => Set<CustomerTag>();
+    public DbSet<CustomerTagLink> CustomerTagLinks => Set<CustomerTagLink>();
     public DbSet<CustomerPointsLog> CustomerPointsLogs => Set<CustomerPointsLog>();
     public DbSet<ConsumeLog> ConsumeLogs => Set<ConsumeLog>();
     public DbSet<CustomerBeautyProfile> CustomerBeautyProfiles => Set<CustomerBeautyProfile>();
     public DbSet<CustomerPreference> CustomerPreferences => Set<CustomerPreference>();
     public DbSet<ServiceReaction> ServiceReactions => Set<ServiceReaction>();
     public DbSet<ServiceComparisonPhoto> ServiceComparisonPhotos => Set<ServiceComparisonPhoto>();
+    public DbSet<ServiceComparisonPhotoItem> ServiceComparisonPhotoItems => Set<ServiceComparisonPhotoItem>();
     public DbSet<BodyDataRecord> BodyDataRecords => Set<BodyDataRecord>();
     public DbSet<CustomerDeleteLog> CustomerDeleteLogs => Set<CustomerDeleteLog>();
+    public DbSet<CustomerCareLog> CustomerCareLogs => Set<CustomerCareLog>();
     public DbSet<PointsRule> PointsRules => Set<PointsRule>();
     public DbSet<PointsExchange> PointsExchanges => Set<PointsExchange>();
 
@@ -104,6 +113,13 @@ public class StoreDbContext : TenantDbContext
     // DbSets - 营销管理
     public DbSet<Activity> Activities => Set<Activity>();
 
+    /// <summary>
+    /// 是否跳过软删除拦截器（用于永久删除场景）。
+    /// SoftDeleteInterceptor 会将 Remove 操作转为 IsDeleted=true 的 Update，
+    /// 永久删除需临时开启此开关以绕过拦截，执行真正的物理 DELETE。
+    /// </summary>
+    public bool SkipSoftDelete { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -123,6 +139,7 @@ public class StoreDbContext : TenantDbContext
         ConfigureUserStore(modelBuilder);
         ConfigureStoreTenantSetting(modelBuilder);
         ConfigureCrossStoreOperationLog(modelBuilder);
+        ConfigureProductMaster(modelBuilder);
         ConfigureProductCategory(modelBuilder);
         ConfigureProduct(modelBuilder);
         ConfigureSupplier(modelBuilder);
@@ -132,7 +149,10 @@ public class StoreDbContext : TenantDbContext
         ConfigureInventoryAlert(modelBuilder);
         ConfigureCustomer(modelBuilder);
         ConfigureCustomerLevel(modelBuilder);
+        ConfigureCustomerTag(modelBuilder);
+        ConfigureCustomerTagLink(modelBuilder);
         ConfigureCustomerDeleteLog(modelBuilder);
+        ConfigureCustomerCareLog(modelBuilder);
         ConfigureCustomerPointsLog(modelBuilder);
         ConfigureConsumeLog(modelBuilder);
         ConfigureStoredValueAccount(modelBuilder);
@@ -154,6 +174,7 @@ public class StoreDbContext : TenantDbContext
         ConfigureActivity(modelBuilder);
         ConfigureServiceProduct(modelBuilder);
         ConfigureServiceProductEquipment(modelBuilder);
+        ConfigureServiceProductSkill(modelBuilder);
         ConfigurePurchaseReturn(modelBuilder);
         ConfigurePurchaseReturnItem(modelBuilder);
         ConfigureDailyStat(modelBuilder);
@@ -175,12 +196,11 @@ public class StoreDbContext : TenantDbContext
         ConfigureInventoryBatch(modelBuilder);
         ConfigureStockTransfer(modelBuilder);
         ConfigureStockTransferItem(modelBuilder);
-        ConfigureSampleGiftTransfer(modelBuilder);
-        ConfigureSampleGiftTransferItem(modelBuilder);
         ConfigureProductSalesStat(modelBuilder);
         ConfigureCustomerPreference(modelBuilder);
         ConfigureServiceReaction(modelBuilder);
         ConfigureServiceComparisonPhoto(modelBuilder);
+        ConfigureServiceComparisonPhotoItem(modelBuilder);
         ConfigureBodyDataRecord(modelBuilder);
         ConfigureSkillCategory(modelBuilder);
         ConfigureDailySettlement(modelBuilder);
@@ -239,6 +259,12 @@ public class StoreDbContext : TenantDbContext
                 .IsUnique()
                 .HasFilter("\"IsDeleted\" = false")
                 .HasDatabaseName("UX_StoreTenantSettings_Tenant");
+
+            // 角色ID列表用 jsonb 存储，数组语义正确，EF Core+Npgsql 原生支持
+            // 列设为 nullable：旧记录迁移后为 null，AppService 读取时用 ?? new List<long>() 兜底
+            entity.Property(e => e.BirthdayReminderRoleIds)
+                .HasColumnType("jsonb")
+                .IsRequired(false);
         });
     }
 
@@ -266,6 +292,37 @@ public class StoreDbContext : TenantDbContext
         });
     }
 
+    private void ConfigureProductMaster(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProductMaster>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Unit).HasMaxLength(20);
+            entity.Property(e => e.Specification).HasMaxLength(100);
+            entity.Property(e => e.Brand).HasMaxLength(100);
+            entity.Property(e => e.ImageUrl).HasColumnType("text");
+            entity.Property(e => e.Remark).HasMaxLength(500);
+
+            // Code 在租户内唯一（含软删除过滤，允许删除后重建）
+            entity.HasIndex(e => new { e.TenantId, e.Code, e.IsDeleted })
+                .IsUnique()
+                .HasDatabaseName("UX_ProductMasters_Tenant_Code_Deleted");
+
+            entity.HasIndex(e => e.TenantId).HasDatabaseName("IX_ProductMasters_Tenant");
+            entity.HasIndex(e => e.CategoryId).HasDatabaseName("IX_ProductMasters_Category");
+
+            // IsSalable 默认 true（样品/赠品由应用层强制 false）
+            entity.Property(e => e.IsSalable).HasDefaultValue(true);
+
+            entity.HasOne(e => e.Category)
+                .WithMany()
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
     private void ConfigureProductCategory(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ProductCategory>(entity =>
@@ -273,10 +330,12 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Code).HasMaxLength(50);
-            entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.Code);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 分类改租户级共享：Code 在租户内唯一（含软删除过滤）
+            entity.HasIndex(e => new { e.TenantId, e.Code, e.IsDeleted })
+                .IsUnique()
+                .HasDatabaseName("UX_ProductCategories_Tenant_Code_Deleted");
+            entity.HasIndex(e => e.TenantId).HasDatabaseName("IX_ProductCategories_Tenant");
         });
     }
 
@@ -285,29 +344,25 @@ public class StoreDbContext : TenantDbContext
         modelBuilder.Entity<Product>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Unit).HasMaxLength(20);
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.CostPrice).HasPrecision(18, 2);
             entity.Property(e => e.LastPurchasePrice).HasPrecision(18, 2);
             entity.Property(e => e.LowStockThreshold).HasPrecision(18, 4);
             entity.Property(e => e.OverstockThreshold).HasPrecision(18, 4);
-            entity.Property(e => e.Specification).HasMaxLength(100);
-            entity.Property(e => e.Brand).HasMaxLength(100);
-            entity.Property(e => e.ImageUrl).HasColumnType("text");
             entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.Code);
-            entity.HasIndex(e => e.CategoryId);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 唯一约束：同一门店同一主档只能有一份档案（消除多份档案问题的关键约束）
+            // 含软删除过滤，允许删除后重建
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.MasterId, e.IsDeleted })
+                .IsUnique()
+                .HasDatabaseName("UX_Products_Tenant_Store_Master_Deleted");
 
-            // IsSalable 默认 true（样品/赠品由应用层强制 false），数据库层默认值便于老数据回填
-            entity.Property(e => e.IsSalable).HasDefaultValue(true);
+            entity.HasIndex(e => e.MasterId).HasDatabaseName("IX_Products_Master");
+            entity.HasIndex(e => new { e.TenantId, e.StoreId }).HasDatabaseName("IX_Products_Tenant_Store");
 
-            entity.HasOne(e => e.Category)
+            entity.HasOne(e => e.Master)
                 .WithMany()
-                .HasForeignKey(e => e.CategoryId)
+                .HasForeignKey(e => e.MasterId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
@@ -328,11 +383,11 @@ public class StoreDbContext : TenantDbContext
             entity.HasIndex(e => e.Code);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
-            // 唯一约束：(Code, TenantId, StoreId, IsDeleted) 唯一，按门店隔离避免编码重复
+            // 唯一约束：(TenantId, Code, IsDeleted) 唯一，租户内全局唯一（不分公用私用）
             // 含 IsDeleted 是为了让软删除记录不阻止相同 Code 重新创建
-            entity.HasIndex(e => new { e.Code, e.TenantId, e.StoreId, e.IsDeleted })
+            entity.HasIndex(e => new { e.TenantId, e.Code, e.IsDeleted })
                 .IsUnique()
-                .HasDatabaseName("UX_Suppliers_Code_Tenant_Store_Deleted");
+                .HasDatabaseName("UX_Suppliers_Tenant_Code_Deleted");
         });
     }
 
@@ -383,7 +438,6 @@ public class StoreDbContext : TenantDbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Quantity).HasPrecision(18, 4);
-            entity.Property(e => e.AlertQuantity).HasPrecision(18, 4);
 
             entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => new { e.TenantId, e.StoreId, e.ProductId }).IsUnique();
@@ -466,7 +520,6 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.Balance).HasPrecision(18, 2);
             entity.Property(e => e.TotalConsume).HasPrecision(18, 2);
             entity.Property(e => e.Address).HasMaxLength(500);
-            entity.Property(e => e.Tags).HasMaxLength(500);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
             entity.HasIndex(e => e.Phone);
@@ -488,7 +541,7 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-            // Level 字段：1=普通会员 2=会员（参见 CustomerLevelTypes）
+            // Level 字段：等级值，同租户内唯一（由门店自定义）
             entity.Property(e => e.Level).IsRequired();
             entity.Property(e => e.DiscountRate).HasPrecision(5, 2);
             entity.Property(e => e.Remark).HasMaxLength(500);
@@ -502,6 +555,83 @@ public class StoreDbContext : TenantDbContext
                 .IsUnique()
                 .HasFilter("\"IsDeleted\" = false")
                 .HasDatabaseName("UX_CustomerLevels_Tenant_Level");
+        });
+    }
+
+    private void ConfigureCustomerTag(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CustomerTag>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Color).HasMaxLength(20);
+            entity.Property(e => e.Remark).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+
+            // 唯一过滤索引：同门店内标签名称不重复（仅约束未删除记录）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.Name })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false")
+                .HasDatabaseName("UX_CustomerTags_Tenant_Store_Name");
+        });
+    }
+
+    private void ConfigureCustomerTagLink(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CustomerTagLink>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // 同一客户同一标签仅允许一条未删除关联
+            entity.HasIndex(e => new { e.CustomerId, e.TagId })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false")
+                .HasDatabaseName("UX_CustomerTagLinks_Customer_Tag");
+            entity.HasIndex(e => e.TagId);
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+
+            entity.HasOne(e => e.Customer)
+                .WithMany(c => c.CustomerTagLinks)
+                .HasForeignKey(e => e.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Tag)
+                .WithMany()
+                .HasForeignKey(e => e.TagId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private void ConfigureCustomerCareLog(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CustomerCareLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).IsRequired();
+            entity.Property(e => e.CareTime).IsRequired();
+
+            // 普通索引：租户+门店隔离查询
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            entity.HasIndex(e => new { e.CustomerId, e.Type, e.CareYear });
+            entity.HasIndex(e => new { e.RefOrderId, e.Type });
+
+            // 部分唯一索引：每年每客户仅一条生日关怀（Type=1）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.CustomerId, e.CareYear })
+                .IsUnique()
+                .HasFilter("\"Type\" = 1")
+                .HasDatabaseName("UX_CustomerCareLogs_BirthdayCare");
+
+            // 部分唯一索引：每订单仅一条消费感谢（Type=2）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.RefOrderId })
+                .IsUnique()
+                .HasFilter("\"Type\" = 2")
+                .HasDatabaseName("UX_CustomerCareLogs_ConsumeThank");
+
+            entity.HasOne(e => e.Customer)
+                .WithMany()
+                .HasForeignKey(e => e.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -572,14 +702,17 @@ public class StoreDbContext : TenantDbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.GiftAmount).HasPrecision(18, 2);
-            entity.Property(e => e.GiftRate).HasPrecision(5, 4);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.Code);
+            // 充值金额需按租户做重复校验，建索引支撑该查询
+            entity.HasIndex(e => new { e.TenantId, e.Amount });
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
+
+            // 全局查询过滤器：自动排除已软删除的规则，并按当前租户隔离
+            // 设计时（迁移）_currentTenantId 为 null，退化为仅过滤软删除，保证迁移能查到全部数据
+            entity.HasQueryFilter(e => !e.IsDeleted && (_currentTenantId == null || e.TenantId == _currentTenantId.Value));
         });
     }
 
@@ -599,6 +732,7 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.AfterRealBalance).HasPrecision(18, 2);
             entity.Property(e => e.BeforeGiftBalance).HasPrecision(18, 2);
             entity.Property(e => e.AfterGiftBalance).HasPrecision(18, 2);
+            entity.Property(e => e.OperatorName).HasMaxLength(50);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
             entity.HasIndex(e => e.CustomerId);
@@ -622,6 +756,7 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
             entity.Property(e => e.PaidAmount).HasPrecision(18, 2);
             entity.Property(e => e.RefundAmount).HasPrecision(18, 2);
+            entity.Property(e => e.DeductRate).HasPrecision(8, 4);
             entity.Property(e => e.RefundReason).HasMaxLength(500);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
@@ -835,6 +970,7 @@ public class StoreDbContext : TenantDbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.VerifyAmount).HasPrecision(18, 2);
+            entity.Property(e => e.OperatorName).HasMaxLength(50);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
             entity.HasIndex(e => e.CardSaleId);
@@ -967,12 +1103,15 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ApplicableSkills).HasMaxLength(500);
 
-            entity.HasIndex(e => e.ProductId);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 租户级：MasterId 在租户内唯一（一个 Master 对应一个 ServiceProduct，1:1）
+            entity.HasIndex(e => new { e.TenantId, e.MasterId })
+                .IsUnique()
+                .HasDatabaseName("UX_ServiceProducts_Tenant_Master");
+            entity.HasIndex(e => e.TenantId).HasDatabaseName("IX_ServiceProducts_Tenant");
 
-            entity.HasOne(e => e.Product)
-                .WithMany()
-                .HasForeignKey(e => e.ProductId)
+            entity.HasOne(e => e.Master)
+                .WithOne(m => m.ServiceProduct)
+                .HasForeignKey<ServiceProduct>(e => e.MasterId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -997,6 +1136,30 @@ public class StoreDbContext : TenantDbContext
             entity.HasOne(e => e.EquipmentType)
                 .WithMany()
                 .HasForeignKey(e => e.EquipmentTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private void ConfigureServiceProductSkill(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ServiceProductSkill>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => e.ServiceProductId);
+            entity.HasIndex(e => e.SkillCategoryId);
+            // 同一门店下同一服务项目同一技能分类不重复
+            entity.HasIndex(e => new { e.ServiceProductId, e.StoreId, e.SkillCategoryId }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+
+            entity.HasOne(e => e.ServiceProduct)
+                .WithMany(p => p.ServiceProductSkills)
+                .HasForeignKey(e => e.ServiceProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.SkillCategory)
+                .WithMany()
+                .HasForeignKey(e => e.SkillCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
@@ -1138,7 +1301,16 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.Remark).HasMaxLength(500);
 
             entity.HasIndex(e => e.CustomerId);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 唯一索引：同租户同门店下每个客户仅允许一份未删除的美容档案
+            // 使用 PostgreSQL 过滤索引语法，软删除后允许重建
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.CustomerId })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false")
+                .HasDatabaseName("UX_CustomerBeautyProfiles_Tenant_Store_Customer");
+
+            // 全局查询过滤器：自动排除已软删除的档案，并按当前租户隔离
+            // 设计时（迁移）_currentTenantId 为 null，退化为仅过滤软删除，保证迁移能查到全部数据
+            entity.HasQueryFilter(e => !e.IsDeleted && (_currentTenantId == null || e.TenantId == _currentTenantId.Value));
 
             entity.HasOne(e => e.Customer)
                 .WithMany()
@@ -1411,9 +1583,8 @@ public class StoreDbContext : TenantDbContext
         modelBuilder.Entity<PointsRule>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PointsRate).HasPrecision(5, 2);
-            entity.Property(e => e.DeductRate).HasPrecision(5, 2);
+            entity.Property(e => e.DeductRate).HasPrecision(8, 4);
             entity.Property(e => e.MaxDeductAmount).HasPrecision(18, 2);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
@@ -1499,56 +1670,6 @@ public class StoreDbContext : TenantDbContext
         });
     }
 
-    private void ConfigureSampleGiftTransfer(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<SampleGiftTransfer>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TransferNo).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.FromStoreCode).HasMaxLength(50);
-            entity.Property(e => e.FromStoreName).HasMaxLength(100);
-            entity.Property(e => e.ToStoreCode).HasMaxLength(50);
-            entity.Property(e => e.ToStoreName).HasMaxLength(100);
-            entity.Property(e => e.OperatorName).HasMaxLength(50);
-            entity.Property(e => e.Remark).HasMaxLength(500);
-
-            // 同租户+门店+单号唯一（多租户隔离，避免不同租户单号冲突）
-            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.TransferNo }).IsUnique();
-            entity.HasIndex(e => e.FromStoreId);
-            entity.HasIndex(e => e.ToStoreId);
-            entity.HasIndex(e => e.TransferDate);
-            entity.HasIndex(e => e.Status);
-        });
-    }
-
-    private void ConfigureSampleGiftTransferItem(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<SampleGiftTransferItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Quantity).HasPrecision(18, 4);
-            entity.Property(e => e.ProductName).HasMaxLength(200);
-            entity.Property(e => e.ProductCode).HasMaxLength(50);
-            entity.Property(e => e.Unit).HasMaxLength(20);
-            entity.Property(e => e.BatchNo).HasMaxLength(50);
-            entity.Property(e => e.Remark).HasMaxLength(500);
-
-            entity.HasIndex(e => e.SampleGiftTransferId);
-            entity.HasIndex(e => e.ProductId);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId });
-
-            entity.HasOne(e => e.SampleGiftTransfer)
-                .WithMany(t => t.Items)
-                .HasForeignKey(e => e.SampleGiftTransferId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Product)
-                .WithMany()
-                .HasForeignKey(e => e.ProductId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-    }
-
     private void ConfigureProductSalesStat(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ProductSalesStat>(entity =>
@@ -1603,6 +1724,7 @@ public class StoreDbContext : TenantDbContext
 
             entity.HasIndex(e => e.CustomerId);
             entity.HasIndex(e => e.OrderId);
+            entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => e.ReactionDate);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
 
@@ -1619,11 +1741,11 @@ public class StoreDbContext : TenantDbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ServiceItem).HasMaxLength(200);
-            entity.Property(e => e.PhotoUrl).HasColumnType("text");
             entity.Property(e => e.Remark).HasMaxLength(500);
 
             entity.HasIndex(e => e.CustomerId);
             entity.HasIndex(e => e.OrderId);
+            entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => e.PhotoDate);
             entity.HasIndex(e => e.PhotoType);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
@@ -1631,6 +1753,24 @@ public class StoreDbContext : TenantDbContext
             entity.HasOne(e => e.Customer)
                 .WithMany()
                 .HasForeignKey(e => e.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private void ConfigureServiceComparisonPhotoItem(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ServiceComparisonPhotoItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            // objectKey 最长约 60 字符，外链留足余量。设上限是为了防止有人重新往里写 base64
+            entity.Property(e => e.PhotoSource).HasMaxLength(500);
+
+            entity.HasIndex(e => e.ServiceComparisonPhotoId);
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+
+            entity.HasOne(e => e.ServiceComparisonPhoto)
+                .WithMany(p => p.Items)
+                .HasForeignKey(e => e.ServiceComparisonPhotoId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -1682,12 +1822,13 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.Code);
+            // 技能分类改租户级共享：Code 在租户内唯一（含软删除过滤）
+            entity.HasIndex(e => new { e.TenantId, e.Code, e.IsDeleted })
+                .IsUnique()
+                .HasDatabaseName("UX_SkillCategories_Tenant_Code_Deleted");
             entity.HasIndex(e => e.ParentId);
-            entity.HasIndex(e => e.Status);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            entity.HasIndex(e => e.TenantId).HasDatabaseName("IX_SkillCategories_Tenant");
 
             entity.HasOne(e => e.Parent)
                 .WithMany()
@@ -1735,6 +1876,7 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.StoreCode).HasMaxLength(50);
             entity.Property(e => e.TransferFee).HasPrecision(18, 2);
+            entity.Property(e => e.OperatorName).HasMaxLength(50);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
             entity.HasIndex(e => e.CardSaleId);

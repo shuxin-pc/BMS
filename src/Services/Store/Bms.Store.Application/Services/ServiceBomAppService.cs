@@ -34,7 +34,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto<PagedResponseDto<ServiceBomDto>>> GetPagedListAsync(ServiceBomQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<ServiceBomDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<ServiceBomDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
 
@@ -103,7 +103,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto<ServiceBomDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ServiceBomDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ServiceBomDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
 
@@ -149,7 +149,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto<ServiceBomDto>> CreateAsync(ServiceBomCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ServiceBomDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ServiceBomDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -178,7 +178,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto<ServiceBomDto>> UpdateAsync(ServiceBomUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ServiceBomDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ServiceBomDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -214,7 +214,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var bom = await _dbContext.ServiceBoms
             .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted && b.TenantId == _currentUser.TenantId.Value);
@@ -230,7 +230,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -254,7 +254,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto<List<ServiceProductOptionDto>>> GetServiceProductOptionsAsync()
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<ServiceProductOptionDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<ServiceProductOptionDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
 
@@ -280,7 +280,7 @@ public class ServiceBomAppService : IServiceBomAppService
     public async Task<ApiResponseDto<List<ConsumableOptionDto>>> GetConsumableOptionsAsync()
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<ConsumableOptionDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<ConsumableOptionDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;

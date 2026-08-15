@@ -21,11 +21,6 @@ public interface IInventoryBatchAppService
     Task<ApiResponseDto<PagedResponseDto<ExpiryDto>>> GetExpiryListAsync(ExpiryQueryDto query);
 
     /// <summary>
-    /// 获取效期预警列表（即将过期或已过期的商品）
-    /// </summary>
-    Task<ApiResponseDto<PagedResponseDto<ExpiryDto>>> GetExpiryAlertsAsync(ExpiryQueryDto query);
-
-    /// <summary>
     /// 按商品ID查询可用效期选项列表（用于 POS 效期选择）。
     /// 有日期批次按过期日期升序在前，无效期批次排末尾按 CreatedTime 升序，第一项标记为推荐。
     /// </summary>

@@ -40,11 +40,12 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     public async Task<ApiResponseDto<PagedResponseDto<TreatmentCardDto>>> GetPagedListAsync(TreatmentCardQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<TreatmentCardDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<TreatmentCardDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.TreatmentCards
-            .Where(t => !t.IsDeleted && t.TenantId == tenantId);
+            .Where(t => !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.Name))
             queryable = queryable.Where(t => t.Name.Contains(query.Name));
@@ -79,11 +80,12 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     public async Task<ApiResponseDto<TreatmentCardDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TreatmentCardDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TreatmentCardDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.TreatmentCards
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted && t.TenantId == tenantId);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<TreatmentCardDto?>.Fail("疗程卡配置不存在", 404);
 
@@ -98,28 +100,30 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     public async Task<ApiResponseDto<TreatmentCardDto>> CreateAsync(TreatmentCardCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TreatmentCardDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TreatmentCardDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<TreatmentCardDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var codeExists = await _dbContext.TreatmentCards
-            .AnyAsync(t => t.Code == dto.Code && t.TenantId == tenantId && !t.IsDeleted);
+            .AnyAsync(t => t.Code == dto.Code && t.TenantId == tenantId && t.StoreId == storeId && !t.IsDeleted);
         if (codeExists)
             return ApiResponseDto<TreatmentCardDto>.Fail($"编码 {dto.Code} 已存在", 400);
 
         var entity = dto.Adapt<TreatmentCard>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = storeId;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.TreatmentCards.Add(entity);
         await _dbContext.SaveChangesAsync();
 
         // 创建项目明细子表，计算折算单价
-        await CreateItemsAsync(dto.Items, entity.Id, entity.Price, tenantId);
+        await CreateItemsAsync(dto.Items, entity.Id, entity.Price, tenantId, storeId);
 
         var result = ToDto(entity);
         await FillItemsForCardAsync(result, tenantId);
@@ -132,28 +136,28 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     public async Task<ApiResponseDto<TreatmentCardDto>> UpdateAsync(TreatmentCardUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TreatmentCardDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TreatmentCardDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<TreatmentCardDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.TreatmentCards
-            .FirstOrDefaultAsync(t => t.Id == dto.Id && !t.IsDeleted && t.TenantId == tenantId);
+            .FirstOrDefaultAsync(t => t.Id == dto.Id && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<TreatmentCardDto>.Fail("疗程卡配置不存在", 404);
 
         if (entity.Code != dto.Code)
         {
             var codeExists = await _dbContext.TreatmentCards
-                .AnyAsync(t => t.Code == dto.Code && t.TenantId == tenantId && !t.IsDeleted && t.Id != dto.Id);
+                .AnyAsync(t => t.Code == dto.Code && t.TenantId == tenantId && t.StoreId == storeId && !t.IsDeleted && t.Id != dto.Id);
             if (codeExists)
                 return ApiResponseDto<TreatmentCardDto>.Fail($"编码 {dto.Code} 已存在", 400);
         }
 
-        entity.StoreId = dto.StoreId;
-        entity.StoreCode = dto.StoreCode;
+        // StoreId/StoreCode 为归属门店永久归属，禁止修改（文档 5.4 节）
         entity.Name = dto.Name;
         entity.Code = dto.Code;
         entity.ServiceItems = dto.ServiceItems;
@@ -168,7 +172,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
 
         // 更新项目明细：先软删除旧项目，再创建新项目
         await SoftDeleteItemsAsync(entity.Id, tenantId);
-        await CreateItemsAsync(dto.Items, entity.Id, entity.Price, tenantId);
+        await CreateItemsAsync(dto.Items, entity.Id, entity.Price, tenantId, storeId);
 
         var result = ToDto(entity);
         await FillItemsForCardAsync(result, tenantId);
@@ -181,11 +185,12 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.TreatmentCards
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted && t.TenantId == tenantId);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto.Fail("疗程卡配置不存在", 404);
 
@@ -203,13 +208,14 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entities = await _dbContext.TreatmentCards
-            .Where(t => ids.Contains(t.Id) && !t.IsDeleted && t.TenantId == tenantId)
+            .Where(t => ids.Contains(t.Id) && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId)
             .ToListAsync();
 
         foreach (var entity in entities)
@@ -284,7 +290,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     /// 创建项目明细子表，按项目原价比例分摊卡价计算折算单价
     /// 折算逻辑：各项目分摊价值 = 卡价 × (该项目原价 × 次数 / Σ所有项目原价 × 次数)
     /// </summary>
-    private async Task CreateItemsAsync(List<CourseCardItemCreateDto> items, long cardId, decimal cardPrice, long tenantId)
+    private async Task CreateItemsAsync(List<CourseCardItemCreateDto> items, long cardId, decimal cardPrice, long tenantId, long storeId)
     {
         if (items == null || !items.Any()) return;
 
@@ -312,6 +318,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
                 AllocatedTotalPrice = allocatedTotal,
                 TenantId = tenantId,
                 TenantCode = tenantCode,
+                StoreId = storeId,
                 CreatedTime = DateTime.Now
             });
         }

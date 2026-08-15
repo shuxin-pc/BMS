@@ -48,7 +48,7 @@ public class SampleReportDto
 
 /// <summary>
 /// 样品/赠品按活动维度统计报表（P-SG-04）
-/// 数据源：SampleGiftOut（仅赠品出库有 ActivityId）
+/// R5：数据源从 SampleGiftOut 迁移到 InventoryLogs（SourceType 9=样品领用出库/10=赠品活动出库）
 /// 聚合维度：ActivityId + ProductId
 /// </summary>
 public class SampleActivityReportDto

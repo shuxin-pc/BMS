@@ -119,19 +119,6 @@
             {{ formatDateTime(row.returnTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="凭证" width="80" align="center">
-          <template #default="{ row }">
-            <el-image
-              v-if="row.voucherImageUrl"
-              :src="row.voucherImageUrl"
-              :preview-src-list="[row.voucherImageUrl]"
-              fit="cover"
-              style="width: 30px; height: 30px; border-radius: 4px"
-              preview-teleported
-            />
-            <span v-else class="text-muted">无</span>
-          </template>
-        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
@@ -159,7 +146,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑采购退货' : '发起采购退货'"
-      width="900px"
+      width="1100px"
       :close-on-click-modal="false"
     >
       <el-form
@@ -169,18 +156,14 @@
         label-width="100px"
       >
         <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="退货单号" prop="returnNo">
-              <el-input v-model="formData.returnNo" placeholder="如 PR20260716001" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="供应商" prop="supplierId">
               <el-select
                 v-model="formData.supplierId"
                 placeholder="请选择供应商"
                 filterable
                 style="width: 100%"
+                @change="handleSupplierChange"
               >
                 <el-option
                   v-for="item in supplierOptions"
@@ -191,13 +174,13 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="退货时间" prop="returnTime">
               <el-date-picker
                 v-model="formData.returnTime"
-                type="datetime"
-                placeholder="选择退货时间"
-                value-format="YYYY-MM-DDTHH:mm:ss"
+                type="date"
+                placeholder="选择退货日期"
+                value-format="YYYY-MM-DD"
                 style="width: 100%"
               />
             </el-form-item>
@@ -205,7 +188,7 @@
         </el-row>
 
         <!-- 退货明细表格 -->
-        <el-form-item label="退货明细" prop="items">
+        <el-form-item label="退货明细">
           <div class="items-table-wrapper">
             <el-table :data="formData.items" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" align="center" />
@@ -213,13 +196,14 @@
                 <template #default="{ row, $index }">
                   <el-select
                     v-model="row.productId"
-                    placeholder="请选择商品"
+                    :placeholder="formData.supplierId ? '请选择商品' : '请先选择供应商'"
+                    :disabled="!formData.supplierId"
                     filterable
                     style="width: 100%"
                     @change="handleProductChange($index)"
                   >
                     <el-option
-                      v-for="item in productOptions"
+                      v-for="item in getSupplierProducts()"
                       :key="item.id"
                       :label="`${item.name}（${item.code}）`"
                       :value="item.id"
@@ -227,20 +211,36 @@
                   </el-select>
                 </template>
               </el-table-column>
-              <el-table-column label="批次号" width="140">
-                <template #default="{ row }">
-                  <el-input v-model="row.batchNo" placeholder="选填" />
+              <el-table-column label="批次号" min-width="200">
+                <template #default="{ row, $index }">
+                  <el-select
+                    v-model="row.batchNo"
+                    :placeholder="row.productId ? '请选择批次' : '请先选择商品'"
+                    :disabled="!row.productId"
+                    filterable
+                    style="width: 100%"
+                    @change="handleBatchChange($index)"
+                  >
+                    <el-option
+                      v-for="batch in getProductBatchOptions(row.productId)"
+                      :key="batch.id"
+                      :label="`${batch.batchNo}（库存: ${batch.quantity}）`"
+                      :value="batch.batchNo"
+                    />
+                  </el-select>
                 </template>
               </el-table-column>
               <el-table-column label="退货数量" width="140">
-                <template #default="{ row }">
+                <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.quantity"
-                    :min="0.01"
-                    :precision="4"
+                    :min="0"
+                    :max="row.batchStock"
+                    :precision="2"
                     :step="1"
                     :controls="false"
                     style="width: 100%"
+                    @change="handleQuantityChange($index)"
                   />
                 </template>
               </el-table-column>
@@ -252,13 +252,9 @@
                     :precision="2"
                     :step="10"
                     :controls="false"
+                    disabled
                     style="width: 100%"
                   />
-                </template>
-              </el-table-column>
-              <el-table-column label="备注" min-width="150">
-                <template #default="{ row }">
-                  <el-input v-model="row.remark" placeholder="选填" />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="80" align="center">
@@ -282,20 +278,6 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="凭证照片">
-          <el-upload
-            :show-file-list="true"
-            :auto-upload="false"
-            :limit="1"
-            accept="image/*"
-            :on-change="handleVoucherChange"
-            :on-remove="handleVoucherRemove"
-            list-type="picture-card"
-          >
-            <el-icon><Plus /></el-icon>
-          </el-upload>
-          <div class="upload-tip">支持上传退货凭证照片（非必填）</div>
-        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input
             v-model="formData.remark"
@@ -328,24 +310,22 @@ import {
   batchDeletePurchaseReturns
 } from '@/api/purchase'
 import type { PurchaseReturn, PurchaseReturnCreate, PurchaseReturnItemCreate } from '@/api/purchase/types'
-import { getSuppliers } from '@/api/supplier'
+import { getSuppliers, getProductsBySupplier } from '@/api/supplier'
 import type { Supplier } from '@/api/supplier/types'
+import { getProductOptions, getProductBatches } from '@/api/inventory-ops'
+import type { InventoryBatchOption } from '@/api/inventory-ops/types'
 
 const systemConfigStore = useSystemConfigStore()
 
-/**
- * 本地商品选项（避免依赖后端 product API）
- * 与采购订单明细中的商品保持一致
- */
-const productOptions = ref([
-  { id: 101, name: '深层修复洗发水', code: 'SP-001' },
-  { id: 102, name: '丝滑护发素', code: 'SP-002' },
-  { id: 103, name: '植物染发剂', code: 'SP-003' },
-  { id: 104, name: '强力定型喷雾', code: 'SP-004' },
-  { id: 105, name: '保湿护肤霜', code: 'SP-005' },
-  { id: 106, name: '一次性毛巾', code: 'HC-001' },
-  { id: 107, name: '染发碗刷套装', code: 'HC-002' }
-])
+// 商品下拉选项（从后端加载，用于列表展开行展示商品名称）
+const productOptions = ref<{ id: number; name: string; code: string }[]>([])
+
+// 弹窗：按供应商ID缓存的商品选项（key=supplierId），切换供应商时按需加载
+const productOptionsBySupplier = ref<Record<number, { id: number; name: string; code: string }[]>>({})
+
+// 弹窗：按商品ID缓存的在库批次列表（key=productId），选商品后按需加载
+// 用于批次号下拉，展示批次号+当前库存数量
+const batchesByProduct = ref<Record<number, InventoryBatchOption[]>>({})
 
 // 供应商下拉选项
 const supplierOptions = ref<Supplier[]>([])
@@ -376,6 +356,54 @@ const loadSupplierOptions = async () => {
   } catch {
     // 供应商列表加载失败不阻断主流程
   }
+}
+
+// 加载商品选项（用于列表展开行展示商品名称）
+const loadProductOptions = async () => {
+  try {
+    productOptions.value = await getProductOptions()
+  } catch {
+    // 商品列表加载失败不阻断主流程
+  }
+}
+
+// 加载指定供应商关联的商品列表（用于弹窗明细行的商品下拉筛选）
+// 已缓存则直接复用，避免重复请求
+const loadProductsBySupplier = async (supplierId: number) => {
+  if (productOptionsBySupplier.value[supplierId]) return
+  try {
+    const list = await getProductsBySupplier(supplierId)
+    productOptionsBySupplier.value[supplierId] = list.map(ps => ({
+      id: ps.productId,
+      name: ps.productName || '',
+      code: ps.productCode || ''
+    }))
+  } catch {
+    // 供应商关联商品加载失败不阻断主流程
+  }
+}
+
+// 获取当前供应商下的商品选项（供模板使用）
+const getSupplierProducts = (): { id: number; name: string; code: string }[] => {
+  if (!formData.supplierId) return []
+  return productOptionsBySupplier.value[formData.supplierId] || []
+}
+
+// 加载指定商品的在库批次列表（用于弹窗明细行的批次号下拉）
+// 已缓存则直接复用，避免重复请求
+const loadProductBatches = async (productId: number) => {
+  if (batchesByProduct.value[productId]) return
+  try {
+    batchesByProduct.value[productId] = await getProductBatches(productId)
+  } catch {
+    // 批次列表加载失败不阻断主流程
+  }
+}
+
+// 获取指定商品的在库批次选项（供模板使用）
+const getProductBatchOptions = (productId: number | undefined): InventoryBatchOption[] => {
+  if (!productId) return []
+  return batchesByProduct.value[productId] || []
 }
 
 // 获取供应商名称
@@ -432,9 +460,13 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 const isEdit = ref(false)
 const editingId = ref(0)
-const voucherFile = ref<File | null>(null)
 
-interface FormItem extends PurchaseReturnItemCreate {}
+interface FormItem extends PurchaseReturnItemCreate {
+  /** 选中批次的当前库存数（前端校验退货数量上限用，不提交后端） */
+  batchStock?: number
+  /** 选中批次的入库单价（自动计算退款金额用，不提交后端） */
+  unitPrice?: number
+}
 
 const formData = reactive({
   returnNo: '',
@@ -446,42 +478,11 @@ const formData = reactive({
 })
 
 const formRules: FormRules = {
-  returnNo: [
-    { required: true, message: '请输入退货单号', trigger: 'blur' },
-    { max: 50, message: '退货单号最多50个字符', trigger: 'blur' }
-  ],
   supplierId: [
     { required: true, message: '请选择供应商', trigger: 'change' }
   ],
   returnTime: [
     { required: true, message: '请选择退货时间', trigger: 'change' }
-  ],
-  items: [
-    {
-      validator: (_rule: any, value: FormItem[], callback: any) => {
-        if (!value || value.length === 0) {
-          callback(new Error('退货明细不能为空'))
-          return
-        }
-        for (let i = 0; i < value.length; i++) {
-          const item = value[i]
-          if (!item.productId) {
-            callback(new Error(`第 ${i + 1} 行请选择商品`))
-            return
-          }
-          if (!item.quantity || item.quantity <= 0) {
-            callback(new Error(`第 ${i + 1} 行退货数量必须大于0`))
-            return
-          }
-          if (item.refundAmount < 0) {
-            callback(new Error(`第 ${i + 1} 行退款金额不能为负数`))
-            return
-          }
-        }
-        callback()
-      },
-      trigger: 'change'
-    }
   ]
 }
 
@@ -500,8 +501,9 @@ const handleAddItem = () => {
     productId: undefined as unknown as number,
     quantity: 1,
     refundAmount: 0,
-    batchNo: '',
-    remark: ''
+    batchNo: undefined,
+    batchStock: undefined,
+    unitPrice: undefined
   })
 }
 
@@ -510,31 +512,67 @@ const handleRemoveItem = (index: number) => {
   formData.items.splice(index, 1)
 }
 
-// 商品选择变化时可以做联动（如自动带出上次采购价）
-const handleProductChange = (_index: number) => {
-  // 预留：可根据选中的商品自动带出参考价格
+// 供应商变化时清空明细并加载该供应商关联的商品
+const handleSupplierChange = async (supplierId: number) => {
+  formData.items = []
+  batchesByProduct.value = {}
+  if (supplierId) {
+    await loadProductsBySupplier(supplierId)
+  }
 }
 
-// 凭证图片选择/移除
-const handleVoucherChange = (file: any) => {
-  voucherFile.value = file.raw
+// 商品选择变化时加载该商品的在库批次，并清空原批次选择
+const handleProductChange = async (index: number) => {
+  const row = formData.items[index]
+  if (!row) return
+  // 清空原批次选择、库存上限、单价、退款金额
+  row.batchNo = undefined
+  row.batchStock = undefined
+  row.unitPrice = undefined
+  row.refundAmount = 0
+  if (row.productId) {
+    await loadProductBatches(row.productId)
+  }
 }
 
-const handleVoucherRemove = () => {
-  voucherFile.value = null
+// 批次选择变化时记录该批次当前库存与入库单价，并联动重算退款金额
+const handleBatchChange = (index: number) => {
+  const row = formData.items[index]
+  if (!row) return
+  const batch = getProductBatchOptions(row.productId).find(b => b.batchNo === row.batchNo)
+  row.batchStock = batch?.quantity
+  row.unitPrice = batch?.unitPrice
+  if (row.unitPrice !== undefined) {
+    row.refundAmount = Number((row.quantity * row.unitPrice).toFixed(2))
+  }
+}
+
+// 退货数量变化时按批次单价自动计算退款金额
+const handleQuantityChange = (index: number) => {
+  const row = formData.items[index]
+  if (!row) return
+  // 输入0或负数时重置为1
+  if (!row.quantity || row.quantity <= 0) {
+    row.quantity = 1
+  }
+  if (row.unitPrice !== undefined) {
+    row.refundAmount = Number((row.quantity * row.unitPrice).toFixed(2))
+  }
 }
 
 // 重置表单
 const resetFormData = () => {
   formData.returnNo = ''
   formData.supplierId = undefined
-  formData.returnTime = new Date().toISOString().slice(0, 19)
+  formData.returnTime = new Date().toISOString().slice(0, 10)
   formData.voucherImageUrl = ''
   formData.remark = ''
   formData.items = []
-  voucherFile.value = null
   isEdit.value = false
   editingId.value = 0
+  // 清空弹窗级缓存，避免上次选择的供应商/商品批次残留
+  productOptionsBySupplier.value = {}
+  batchesByProduct.value = {}
 }
 
 // 新增
@@ -546,7 +584,7 @@ const handleAdd = () => {
 }
 
 // 编辑
-const handleEdit = (row: PurchaseReturn) => {
+const handleEdit = async (row: PurchaseReturn) => {
   resetFormData()
   isEdit.value = true
   editingId.value = row.id
@@ -555,13 +593,24 @@ const handleEdit = (row: PurchaseReturn) => {
   formData.returnTime = row.returnTime
   formData.voucherImageUrl = row.voucherImageUrl || ''
   formData.remark = row.remark || ''
+  // 预加载供应商关联商品，确保商品下拉能显示已选商品
+  if (row.supplierId) {
+    await loadProductsBySupplier(row.supplierId)
+  }
+  // 回填明细，并预加载每个商品的在库批次列表（用于批次下拉显示原批次）
+  // 编辑模式不设置 batchStock：库存已扣减，批次库存校验在编辑模式跳过
   formData.items = (row.items || []).map(item => ({
     productId: item.productId,
     quantity: Number(item.quantity),
     refundAmount: Number(item.refundAmount),
-    batchNo: item.batchNo || '',
-    remark: item.remark || ''
+    batchNo: item.batchNo || undefined,
+    batchStock: undefined
   }))
+  await Promise.all(
+    formData.items
+      .filter(item => item.productId)
+      .map(item => loadProductBatches(item.productId))
+  )
   dialogVisible.value = true
 }
 
@@ -606,24 +655,50 @@ const handleSubmit = async () => {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+    // 手动校验退货明细（参考采购订单页面，不使用 el-form 校验避免红色边框残留）
+    if (formData.items.length === 0) {
+      ElMessage.warning('请至少添加一条退货明细')
+      return
+    }
+    for (let i = 0; i < formData.items.length; i++) {
+      const item = formData.items[i]
+      if (!item.productId) {
+        ElMessage.warning(`第 ${i + 1} 行请选择商品`)
+        return
+      }
+      if (!item.batchNo) {
+        ElMessage.warning(`第 ${i + 1} 行请选择批次`)
+        return
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        ElMessage.warning(`第 ${i + 1} 行退货数量必须大于0`)
+        return
+      }
+      // 新建模式下校验退货数量不超过批次当前库存（编辑模式跳过：库存已扣减）
+      if (!isEdit.value && item.batchStock !== undefined && item.quantity > item.batchStock) {
+        ElMessage.warning(`第 ${i + 1} 行退货数量不能超过批次库存 ${item.batchStock}`)
+        return
+      }
+    }
     submitLoading.value = true
     try {
       const payload: PurchaseReturnCreate = {
-        returnNo: formData.returnNo,
+        // 退货单号由后端自动生成：新建时不传，编辑时回填原值保持不变
+        returnNo: formData.returnNo || undefined,
         supplierId: formData.supplierId!,
         returnTime: formData.returnTime,
-        voucherImageUrl: voucherFile.value ? URL.createObjectURL(voucherFile.value) : formData.voucherImageUrl || undefined,
+        voucherImageUrl: formData.voucherImageUrl || undefined,
         remark: formData.remark || undefined,
         items: formData.items.map(item => ({
           productId: item.productId,
           quantity: Number(item.quantity),
           refundAmount: Number(item.refundAmount),
-          batchNo: item.batchNo || undefined,
-          remark: item.remark || undefined
+          batchNo: item.batchNo || undefined
         }))
       }
       if (isEdit.value) {
-        await updatePurchaseReturn(editingId.value, payload)
+        // 编辑时 body 须携带 id，供后端 [FromBody] 模型绑定后通过 FluentValidation 自动验证
+        await updatePurchaseReturn({ ...payload, id: editingId.value })
         ElMessage.success('修改成功')
       } else {
         await createPurchaseReturn(payload)
@@ -639,13 +714,10 @@ const handleSubmit = async () => {
   })
 }
 
-// 格式化日期时间
+// 格式化日期（退货时间只精确到天）
 const formatDateTime = (dateStr: string): string => {
   if (!dateStr) return '-'
-  const dt = new Date(dateStr)
-  const date = dt.toISOString().split('T')[0]
-  const time = dt.toTimeString().split(' ')[0]
-  return `${date} ${time}`
+  return new Date(dateStr).toISOString().split('T')[0]
 }
 
 onMounted(async () => {
@@ -654,6 +726,7 @@ onMounted(async () => {
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
   loadSupplierOptions()
+  loadProductOptions()
   loadData()
 })
 </script>
@@ -698,6 +771,34 @@ onMounted(async () => {
 
 :deep(.el-table__row:hover > td.el-table__cell) {
   background-color: var(--bg-hover) !important;
+}
+
+/* 弹窗内表格 - 浅色浮层风格
+   项目规范：弹窗为白底浅色浮层，弹窗内表格需跟随浅色，
+   避免页面深色表格样式覆盖到弹窗，导致深色单元格+白色弹窗+白色输入框冲突 */
+:deep(.el-dialog .el-table) {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: #4b5563 !important;
+  --el-table-border-color: #e5e7eb !important;
+  --el-table-header-bg-color: #f9fafb !important;
+  --el-table-header-text-color: #1f2937 !important;
+  --el-table-row-hover-bg-color: #f3f4f6 !important;
+}
+
+:deep(.el-dialog .el-table th.el-table__cell) {
+  background-color: #f9fafb !important;
+  color: #1f2937 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+:deep(.el-dialog .el-table td.el-table__cell) {
+  background-color: transparent !important;
+  color: #4b5563 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+:deep(.el-dialog .el-table__row:hover > td.el-table__cell) {
+  background-color: #f3f4f6 !important;
 }
 
 /* 搜索区域 */
@@ -746,18 +847,6 @@ onMounted(async () => {
 
 .amount-text.danger {
   color: var(--el-color-danger);
-}
-
-.text-muted {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-/* 上传提示 */
-.upload-tip {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
 }
 
 /* 明细表格容器 */

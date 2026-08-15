@@ -5,7 +5,7 @@ using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Application.Services;
-using Bms.System.Domain.Attributes;
+using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.System.Domain.Exceptions;
 
 namespace Bms.System.Api.Controllers;
@@ -58,10 +58,16 @@ public class RolesController : ControllerBase
     /// <summary>
     /// 获取所有角色列表（不过滤租户，用于跨租户场景）
     /// 下拉查询辅助接口，仅需认证，不校验权限码
+    /// 修复 H1：仅 super_admin 可用，非超管返回 403
     /// </summary>
     [HttpGet("all-without-filter")]
     public async Task<ApiResponseDto<List<RoleDto>>> GetAllWithoutFilter()
     {
+        var (isSuperAdmin, _) = GetCurrentUserInfo();
+        if (!isSuperAdmin)
+        {
+            return ApiResponseDto<List<RoleDto>>.Fail("无权访问此接口", 403);
+        }
         return await _roleService.GetAllListWithoutFilterAsync();
     }
 
@@ -165,27 +171,6 @@ public class RolesController : ControllerBase
     public async Task<ApiResponseDto<List<Application.Dtos.Menus.MenuDto>>> GetRoleMenus(long id)
     {
         return await _roleService.GetRoleMenusAsync(id);
-    }
-
-    /// <summary>
-    /// 分配权限
-    /// </summary>
-    [HttpPost("{id}/permissions")]
-    [Permission("system:role:edit")]
-    public async Task<ApiResponseDto> AssignPermissions(long id, [FromBody] RoleAssignPermissionsDto dto)
-    {
-        try
-        {
-            return await _roleService.AssignPermissionsAsync(id, dto.PermissionIds);
-        }
-        catch (PermissionDeniedException ex)
-        {
-            return ApiResponseDto.Fail(ex.Message, 403);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return ApiResponseDto.Fail(ex.Message, 400);
-        }
     }
 
     /// <summary>

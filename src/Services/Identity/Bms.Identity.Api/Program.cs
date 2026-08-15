@@ -68,6 +68,13 @@ builder.Services.AddOpenIddict()
         options.AcceptAnonymousClients();
         options.DisableAccessTokenEncryption();
 
+        // Token 有效期（L2 修复：缩短风险窗口）
+        // access_token 15 分钟：用户被禁用或权限变更后，最多 15 分钟内旧 Token 仍有效
+        // 配合 H8 刷新令牌机制（刷新时重新加载用户状态），实现权限变更的近实时生效
+        // refresh_token 7 天：减少 refresh_token 被盗用的风险窗口
+        options.SetAccessTokenLifetime(TimeSpan.FromMinutes(15));
+        options.SetRefreshTokenLifetime(TimeSpan.FromDays(7));
+
         // 注册 System.Api 作为有效受众
         options.AddEncryptionKey(new SymmetricSecurityKey(
             Convert.FromBase64String("DRjd/GnduI3Efzen9V9BvbNUfc/VKgXltV7Kbk9sMkY=")));
@@ -101,9 +108,16 @@ builder.Services.AddOpenIddict()
 var systemApiUrl = builder.Configuration.GetValue<string>("SystemApi:BaseUrl")
     ?? "http://localhost:5000";
 
+// 内部服务调用凭证（与 System.Api 的 InternalServices:ServiceKey 保持一致）
+var internalServiceKey = builder.Configuration["InternalServices:ServiceKey"]
+    ?? string.Empty;
+
 builder.Services.AddHttpClient<ISystemApiClient, SystemApiClient>(client =>
 {
     client.BaseAddress = new Uri(systemApiUrl);
+    // 添加内部服务调用认证头，通过 System.Api 的 InternalServiceAuthMiddleware 校验
+    client.DefaultRequestHeaders.Add("X-Internal-Service", "IdentityService");
+    client.DefaultRequestHeaders.Add("X-Internal-Service-Key", internalServiceKey);
 });
 
 // ==========================================
@@ -118,6 +132,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new LongToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableLongToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new IntToStringConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableIntToStringConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

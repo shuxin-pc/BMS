@@ -31,4 +31,16 @@ public interface IStockTransferAppService
     /// 取消调拨单：草稿转已取消（已调入的不可取消，需走反向调拨单）
     /// </summary>
     Task<ApiResponseDto> CancelAsync(long id, string? reason);
+
+    /// <summary>
+    /// 获取调出门店的库存商品选项（仅返回 Stock > 0 的商品，排除样品/赠品）
+    /// 用于新增调拨时商品下拉选择，支持跨门店查询（fromStoreId 由前端传入，绕过 X-Store-Id 限制）
+    /// </summary>
+    Task<ApiResponseDto<List<StockTransferProductOptionDto>>> GetFromStoreProductsAsync(long fromStoreId);
+
+    /// <summary>
+    /// 获取调出门店指定商品的在库批次列表（按过期日期升序，FEFO）
+    /// 用于手动指定批次模式下的批次下拉选择
+    /// </summary>
+    Task<ApiResponseDto<List<StockTransferBatchOptionDto>>> GetFromStoreProductBatchesAsync(long fromStoreId, long productId);
 }

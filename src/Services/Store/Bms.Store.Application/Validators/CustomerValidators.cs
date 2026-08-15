@@ -20,7 +20,6 @@ public class CustomerUpdateDtoValidator : AbstractValidator<CustomerUpdateDto>
 {
     public CustomerUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new CustomerCreateDtoValidator());
     }
 }

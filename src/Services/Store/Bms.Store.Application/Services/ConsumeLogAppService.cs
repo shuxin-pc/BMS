@@ -37,7 +37,7 @@ public class ConsumeLogAppService : IConsumeLogAppService
     public async Task<ApiResponseDto<PagedResponseDto<ConsumeLogDto>>> GetPagedListAsync(ConsumeLogQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<ConsumeLogDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<ConsumeLogDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.ConsumeLogs
@@ -71,7 +71,7 @@ public class ConsumeLogAppService : IConsumeLogAppService
     public async Task<ApiResponseDto<ConsumeLogDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ConsumeLogDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ConsumeLogDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.ConsumeLogs
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
@@ -86,7 +86,7 @@ public class ConsumeLogAppService : IConsumeLogAppService
     public async Task<ApiResponseDto<ConsumeLogDto>> CreateAsync(ConsumeLogCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ConsumeLogDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ConsumeLogDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -109,7 +109,7 @@ public class ConsumeLogAppService : IConsumeLogAppService
     public async Task<ApiResponseDto<ConsumeLogDto>> UpdateAsync(ConsumeLogUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ConsumeLogDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ConsumeLogDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -139,7 +139,7 @@ public class ConsumeLogAppService : IConsumeLogAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.ConsumeLogs
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
@@ -157,7 +157,7 @@ public class ConsumeLogAppService : IConsumeLogAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

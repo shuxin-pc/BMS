@@ -15,16 +15,13 @@ namespace Bms.Store.Api.Controllers;
 public class InventoryLogsController : ControllerBase
 {
     private readonly IInventoryLogAppService _appService;
-    private readonly IInboundAppService _inboundAppService;
     private readonly IOutboundAppService _outboundAppService;
 
     public InventoryLogsController(
         IInventoryLogAppService appService,
-        IInboundAppService inboundAppService,
         IOutboundAppService outboundAppService)
     {
         _appService = appService;
-        _inboundAppService = inboundAppService;
         _outboundAppService = outboundAppService;
     }
 
@@ -72,13 +69,6 @@ public class InventoryLogsController : ControllerBase
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
-
-    /// <summary>
-    /// 入库（语义化端点，事务内同步维护 InventoryLog + InventoryBatch + Inventory 三表）
-    /// </summary>
-    [HttpPost("inbound")]
-    public async Task<ApiResponseDto<InventoryLogDto>> Inbound([FromBody] InboundCreateDto dto)
-        => await _inboundAppService.CreateAsync(dto);
 
     /// <summary>
     /// 出库（语义化端点，事务内按 FEFO 或手动指定扣减批次，写多条流水，更新汇总表）

@@ -10,7 +10,7 @@ namespace Bms.Store.Api.Controllers;
 /// 设备维护记录管理控制器
 /// </summary>
 [ApiController]
-[Route("api/store/[controller]")]
+[Route("api/store/equipment-maintenances")]
 [Authorize]
 public class EquipmentMaintenancesController : ControllerBase
 {

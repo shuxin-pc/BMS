@@ -218,7 +218,20 @@ export const useUserStore = defineStore('user', {
       return true
     },
 
-    logout() {
+    async logout() {
+      // 清除动态路由注册：先移除 dynamic_ 路由再重置标记
+      // 使用动态导入避免循环依赖（router/index.ts -> stores/user.ts -> router/index.ts）
+      try {
+        const [{ default: router }, { unregisterDynamicRoutes, resetRouteRegistration }] = await Promise.all([
+          import('@/router'),
+          import('@/router/modules')
+        ])
+        unregisterDynamicRoutes(router)
+        resetRouteRegistration()
+      } catch (error) {
+        // 路由清理失败不阻断 logout
+      }
+
       // 清空用户 store
       this.token = ''
       this.userInfo = <UserInfo>{
@@ -333,6 +346,20 @@ export const useUserStore = defineStore('user', {
       localStorage.setItem('currentSubsystemId', id)
       // 切换子系统后重新获取菜单
       await this.getMenus()
+
+      // 切换子系统后用户仍在 layout，路由守卫 beforeEach 不会触发
+      // 需主动清除旧子系统动态路由并注册新子系统路由
+      try {
+        const [{ default: router }, { unregisterDynamicRoutes, registerDynamicRoutes, registerNotFoundRoute }] = await Promise.all([
+          import('@/router'),
+          import('@/router/modules')
+        ])
+        unregisterDynamicRoutes(router)
+        registerDynamicRoutes(router, this.menus, new Set<string>())
+        registerNotFoundRoute(router)
+      } catch (error) {
+        // 路由注册失败不影响菜单切换，但可能导致页面 404
+      }
 
       // 切换到 store 子系统时，加载授权门店列表（用于门店切换器）
       const target = this.authorizedSubsystems.find(s => String(s.id) === id)

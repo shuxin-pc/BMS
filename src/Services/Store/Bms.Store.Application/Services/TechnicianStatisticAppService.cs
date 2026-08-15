@@ -38,7 +38,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto<PagedResponseDto<TechnicianStatisticDto>>> GetPagedListAsync(TechnicianStatisticQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<TechnicianStatisticDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<TechnicianStatisticDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         // join Technician 过滤 Source=1（商家技师），隐藏平台技师统计记录
@@ -78,7 +78,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto<TechnicianStatisticDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TechnicianStatisticDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TechnicianStatisticDto?>.Fail("登录状态异常，请重新登录", 401);
 
         // join Technician 过滤 Source=1（商家技师），隐藏平台技师统计记录
         var entity = await (from s in _dbContext.TechnicianStatistics
@@ -97,7 +97,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto<TechnicianStatisticDto>> CreateAsync(TechnicianStatisticCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TechnicianStatisticDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TechnicianStatisticDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -120,7 +120,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto<TechnicianStatisticDto>> UpdateAsync(TechnicianStatisticUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TechnicianStatisticDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TechnicianStatisticDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -150,7 +150,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.TechnicianStatistics
             .FirstOrDefaultAsync(s => s.Id == id && s.TenantId == _currentUser.TenantId.Value);
@@ -168,7 +168,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -192,7 +192,7 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
     public async Task<ApiResponseDto<TechnicianStatReportDto>> GetReportAsync(TechnicianStatisticQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<TechnicianStatReportDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<TechnicianStatReportDto>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
 
@@ -217,9 +217,12 @@ public class TechnicianStatisticAppService : ITechnicianStatisticAppService
         }
 
         // 1. 主查询：OrderItem 关联 Order（取 OrderTime/CustomerId）+ ServiceProduct（取 Duration，左连接）
+        // ServiceProduct 关联字段从 ProductId 改为 MasterId（设计文档 3.4 节）
+        // 通过 Product.MasterId 桥接 OrderItem.ProductId 与 ServiceProduct.MasterId
         var baseQuery = from oi in _dbContext.OrderItems
                         join o in _dbContext.Orders on oi.OrderId equals o.Id
-                        join sp in _dbContext.ServiceProducts on oi.ProductId equals sp.ProductId into spGroup
+                        join p in _dbContext.Products on oi.ProductId equals p.Id
+                        join sp in _dbContext.ServiceProducts on p.MasterId equals sp.MasterId into spGroup
                         from sp in spGroup.DefaultIfEmpty()
                         where oi.TenantId == tenantId
                               && oi.TechnicianId.HasValue

@@ -113,3 +113,53 @@ public class IntToStringConverter : JsonConverter<int>
         writer.WriteNumberValue(value);
     }
 }
+
+/// <summary>
+/// NullableInt 类型 JSON 转换器
+/// 与 NullableLongToStringConverter 行为一致：
+/// - 支持数字、字符串数字、空字符串（视为 null）、null
+/// 解决 el-input-number 清空时可能产生空字符串导致 int? 反序列化失败的问题
+/// </summary>
+public class NullableIntToStringConverter : JsonConverter<int?>
+{
+    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var stringValue = reader.GetString();
+            if (string.IsNullOrEmpty(stringValue))
+            {
+                return null;
+            }
+            if (int.TryParse(stringValue, out int result))
+            {
+                return result;
+            }
+            throw new JsonException($"无法将字符串 '{stringValue}' 转换为 int 类型");
+        }
+
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            return reader.GetInt32();
+        }
+
+        throw new JsonException($"无法将 {reader.TokenType} 转换为 int? 类型");
+    }
+
+    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+        {
+            writer.WriteNumberValue(value.Value);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+    }
+}

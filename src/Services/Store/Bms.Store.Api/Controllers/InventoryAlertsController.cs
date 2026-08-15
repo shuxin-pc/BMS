@@ -67,25 +67,9 @@ public class InventoryAlertsController : ControllerBase
         => await _appService.BatchDeleteAsync(request.Ids);
 
     /// <summary>
-    /// 手动触发预警扫描（低库存/效期/积压）
+    /// 手动触发预警扫描（低库存/效期/积压），同时关闭已解决的预警
     /// </summary>
     [HttpPost("scan")]
     public async Task<ApiResponseDto<InventoryAlertScanResultDto>> Scan()
         => await _appService.ScanAsync();
-
-    /// <summary>
-    /// 标记预警已处理
-    /// </summary>
-    [HttpPost("{id:long}/process")]
-    public async Task<ApiResponseDto> Process(long id, [FromBody] ProcessAlertRequest? request)
-        => await _appService.ProcessAsync(id, request?.Remark);
-}
-
-/// <summary>
-/// 预警处理请求
-/// </summary>
-public class ProcessAlertRequest
-{
-    /// <summary>处理备注</summary>
-    public string? Remark { get; set; }
 }

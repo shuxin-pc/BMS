@@ -1,9 +1,9 @@
 namespace Bms.Store.Domain.Entities;
 
 /// <summary>
-/// 储值账户（租户内跨店通用，不归属单一门店，遵循原则4跨店权益共享）
+/// 储值账户（租户内跨店通用，开户门店永久归属，遵循原则4跨店权益共享）
 /// </summary>
-public class StoredValueAccount : StoreTenantEntity
+public class StoredValueAccount : StoreEntity
 {
     /// <summary>
     /// 客户ID

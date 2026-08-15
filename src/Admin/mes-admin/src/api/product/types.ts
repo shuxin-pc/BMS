@@ -36,10 +36,12 @@ export interface ProductCategory {
   id: number
   /** 分类名称 */
   name: string
+  /** 分类编码 */
+  code?: string
   /** 父分类ID */
   parentId: number
-  /** 排序 */
-  sort: number
+  /** 创建时间 */
+  createdAt?: string
   /** 子分类 */
   children?: ProductCategory[]
 }
@@ -48,52 +50,60 @@ export interface ProductCategory {
  * 商品信息（主表+子表字段合并输出）
  * 商品多态模型：主表区分类型，仅服务项目（type=2）有子表字段
  * - type=2 服务项目：duration、requiredRoomType、equipmentIds、equipmentNames、applicableSkills
+ * Master 字段（name/code/type/spec/unit/brand 等）来自 ProductMaster，只读展示
+ * Store 字段（price/costPrice/status 等）门店独立
  */
 export interface Product {
   /** 商品ID */
   id: number
-  /** 商品名称 */
+  /** 关联商品主档ID */
+  masterId: number
+  /** 商品名称（Master 字段，只读） */
   name: string
-  /** 商品编码 */
+  /** 商品编码（Master 字段，只读） */
   code: string
-  /** 商品分类ID */
+  /** 商品分类ID（Master 字段，只读） */
   categoryId: number
   /** 商品分类名称 */
   categoryName?: string
-  /** 商品类型：1-实物商品，2-服务项目，3-耗材 */
+  /** 商品类型：1-实物商品，2-服务项目，3-耗材，4-样品，5-赠品（Master 字段，只读） */
   type: ProductType
-  /** 规格 */
+  /** 规格（Master 字段，只读） */
   spec?: string
-  /** 单位 */
+  /** 单位（Master 字段，只读） */
   unit?: string
-  /** 品牌 */
+  /** 品牌（Master 字段，只读） */
   brand?: string
-  /** 供应商ID */
-  supplierId?: number
-  /** 售价 */
+  /** 默认供应商ID（从 ProductSupplier.IsDefault=true 派生） */
+  defaultSupplierId?: number
+  /** 默认供应商名称 */
+  defaultSupplierName?: string
+  /** 售价（Store 字段，分店独立） */
   price: number
-  /** 成本价 */
+  /** 成本价（Store 字段） */
   costPrice?: number
-  /** 低库存预警阈值（低于此值触发预警，空=不预警） */
+  /** 上次采购价（采购入库时自动更新，分店独立采购） */
+  lastPurchasePrice?: number
+  /** 低库存预警阈值（Store 字段，空=不预警） */
   lowStockThreshold?: number
-  /** 效期预警天数（剩余天数小于等于此值触发预警，空=不预警） */
+  /** 效期预警天数（Store 字段，空=不预警） */
   expiryAlertDays?: number
-  /** 积压预警阈值（超过此值触发预警，空=不预警） */
+  /** 积压预警阈值（Store 字段，空=不预警） */
   overstockThreshold?: number
-  /** 商品图片URL */
+  /** 商品图片URL（Master 字段，只读） */
   imageUrl?: string
-  /** 商品状态：1-上架，2-下架 */
+  /** 上架状态（Store 字段）：1-上架，2-下架 */
   status: ProductStatus
-  /** 是否可销售（样品/赠品为 false，不可通过 POS 销售下单） */
+  /** 是否可销售（Master 字段，样品/赠品为 false） */
   isSalable: boolean
-  /** 商品描述 */
-  description?: string
+  /** 分店级备注（Store 字段） */
+  remark?: string
   /** 创建时间 */
   createdAt: string
   /** 更新时间 */
   updatedAt?: string
 
-  // ========== 服务项目子表字段（type=2）==========
+  // ========== 服务项目子表字段（type=2，Master 层）==========
   /** 服务时长（分钟，服务项目） */
   duration?: number
   /** 所需房间/床位类型（1:房间 2:床位，undefined=不限，服务项目） */
@@ -116,8 +126,6 @@ export interface ProductQuery {
   code?: string
   /** 分类ID */
   categoryId?: number
-  /** 供应商ID */
-  supplierId?: number
   /** 状态筛选 */
   status?: ProductStatus
   /** 类型筛选 */
@@ -129,31 +137,27 @@ export interface ProductQuery {
 }
 
 /**
- * 创建商品请求（主表+子表字段合并）
- * 调用方根据 type 填充对应子表字段
+ * 创建门店商品档案请求（仅 Store 字段 + 关联主档）
+ * Master 字段由主档统一管理，门店仅承载定价/预警/上架等独立配置
+ * 对应后端 ProductCreateDto
  */
 export interface ProductCreate {
-  name: string
-  code: string
-  categoryId: number
-  type: ProductType
-  spec?: string
-  unit?: string
+  /** 关联商品主档ID */
+  masterId: number
+  /** 售价（Store 字段，分店独立定价） */
   price: number
+  /** 成本价（Store 字段） */
   costPrice?: number
+  /** 低库存预警阈值（Store 字段，空=不预警） */
   lowStockThreshold?: number
+  /** 效期预警天数（Store 字段，空=不预警） */
   expiryAlertDays?: number
+  /** 积压预警阈值（Store 字段，空=不预警） */
   overstockThreshold?: number
-  imageUrl?: string
+  /** 上架状态（Store 字段）：1-上架，2-下架 */
   status: ProductStatus
-  description?: string
-
-  // 服务项目子表字段（type=2）
-  duration?: number
-  requiredRoomType?: RequiredRoomType
-  /** 所需仪器 ID 列表（服务项目） */
-  equipmentIds?: number[]
-  applicableSkills?: string
+  /** 分店级备注 */
+  remark?: string
 }
 
 /**

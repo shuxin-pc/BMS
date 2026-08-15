@@ -4,7 +4,7 @@ namespace Bms.Store.Domain.Entities;
 /// 疗程卡核销项目明细
 /// 一次核销可包含多个项目（一次到店做多种护理），每个项目独立计算金额
 /// </summary>
-public class TreatmentCardVerifyItem : StoreTenantEntityBase
+public class TreatmentCardVerifyItem : StoreBusinessEntityBase
 {
     /// <summary>
     /// 核销主单ID

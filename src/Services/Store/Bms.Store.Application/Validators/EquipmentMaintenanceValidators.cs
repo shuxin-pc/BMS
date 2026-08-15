@@ -24,7 +24,6 @@ public class EquipmentMaintenanceUpdateDtoValidator : AbstractValidator<Equipmen
 {
     public EquipmentMaintenanceUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new EquipmentMaintenanceCreateDtoValidator());
     }
 }

@@ -45,7 +45,7 @@ public class ResourceAvailabilityService : IResourceAvailabilityService
         {
             var sp = await _dbContext.ServiceProducts
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.ProductId == serviceProductId.Value);
+                .FirstOrDefaultAsync(x => x.MasterId == serviceProductId.Value);
             if (sp?.RequiredRoomType.HasValue == true)
             {
                 effectiveRoomType = sp.RequiredRoomType;
@@ -98,8 +98,8 @@ public class ResourceAvailabilityService : IResourceAvailabilityService
         {
             var productIds = orderItems.Select(oi => oi.ProductId).Distinct().ToList();
             productDurations = await _dbContext.ServiceProducts
-                .Where(sp => productIds.Contains(sp.ProductId))
-                .ToDictionaryAsync(sp => sp.ProductId, sp => sp.Duration ?? 0);
+                .Where(sp => productIds.Contains(sp.MasterId))
+                .ToDictionaryAsync(sp => sp.MasterId, sp => sp.Duration ?? 0);
         }
 
         // 构建占用时间区间列表：[(resourceType, resourceId, start, end, source, info)]

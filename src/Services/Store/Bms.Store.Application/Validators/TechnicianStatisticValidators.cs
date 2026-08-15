@@ -25,7 +25,6 @@ public class TechnicianStatisticUpdateDtoValidator : AbstractValidator<Technicia
 {
     public TechnicianStatisticUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new TechnicianStatisticCreateDtoValidator());
     }
 }

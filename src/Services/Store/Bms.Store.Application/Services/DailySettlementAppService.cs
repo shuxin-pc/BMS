@@ -774,7 +774,7 @@ public class DailySettlementAppService : IDailySettlementAppService
     public async Task<ApiResponseDto<PagedResponseDto<DailySettlementDto>>> GetPagedListAsync(DailySettlementQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<DailySettlementDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<DailySettlementDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.DailySettlements
@@ -815,7 +815,7 @@ public class DailySettlementAppService : IDailySettlementAppService
     public async Task<ApiResponseDto<DailySettlementDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<DailySettlementDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<DailySettlementDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var queryable = _dbContext.DailySettlements
             .Where(s => s.Id == id && s.TenantId == _currentUser.TenantId.Value);
@@ -834,7 +834,7 @@ public class DailySettlementAppService : IDailySettlementAppService
     private TenantStoreContext ResolveTenantStore()
     {
         if (!_currentUser.TenantId.HasValue)
-            return new TenantStoreContext(0, 0, "无法确定当前租户", 401);
+            return new TenantStoreContext(0, 0, "登录状态异常，请重新登录", 401);
         if (!_currentUser.StoreId.HasValue)
             return new TenantStoreContext(0, 0, "请选择门店", 400);
         return new TenantStoreContext(_currentUser.TenantId.Value, _currentUser.StoreId.Value, null, 0);

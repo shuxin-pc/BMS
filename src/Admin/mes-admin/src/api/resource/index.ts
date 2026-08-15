@@ -1,7 +1,7 @@
 // 资源可用性 API 服务
 // 对接后端 ResourcesController（路由 /api/store/resources）
 import { request, buildQuery } from '../shared/storeRequest'
-import type { ResourceAvailabilityDto } from './types'
+import type { ResourceAvailabilityDto, TechnicianAvailabilityItem, RoomAvailabilityItem, EquipmentAvailabilityItem } from './types'
 
 export type { ResourceAvailabilityDto, TechnicianAvailabilityItem, RoomAvailabilityItem, EquipmentAvailabilityItem }
 

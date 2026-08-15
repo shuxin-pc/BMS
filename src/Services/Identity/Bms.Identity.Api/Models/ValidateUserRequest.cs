@@ -92,3 +92,14 @@ public class LoginAuditRequest
     /// </summary>
     public string? RequestPath { get; set; }
 }
+
+/// <summary>
+/// 刷新令牌时获取用户最新状态请求
+/// </summary>
+public class RefreshUserInfoRequest
+{
+    /// <summary>
+    /// 用户ID
+    /// </summary>
+    public long UserId { get; set; }
+}

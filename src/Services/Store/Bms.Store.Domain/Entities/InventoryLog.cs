@@ -67,9 +67,19 @@ public class InventoryLog : StoreBusinessEntityBase
     public string? Remark { get; set; }
 
     /// <summary>
+    /// 操作人ID（System 服务用户ID，用于追责与同名操作人区分）
+    /// </summary>
+    public long? OperatorId { get; set; }
+
+    /// <summary>
     /// 操作人姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
     /// </summary>
     public string? OperatorName { get; set; }
+
+    /// <summary>
+    /// 关联活动ID（可选，样品/赠品领用与订单内赠品出库时填充，用于活动维度归因统计）
+    /// </summary>
+    public long? ActivityId { get; set; }
 
     /// <summary>
     /// 导航属性：商品
@@ -80,4 +90,9 @@ public class InventoryLog : StoreBusinessEntityBase
     /// 导航属性：供应商
     /// </summary>
     public Supplier? Supplier { get; set; }
+
+    /// <summary>
+    /// 导航属性：活动
+    /// </summary>
+    public Activity? Activity { get; set; }
 }

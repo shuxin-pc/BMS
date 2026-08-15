@@ -27,4 +27,7 @@ public class InventoryLogQueryDto : PagedRequestDto
 
     /// <summary>结束日期（CreatedTime <= EndDate，含当日）</summary>
     public DateTime? EndDate { get; set; }
+
+    /// <summary>批次号（模糊匹配）</summary>
+    public string? BatchNo { get; set; }
 }

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Bms.System.Domain.Entities;
 using Bms.System.Domain.IRepositories;
 
@@ -8,19 +7,15 @@ namespace Bms.System.Infrastructure.Repositories;
 public class RoleRepository : IRoleRepository
 {
     private readonly SystemDbContext _context;
-    private readonly ILogger<RoleRepository> _logger;
 
-    public RoleRepository(SystemDbContext context, ILogger<RoleRepository> logger)
+    public RoleRepository(SystemDbContext context)
     {
         _context = context;
-        _logger = logger;
     }
 
     public async Task<Role?> GetByIdAsync(long id)
     {
         return await _context.Roles
-            .Include(r => r.RolePermissions)
-                .ThenInclude(rp => rp.Permission)
             .Include(r => r.UserRoles)
             .Include(r => r.DataPermission)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
@@ -29,8 +24,6 @@ public class RoleRepository : IRoleRepository
     public async Task<Role?> GetByCodeAsync(string code)
     {
         return await _context.Roles
-            .Include(r => r.RolePermissions)
-                .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(r => r.Code == code && !r.IsDeleted);
     }
 
@@ -56,22 +49,9 @@ public class RoleRepository : IRoleRepository
 
     public async Task<List<Role>> GetByUserIdAsync(long userId)
     {
-        // Include RolePermissions.Permission，否则权限中间件读取的权限列表为空
         var roles = await _context.Roles
             .Where(r => !r.IsDeleted && r.UserRoles.Any(ur => ur.UserId == userId))
-            .Include(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
             .ToListAsync();
-
-        // 诊断：逐表查证该用户每个角色的权限数据分布
-        foreach (var r in roles)
-        {
-            var rpCount = await _context.RolePermissions.CountAsync(rp => rp.RoleId == r.Id);
-            var rmaCount = await _context.RoleMenuAuths.CountAsync(rma => rma.RoleId == r.Id);
-            var loadedRpCount = r.RolePermissions?.Count ?? 0;
-            _logger.LogWarning(
-                "【权限调试】GetByUserIdAsync RoleId={RoleId}, Code={Code}, DB.RolePermissions={RpInDb}, 已加载RolePermissions={Loaded}, DB.RoleMenuAuths={RmaInDb}",
-                r.Id, r.Code, rpCount, loadedRpCount, rmaCount);
-        }
 
         return roles;
     }

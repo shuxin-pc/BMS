@@ -64,6 +64,9 @@
     <div class="card">
       <el-table v-loading="tableLoading" :data="tableData" style="width: 100%">
         <el-table-column prop="code" label="资产编号" width="140" />
+        <el-table-column prop="equipmentTypeName" label="设备类型" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.equipmentTypeName || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="name" label="设备名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="model" label="型号" width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.model || '-' }}</template>
@@ -137,6 +140,21 @@
         :rules="formRules"
         label-width="100px"
       >
+        <el-form-item label="设备类型" prop="equipmentTypeId">
+          <el-select
+            v-model="formData.equipmentTypeId"
+            filterable
+            placeholder="请选择设备类型"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in equipmentTypeOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="设备名称" prop="name">
@@ -299,6 +317,8 @@ import {
   getUpcomingMaintenance
 } from '@/api/equipment'
 import type { Equipment, EquipmentStatus } from '@/api/equipment/types'
+import { getEquipmentTypeOptions } from '@/api/equipment-type'
+import type { EquipmentType } from '@/api/equipment-type'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -331,8 +351,12 @@ const upcomingVisible = ref(false)
 const upcomingLoading = ref(false)
 const upcomingList = ref<Equipment[]>([])
 
+// 设备类型选项（租户级共享）
+const equipmentTypeOptions = ref<EquipmentType[]>([])
+
 const formData = reactive({
   id: 0,
+  equipmentTypeId: undefined as number | undefined,
   name: '',
   code: '',
   model: '',
@@ -348,6 +372,9 @@ const formData = reactive({
 })
 
 const formRules: FormRules = {
+  equipmentTypeId: [
+    { required: true, message: '请选择设备类型', trigger: 'change' }
+  ],
   name: [
     { required: true, message: '设备名称不能为空', trigger: 'blur' },
     { max: 100, message: '设备名称最多100个字符', trigger: 'blur' }
@@ -442,6 +469,7 @@ const handleReset = () => {
 // 重置表单
 const resetFormData = () => {
   formData.id = 0
+  formData.equipmentTypeId = undefined
   formData.name = ''
   formData.code = ''
   formData.model = ''
@@ -467,6 +495,7 @@ const handleAdd = () => {
 const handleEdit = (row: Equipment) => {
   isEdit.value = true
   formData.id = row.id
+  formData.equipmentTypeId = row.equipmentTypeId
   formData.name = row.name
   formData.code = row.code
   formData.model = row.model || ''
@@ -512,6 +541,7 @@ const handleSubmit = async () => {
       submitLoading.value = true
       try {
         const payload = {
+          equipmentTypeId: formData.equipmentTypeId!,
           name: formData.name,
           code: formData.code,
           model: formData.model || undefined,
@@ -557,11 +587,21 @@ const loadUpcomingMaintenance = async () => {
   }
 }
 
+// 加载设备类型选项
+const loadEquipmentTypeOptions = async () => {
+  try {
+    equipmentTypeOptions.value = await getEquipmentTypeOptions()
+  } catch {
+    equipmentTypeOptions.value = []
+  }
+}
+
 onMounted(async () => {
   if (!systemConfigStore.loaded) {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  loadEquipmentTypeOptions()
   loadData()
 })
 </script>

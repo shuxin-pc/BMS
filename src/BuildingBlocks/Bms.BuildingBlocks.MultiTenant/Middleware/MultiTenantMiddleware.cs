@@ -2,6 +2,7 @@ using Bms.BuildingBlocks.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Bms.BuildingBlocks.MultiTenant.Middleware;
@@ -39,9 +40,9 @@ public class MultiTenantMiddleware
             }
 
             // 跳过认证接口的租户检查
-            if (path.StartsWith("/api/internal/auth", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/api/internal/messages", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase) ||
+            // 注意：/api/internal/* 路径不再豁免，内部服务由 InternalServiceAuthMiddleware
+            // 设置 tenant_id claim，ClaimTenantResolver 可正常解析租户上下文
+            if (path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("/api/system/auth", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("/api/system/SystemConfigs/system", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("/api/identity/connect", StringComparison.OrdinalIgnoreCase))
@@ -51,13 +52,8 @@ public class MultiTenantMiddleware
                 return;
             }
 
-            // 获取用户名（从Claims中获取）
-            var userNameClaim = context.User.FindFirst("name")?.Value
-                              ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name")?.Value
-                              ?? context.User.FindFirst("preferred_username")?.Value;
-
             // 解析门店ID（仅 store 子系统 API 需要，从 X-Store-Id 请求头获取）
-            // 注意：必须在 admin 跳过分支之前执行，否则超级管理员用户无法获取 StoreId，
+            // 注意：必须在 super_admin 跳过分支之前执行，否则超级管理员用户无法获取 StoreId，
             // 导致 store 子系统的 API（如 DashboardAppService）返回"请选择门店"
             if (path.StartsWith("/api/store", StringComparison.OrdinalIgnoreCase))
             {
@@ -69,7 +65,12 @@ public class MultiTenantMiddleware
                 }
             }
 
-            if (userNameClaim == "admin")
+            // 超级管理员跳过租户校验（基于角色判断，不依赖用户名硬编码）
+            // 与 CurrentUser.IsSuperAdmin 实现保持一致：查找 ClaimTypes.Role 中是否包含 "super_admin"
+            var isSuperAdmin = context.User.FindAll(ClaimTypes.Role)
+                .Select(c => c.Value)
+                .Contains("super_admin");
+            if (isSuperAdmin)
             {
                 await _next(context);
                 return;

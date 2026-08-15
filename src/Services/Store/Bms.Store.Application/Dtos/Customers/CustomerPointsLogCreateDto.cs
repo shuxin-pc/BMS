@@ -11,7 +11,6 @@ public class CustomerPointsLogCreateDto
     public int BeforePoints { get; set; }
     public int AfterPoints { get; set; }
     public long? OrderId { get; set; }
-    public long? OperatorId { get; set; }
     public DateTime? ExpireDate { get; set; }
     public string? Remark { get; set; }
 }

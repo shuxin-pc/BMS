@@ -8,6 +8,11 @@ public class TechnicianDto
     public long Id { get; set; }
 
     /// <summary>
+    /// 技师归属租户ID（前端据此判断当前租户是否可编辑/删除）
+    /// </summary>
+    public long TenantId { get; set; }
+
+    /// <summary>
     /// 技师姓名
     /// </summary>
     public string Name { get; set; } = string.Empty;
@@ -38,7 +43,7 @@ public class TechnicianDto
     public string? AvatarUrl { get; set; }
 
     /// <summary>
-    /// 状态（0:禁用 1:启用）
+    /// 状态（1:在岗 2:休息）
     /// </summary>
     public int Status { get; set; }
 

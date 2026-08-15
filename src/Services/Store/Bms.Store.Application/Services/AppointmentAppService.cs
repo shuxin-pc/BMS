@@ -44,7 +44,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto<PagedResponseDto<AppointmentDto>>> GetPagedListAsync(AppointmentQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<AppointmentDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<AppointmentDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.Appointments
@@ -52,6 +52,10 @@ public class AppointmentAppService : IAppointmentAppService
 
         if (query.CustomerId.HasValue)
             queryable = queryable.Where(a => a.CustomerId == query.CustomerId.Value);
+        if (!string.IsNullOrWhiteSpace(query.CustomerName))
+            queryable = queryable.Where(a => a.CustomerName.Contains(query.CustomerName));
+        if (!string.IsNullOrWhiteSpace(query.Phone))
+            queryable = queryable.Where(a => a.CustomerPhone.Contains(query.Phone));
         if (query.Status.HasValue)
             queryable = queryable.Where(a => a.Status == query.Status.Value);
         if (query.AppointmentDateStart.HasValue)
@@ -84,7 +88,7 @@ public class AppointmentAppService : IAppointmentAppService
         var productIds = items.Select(a => a.ProductId).Distinct().ToList();
         var productNames = await _dbContext.Products
             .Where(p => productIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name })
+            .Select(p => new { p.Id, Name = p.Master.Name })
             .ToListAsync();
 
         var dtos = items.Adapt<List<AppointmentDto>>();
@@ -114,7 +118,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto<AppointmentDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<AppointmentDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<AppointmentDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Appointments
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
@@ -131,8 +135,9 @@ public class AppointmentAppService : IAppointmentAppService
 
         // 填充服务项目商品名称（替代原 ServiceItem 字符串字段）
         var product = await _dbContext.Products
+            .Include(p => p.Master)
             .FirstOrDefaultAsync(p => p.Id == entity.ProductId);
-        dto.ProductName = product?.Name;
+        dto.ProductName = product?.Master?.Name;
 
         return ApiResponseDto<AppointmentDto?>.Ok(dto);
     }
@@ -144,7 +149,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto<AppointmentDto>> CreateAsync(AppointmentCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<AppointmentDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<AppointmentDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -229,7 +234,7 @@ public class AppointmentAppService : IAppointmentAppService
 
         // 填充 ProductName 返回
         var resultDto = entity.Adapt<AppointmentDto>();
-        resultDto.ProductName = product.Name;
+        resultDto.ProductName = product.Master.Name;
         return ApiResponseDto<AppointmentDto>.Ok(resultDto, "创建成功");
     }
 
@@ -240,7 +245,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto<AppointmentDto>> UpdateAsync(AppointmentUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<AppointmentDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<AppointmentDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -358,7 +363,7 @@ public class AppointmentAppService : IAppointmentAppService
         await _dbContext.SaveChangesAsync();
 
         var resultDto = entity.Adapt<AppointmentDto>();
-        resultDto.ProductName = product.Name;
+        resultDto.ProductName = product.Master.Name;
         return ApiResponseDto<AppointmentDto>.Ok(resultDto, "更新成功");
     }
 
@@ -406,12 +411,13 @@ public class AppointmentAppService : IAppointmentAppService
     private async Task<(ProductEntity? Product, ServiceProductEntity? ServiceProduct)> GetServiceProductAsync(long productId, long tenantId)
     {
         var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId && p.Type == 2);
+            .Include(p => p.Master)
+            .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId && p.Master.Type == 2);
         if (product == null)
             return (null, null);
 
         var serviceProduct = await _dbContext.ServiceProducts
-            .FirstOrDefaultAsync(sp => sp.ProductId == productId && sp.TenantId == tenantId);
+            .FirstOrDefaultAsync(sp => sp.MasterId == productId && sp.TenantId == tenantId);
         return (product, serviceProduct);
     }
 
@@ -421,7 +427,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Appointments
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
@@ -439,7 +445,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -459,7 +465,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>> GetTomorrowRemindersAsync(TomorrowReminderQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         // 明天的日期范围（避免 DateTime 比较时的时间部分干扰）
@@ -497,7 +503,7 @@ public class AppointmentAppService : IAppointmentAppService
         var productIds = items.Select(a => a.ProductId).Distinct().ToList();
         var productNames = await _dbContext.Products
             .Where(p => productIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name })
+            .Select(p => new { p.Id, Name = p.Master.Name })
             .ToDictionaryAsync(p => p.Id, p => p.Name);
 
         var dtos = items.Select(a => new TomorrowReminderDto
@@ -532,7 +538,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto> SendReminderAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Appointments
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
@@ -553,7 +559,7 @@ public class AppointmentAppService : IAppointmentAppService
     public async Task<ApiResponseDto> ConfirmTomorrowAppointmentAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Appointments
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);

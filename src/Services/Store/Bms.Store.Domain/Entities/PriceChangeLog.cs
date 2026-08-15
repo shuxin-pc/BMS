@@ -32,6 +32,11 @@ public class PriceChangeLog : StoreBusinessEntityBase
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作员姓名（冗余字段，写入时填充，避免跨服务查 User 表）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 备注
     /// </summary>
     public string? Remark { get; set; }

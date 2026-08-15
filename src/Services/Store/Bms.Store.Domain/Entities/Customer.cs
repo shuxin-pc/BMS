@@ -56,11 +56,6 @@ public class Customer : StoreEntity
     public string? Address { get; set; }
 
     /// <summary>
-    /// 客户标签（JSON格式或逗号分隔）
-    /// </summary>
-    public string? Tags { get; set; }
-
-    /// <summary>
     /// 授权状态（0:未授权 1:已授权 2:已撤回）
     /// 满足《个人信息保护法》合规要求
     /// </summary>
@@ -80,4 +75,9 @@ public class Customer : StoreEntity
     /// 导航属性：等级
     /// </summary>
     public CustomerLevel? Level { get; set; }
+
+    /// <summary>
+    /// 导航属性：客户标签关联
+    /// </summary>
+    public List<CustomerTagLink> CustomerTagLinks { get; set; } = new();
 }

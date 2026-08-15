@@ -15,6 +15,7 @@ using Bms.System.Application.Extensions;
 using Bms.System.Application.Mapping;
 using Bms.System.Domain.Interfaces;
 using Bms.System.Api.Middleware;
+using Bms.System.Api.Filters;
 using Bms.System.Api.Hubs;
 using Bms.System.Api.Services;
 using Bms.System.Application.Services;
@@ -68,6 +69,9 @@ builder.Services.AddCors(options =>
 // HttpContextAccessor (CurrentUser 需要)
 builder.Services.AddHttpContextAccessor();
 
+// 内存缓存（UserStatusCheckMiddleware 需要，L2 修复）
+builder.Services.AddMemoryCache();
+
 // CurrentUser 服务
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
@@ -89,6 +93,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new LongToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableLongToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new IntToStringConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableIntToStringConverter());
         // 注意：DateOnlyToUtcConverter 不全局注册，因为项目中没有 DateOnly 类型属性
         // 该转换器会导致 DateTime 属性被截断为日期字符串
     })
@@ -111,6 +116,12 @@ builder.Services.AddControllers()
                 data = (object?)null
             });
         };
+    })
+    .AddMvcOptions(options =>
+    {
+        // 全局异常过滤器：兜底处理 controller 未 catch 的业务异常
+        // 修复 H1/H2 引入的系统性问题：查询接口新增校验后异常冒泡为 500
+        options.Filters.Add<GlobalExceptionFilter>();
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -190,6 +201,11 @@ Console.WriteLine("[Program] Authentication and Authorization middleware registe
 app.UseMultiTenant();
 Console.WriteLine("[Program] MultiTenant middleware registered");
 
+// 用户状态校验中间件（L2 修复：在权限校验前检查用户是否被禁用）
+// 必须在认证、多租户之后，权限校验之前
+app.UseMiddleware<UserStatusCheckMiddleware>();
+Console.WriteLine("[Program] UserStatusCheck middleware registered");
+
 // 权限校验中间件（必须在认证授权之后、路由之前）
 // 检查 [Permission] 特性标记的接口所需权限码
 app.UsePermissionMiddleware();
@@ -223,20 +239,41 @@ using (var scope = app.Services.CreateScope())
         context.Database.Migrate();
         logger.LogInformation("数据库迁移应用成功。");
 
-        // 初始化种子数据
-        logger.LogInformation("正在初始化种子数据...");
-        SystemSeedData.Initialize(context, idGenerator, passwordHasher);
-        logger.LogInformation("种子数据初始化成功。");
+        // 测试种子数据加载开关（默认关闭，仅测试/开发环境启用）
+        // 启用后跳过基础种子数据，直接加载从数据库导出的完整测试数据集
+        var seedTestDataEnabled = builder.Configuration.GetValue<bool>("SeedTestData:Enabled");
+        if (seedTestDataEnabled)
+        {
+            logger.LogWarning("检测到 SeedTestData:Enabled=true，加载测试种子数据（将覆盖现有数据）...");
+            await TestSeedData.InitializeAsync(context, logger);
+        }
+        else
+        {
+            // 正常模式：初始化基础种子数据
+            logger.LogInformation("正在初始化种子数据...");
+            SystemSeedData.Initialize(context, idGenerator, passwordHasher);
+            logger.LogInformation("种子数据初始化成功。");
 
-        // 初始化系统配置（独立于用户数据，确保配置项存在）
-        logger.LogInformation("正在初始化系统配置...");
-        SystemSeedData.InitializeSystemConfigs(context);
-        logger.LogInformation("系统配置初始化完成。");
+            // 初始化系统配置（独立于用户数据，确保配置项存在）
+            logger.LogInformation("正在初始化系统配置...");
+            SystemSeedData.InitializeSystemConfigs(context);
+            logger.LogInformation("系统配置初始化完成。");
 
-        // 补全所有页面菜单的"页面查看"按钮（幂等，支持已有数据库增量迁移）
-        logger.LogInformation("正在检查页面查看按钮...");
-        SystemSeedData.EnsurePageViewButtons(context, idGenerator);
-        logger.LogInformation("页面查看按钮检查完成。");
+            // 补全所有页面菜单的"页面查看"按钮（幂等，支持已有数据库增量迁移）
+            logger.LogInformation("正在检查页面查看按钮...");
+            SystemSeedData.EnsurePageViewButtons(context, idGenerator);
+            logger.LogInformation("页面查看按钮检查完成。");
+
+            // 为超级管理员授权商品主档相关菜单（幂等，商品主档分离改造新增）
+            logger.LogInformation("正在检查商品主档菜单授权...");
+            SystemSeedData.EnsureProductMasterMenuAuths(context);
+            logger.LogInformation("商品主档菜单授权检查完成。");
+
+            // 为超级管理员授权服务档案相关菜单（幂等，4 页面整合改造新增）
+            logger.LogInformation("正在检查服务档案菜单授权...");
+            SystemSeedData.EnsureCustomerArchiveMenuAuths(context);
+            logger.LogInformation("服务档案菜单授权检查完成。");
+        }
     }
     catch (Exception ex)
     {

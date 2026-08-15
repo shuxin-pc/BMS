@@ -7,11 +7,6 @@ namespace Bms.Store.Domain.Entities;
 public class PointsRule : StoreEntity
 {
     /// <summary>
-    /// 规则名称
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
     /// 积分比例（每消费1元获得积分数）
     /// </summary>
     public decimal PointsRate { get; set; }
@@ -32,14 +27,14 @@ public class PointsRule : StoreEntity
     public int? PointsValidityDays { get; set; }
 
     /// <summary>
-    /// 生日双倍积分（true=客户生日当月消费双倍积分）
+    /// 生日双倍积分（true=客户生日当天消费双倍积分）
     /// </summary>
     public bool BirthdayDouble { get; set; }
 
     /// <summary>
-    /// 单笔最低获取积分门槛（消费金额低于此值不发积分，null=无门槛）
+    /// 单笔最低消费金额门槛（消费金额低于此值不发积分，null=无门槛）
     /// </summary>
-    public decimal? MinPointsThreshold { get; set; }
+    public decimal? MinAmountThreshold { get; set; }
 
     /// <summary>
     /// 状态（0:禁用 1:启用）

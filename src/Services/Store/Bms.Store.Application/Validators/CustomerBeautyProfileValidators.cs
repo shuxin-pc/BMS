@@ -15,7 +15,6 @@ public class CustomerBeautyProfileUpdateDtoValidator : AbstractValidator<Custome
 {
     public CustomerBeautyProfileUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new CustomerBeautyProfileCreateDtoValidator());
     }
 }

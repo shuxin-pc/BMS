@@ -21,4 +21,9 @@ public class SupplierQueryDto : PagedRequestDto
     /// 状态筛选（0:禁用 1:启用）
     /// </summary>
     public int? Status { get; set; }
+
+    /// <summary>
+    /// 数据范围筛选（1:门店通用 2:门店私用，null=全部）
+    /// </summary>
+    public int? Scope { get; set; }
 }

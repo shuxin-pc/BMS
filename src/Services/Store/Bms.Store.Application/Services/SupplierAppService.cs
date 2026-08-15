@@ -48,8 +48,10 @@ public class SupplierAppService : ISupplierAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
+        // 可见范围：门店通用（Scope=1）+ 本门店私用（Scope=2）
         var queryable = _dbContext.Suppliers
-            .Where(s => !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId);
+            .Where(s => !s.IsDeleted && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)));
 
         if (!string.IsNullOrWhiteSpace(query.Name))
             queryable = queryable.Where(s => s.Name.Contains(query.Name));
@@ -57,6 +59,8 @@ public class SupplierAppService : ISupplierAppService
             queryable = queryable.Where(s => s.Code.Contains(query.Code));
         if (query.Status.HasValue)
             queryable = queryable.Where(s => s.Status == query.Status.Value);
+        if (query.Scope.HasValue)
+            queryable = queryable.Where(s => s.Scope == query.Scope.Value);
 
         var total = await queryable.CountAsync();
         var items = await queryable
@@ -65,12 +69,15 @@ public class SupplierAppService : ISupplierAppService
             .Take(query.PageSize)
             .ToListAsync();
 
-        // 计算每个供应商的累计采购额
+        // 计算每个供应商在当前门店的累计采购额
+        // 门店通用供应商（Scope=1）也只统计本门店的采购明细，避免跨门店累加
         var supplierIds = items.Select(s => s.Id).ToList();
-        var purchaseAmounts = await _dbContext.PurchaseOrders
-            .Where(p => supplierIds.Contains(p.SupplierId))
-            .GroupBy(p => p.SupplierId)
-            .Select(g => new { SupplierId = g.Key, TotalAmount = g.Sum(p => p.TotalAmount) })
+        var purchaseAmounts = await _dbContext.PurchaseOrderItems
+            .Where(i => supplierIds.Contains(i.SupplierId)
+                && i.TenantId == tenantId
+                && i.StoreId == storeId)
+            .GroupBy(i => i.SupplierId)
+            .Select(g => new { SupplierId = g.Key, TotalAmount = g.Sum(i => i.TotalPrice) })
             .ToListAsync();
 
         var dtos = items.Adapt<List<SupplierDto>>();
@@ -101,14 +108,17 @@ public class SupplierAppService : ISupplierAppService
         var entity = await _dbContext.Suppliers
             .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted
                 && s.TenantId == _currentUser.TenantId.Value
-                && s.StoreId == _currentUser.StoreId.Value);
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == _currentUser.StoreId.Value)));
         if (entity == null)
             return ApiResponseDto<SupplierDto?>.Fail("供应商不存在", 404);
 
         var dto = entity.Adapt<SupplierDto>();
-        dto.TotalPurchaseAmount = await _dbContext.PurchaseOrders
-            .Where(p => p.SupplierId == id)
-            .SumAsync(p => p.TotalAmount);
+        // 累计采购额只统计当前门店的采购明细，避免跨门店累加
+        dto.TotalPurchaseAmount = await _dbContext.PurchaseOrderItems
+            .Where(i => i.SupplierId == id
+                && i.TenantId == _currentUser.TenantId.Value
+                && i.StoreId == _currentUser.StoreId.Value)
+            .SumAsync(i => i.TotalPrice);
 
         return ApiResponseDto<SupplierDto?>.Ok(dto);
     }
@@ -127,16 +137,27 @@ public class SupplierAppService : ISupplierAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
+        // 编码全局唯一（不分通用私用）
         var codeExists = await _dbContext.Suppliers
-            .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && s.StoreId == storeId && !s.IsDeleted);
+            .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && !s.IsDeleted);
         if (codeExists)
-            return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 在当前门店已存在", 400);
+            return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 已存在", 400);
 
         var entity = dto.Adapt<SupplierEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
-        entity.StoreId = storeId;
-        entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
+        // 公用供应商 StoreId=0，私用供应商 StoreId=当前门店
+        if (dto.Scope == 1)
+        {
+            entity.StoreId = 0;
+            entity.StoreCode = string.Empty;
+        }
+        else
+        {
+            entity.Scope = 2;
+            entity.StoreId = storeId;
+            entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
+        }
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.Suppliers.Add(entity);
@@ -160,7 +181,8 @@ public class SupplierAppService : ISupplierAppService
         var storeId = _currentUser.StoreId.Value;
         var entity = await _dbContext.Suppliers
             .FirstOrDefaultAsync(s => s.Id == dto.Id && !s.IsDeleted
-                && s.TenantId == tenantId && s.StoreId == storeId);
+                && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)));
         if (entity == null)
             return ApiResponseDto<SupplierDto>.Fail("供应商不存在", 404);
 
@@ -168,9 +190,9 @@ public class SupplierAppService : ISupplierAppService
         if (entity.Code != dto.Code)
         {
             var codeExists = await _dbContext.Suppliers
-                .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && s.StoreId == storeId && !s.IsDeleted && s.Id != dto.Id);
+                .AnyAsync(s => s.Code == dto.Code && s.TenantId == tenantId && !s.IsDeleted && s.Id != dto.Id);
             if (codeExists)
-                return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 在当前门店已存在", 400);
+                return ApiResponseDto<SupplierDto>.Fail($"供应商编码 {dto.Code} 已存在", 400);
         }
 
         entity.Name = dto.Name;
@@ -180,6 +202,19 @@ public class SupplierAppService : ISupplierAppService
         entity.Address = dto.Address;
         entity.BankAccount = dto.BankAccount;
         entity.Status = dto.Status;
+        // Scope 变更时同步调整 StoreId
+        if (dto.Scope == 1)
+        {
+            entity.Scope = 1;
+            entity.StoreId = 0;
+            entity.StoreCode = string.Empty;
+        }
+        else
+        {
+            entity.Scope = 2;
+            entity.StoreId = storeId;
+            entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
+        }
         entity.Remark = dto.Remark;
         entity.UpdatedTime = DateTime.Now;
 
@@ -202,7 +237,7 @@ public class SupplierAppService : ISupplierAppService
         var entity = await _dbContext.Suppliers
             .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted
                 && s.TenantId == tenantId
-                && s.StoreId == storeId);
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)));
         if (entity == null)
             return ApiResponseDto.Fail("供应商不存在", 404);
 
@@ -232,7 +267,7 @@ public class SupplierAppService : ISupplierAppService
         var entities = await _dbContext.Suppliers
             .Where(s => ids.Contains(s.Id) && !s.IsDeleted
                 && s.TenantId == tenantId
-                && s.StoreId == storeId)
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)))
             .ToListAsync();
 
         foreach (var entity in entities)
@@ -326,7 +361,8 @@ public class SupplierAppService : ISupplierAppService
 
         // 校验供应商存在（门店内）
         var supplierExists = await _dbContext.Suppliers
-            .AnyAsync(s => s.Id == dto.SupplierId && !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId);
+            .AnyAsync(s => s.Id == dto.SupplierId && !s.IsDeleted && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)));
         if (!supplierExists)
             return ApiResponseDto<List<ProductSupplierDto>>.Fail("供应商不存在", 404);
 
@@ -382,10 +418,11 @@ public class SupplierAppService : ISupplierAppService
         var boundProductIds = createdEntities.Select(ps => ps.ProductId).ToList();
         var productsInfo = await _dbContext.Products
             .Where(p => boundProductIds.Contains(p.Id) && p.TenantId == tenantId && p.StoreId == storeId)
-            .Select(p => new { p.Id, p.Code, p.Name })
+            .Select(p => new { p.Id, Code = p.Master.Code, Name = p.Master.Name })
             .ToListAsync();
         var supplierInfo = await _dbContext.Suppliers
-            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId && s.StoreId == storeId)
+            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)))
             .Select(s => new { s.Code, s.Name })
             .FirstOrDefaultAsync();
         if (supplierInfo == null)
@@ -505,10 +542,11 @@ public class SupplierAppService : ISupplierAppService
         // 组装返回 DTO（含品项与供应商编码/名称），按门店隔离查询
         var productInfo = await _dbContext.Products
             .Where(p => p.Id == dto.ProductId && p.TenantId == tenantId && p.StoreId == storeId)
-            .Select(p => new { p.Code, p.Name })
+            .Select(p => new { Code = p.Master.Code, Name = p.Master.Name })
             .FirstOrDefaultAsync();
         var supplierInfo = await _dbContext.Suppliers
-            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId && s.StoreId == storeId)
+            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)))
             .Select(s => new { s.Code, s.Name })
             .FirstOrDefaultAsync();
 
@@ -531,6 +569,54 @@ public class SupplierAppService : ISupplierAppService
     }
 
     /// <summary>
+    /// 更新品项-供应商关联的参考价与供货周期（不改变默认供应商状态）
+    /// </summary>
+    public async Task<ApiResponseDto<ProductSupplierDto>> UpdateProductSupplierAsync(UpdateProductSupplierDto dto)
+    {
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<ProductSupplierDto>.Fail("无法确定当前门店", 401);
+
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
+        var relation = await _dbContext.ProductSuppliers
+            .FirstOrDefaultAsync(ps => ps.ProductId == dto.ProductId
+                && ps.SupplierId == dto.SupplierId
+                && ps.TenantId == tenantId
+                && ps.StoreId == storeId);
+        if (relation == null)
+            return ApiResponseDto<ProductSupplierDto>.Fail("品项与供应商未建立关联，请先绑定", 404);
+
+        if (dto.ReferencePrice.HasValue)
+            relation.ReferencePrice = dto.ReferencePrice;
+        if (dto.LeadTimeDays.HasValue)
+            relation.LeadTimeDays = dto.LeadTimeDays.Value;
+        relation.UpdatedTime = DateTime.Now;
+
+        await _dbContext.SaveChangesAsync();
+
+        var supplierInfo = await _dbContext.Suppliers
+            .Where(s => s.Id == dto.SupplierId && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)))
+            .Select(s => new { s.Code, s.Name })
+            .FirstOrDefaultAsync();
+
+        var result = new ProductSupplierDto
+        {
+            Id = relation.Id,
+            ProductId = relation.ProductId,
+            SupplierId = relation.SupplierId,
+            SupplierCode = supplierInfo?.Code,
+            SupplierName = supplierInfo?.Name,
+            IsDefault = relation.IsDefault,
+            ReferencePrice = relation.ReferencePrice,
+            LeadTimeDays = relation.LeadTimeDays,
+            CreatedAt = relation.CreatedTime,
+            UpdatedAt = relation.UpdatedTime
+        };
+        return ApiResponseDto<ProductSupplierDto>.Ok(result, "更新成功");
+    }
+
+    /// <summary>
     /// 查询供应商关联的品项列表（按 IsDefault 倒序，默认供应商排在首位）
     /// </summary>
     public async Task<ApiResponseDto<List<ProductSupplierDto>>> GetProductsBySupplierAsync(long supplierId)
@@ -541,7 +627,8 @@ public class SupplierAppService : ISupplierAppService
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
         var supplierExists = await _dbContext.Suppliers
-            .AnyAsync(s => s.Id == supplierId && !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId);
+            .AnyAsync(s => s.Id == supplierId && !s.IsDeleted && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)));
         if (!supplierExists)
             return ApiResponseDto<List<ProductSupplierDto>>.Fail("供应商不存在", 404);
 
@@ -557,7 +644,7 @@ public class SupplierAppService : ISupplierAppService
         // 过滤已软删除品项，避免展示无效关联；按门店隔离查询
         var productsInfo = await _dbContext.Products
             .Where(p => productIds.Contains(p.Id) && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted)
-            .Select(p => new { p.Id, p.Code, p.Name })
+            .Select(p => new { p.Id, Code = p.Master.Code, Name = p.Master.Name, Type = p.Master.Type })
             .ToListAsync();
 
         var result = relations.Select(ps =>
@@ -569,6 +656,7 @@ public class SupplierAppService : ISupplierAppService
                 ProductId = ps.ProductId,
                 ProductCode = p?.Code,
                 ProductName = p?.Name,
+                ProductType = p?.Type,
                 SupplierId = ps.SupplierId,
                 IsDefault = ps.IsDefault,
                 ReferencePrice = ps.ReferencePrice,
@@ -587,21 +675,142 @@ public class SupplierAppService : ISupplierAppService
     public async Task<ApiResponseDto<List<SupplierOptionDto>>> GetOptionsAsync()
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<SupplierOptionDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<SupplierOptionDto>>.Fail("无法确定当前操作上下文", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
 
         var options = await _dbContext.Suppliers
-            .Where(s => !s.IsDeleted && s.TenantId == tenantId && s.StoreId == storeId)
+            .Where(s => !s.IsDeleted && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)))
             .OrderBy(s => s.Name)
             .Select(s => new SupplierOptionDto
             {
                 Id = s.Id,
-                Name = s.Name
+                Name = s.Name,
+                Scope = s.Scope
             })
             .ToListAsync();
 
         return ApiResponseDto<List<SupplierOptionDto>>.Ok(options);
+    }
+
+    /// <summary>
+    /// 获取供应商采购统计（按当前门店采购订单聚合，支持筛选条件）
+    /// 实现：一次查询拉取明细+订单日期到内存，内存中做供应商/商品两个维度聚合，
+    /// 避免 EF Core GroupBy + Distinct().Count() 翻译问题。
+    /// </summary>
+    public async Task<ApiResponseDto<List<SupplierPurchaseSummaryDto>>> GetPurchaseSummaryAsync(SupplierPurchaseSummaryQueryDto query)
+    {
+        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
+            return ApiResponseDto<List<SupplierPurchaseSummaryDto>>.Fail("无法确定当前门店", 401);
+
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
+
+        // 基础查询：采购明细 join 采购单，按门店隔离
+        var baseQuery = from item in _dbContext.PurchaseOrderItems
+                        join order in _dbContext.PurchaseOrders on item.PurchaseOrderId equals order.Id
+                        where item.TenantId == tenantId && item.StoreId == storeId
+                        select new { item, order };
+
+        if (query.SupplierId.HasValue)
+            baseQuery = baseQuery.Where(x => x.item.SupplierId == query.SupplierId.Value);
+        if (query.ProductId.HasValue)
+            baseQuery = baseQuery.Where(x => x.item.ProductId == query.ProductId.Value);
+        if (!string.IsNullOrWhiteSpace(query.OrderNo))
+            baseQuery = baseQuery.Where(x => x.order.OrderNo.Contains(query.OrderNo));
+        if (query.PurchaseType.HasValue)
+            baseQuery = baseQuery.Where(x => x.order.PurchaseType == query.PurchaseType.Value);
+        if (query.OrderDateStart.HasValue)
+            baseQuery = baseQuery.Where(x => x.order.OrderDate >= query.OrderDateStart.Value);
+        if (query.OrderDateEnd.HasValue)
+            baseQuery = baseQuery.Where(x => x.order.OrderDate <= query.OrderDateEnd.Value);
+
+        // 拉取聚合所需字段到内存
+        var rawData = await baseQuery.Select(x => new
+        {
+            x.item.SupplierId,
+            x.item.ProductId,
+            x.item.Quantity,
+            x.item.TotalPrice,
+            x.item.PurchaseOrderId,
+            x.order.OrderDate
+        }).ToListAsync();
+
+        if (!rawData.Any())
+            return ApiResponseDto<List<SupplierPurchaseSummaryDto>>.Ok(new List<SupplierPurchaseSummaryDto>());
+
+        // 供应商维度聚合
+        var supplierGroups = rawData
+            .GroupBy(x => x.SupplierId)
+            .Select(g => new SupplierPurchaseSummaryDto
+            {
+                SupplierId = g.Key,
+                OrderCount = g.Select(x => x.PurchaseOrderId).Distinct().Count(),
+                TotalAmount = g.Sum(x => x.TotalPrice),
+                ProductCount = g.Select(x => x.ProductId).Distinct().Count(),
+                LastPurchaseTime = g.Max(x => x.OrderDate)
+            })
+            .ToList();
+
+        // 商品维度聚合（按 supplierId+productId 分组，保留 SupplierId 用于后续关联）
+        var productGroups = rawData
+            .GroupBy(x => new { x.SupplierId, x.ProductId })
+            .Select(g => new
+            {
+                g.Key.SupplierId,
+                g.Key.ProductId,
+                Quantity = g.Sum(x => x.Quantity),
+                TotalAmount = g.Sum(x => x.TotalPrice),
+                OrderCount = g.Select(x => x.PurchaseOrderId).Distinct().Count()
+            })
+            .ToList();
+
+        // 合并：每个供应商取 Top 5 商品（按采购额降序）
+        foreach (var supplier in supplierGroups)
+        {
+            supplier.TopProducts = productGroups
+                .Where(p => p.SupplierId == supplier.SupplierId)
+                .OrderByDescending(p => p.TotalAmount)
+                .Take(5)
+                .Select(p => new SupplierPurchaseSummaryProductDto
+                {
+                    ProductId = p.ProductId,
+                    Quantity = p.Quantity,
+                    TotalAmount = p.TotalAmount,
+                    OrderCount = p.OrderCount
+                })
+                .ToList();
+        }
+
+        // 批量填充供应商名称（按可见范围过滤）
+        var supplierIds = supplierGroups.Select(s => s.SupplierId).ToList();
+        var supplierNames = await _dbContext.Suppliers
+            .Where(s => supplierIds.Contains(s.Id) && !s.IsDeleted && s.TenantId == tenantId
+                && (s.Scope == 1 || (s.Scope == 2 && s.StoreId == storeId)))
+            .Select(s => new { s.Id, s.Name })
+            .ToDictionaryAsync(s => s.Id, s => s.Name);
+
+        // 批量填充商品名称（通过 Master 导航属性）
+        var productIds = productGroups.Select(p => p.ProductId).Distinct().ToList();
+        var productNames = await _dbContext.Products
+            .Where(p => productIds.Contains(p.Id) && p.TenantId == tenantId && p.StoreId == storeId)
+            .Select(p => new { p.Id, Name = p.Master.Name })
+            .ToDictionaryAsync(p => p.Id, p => p.Name);
+
+        foreach (var supplier in supplierGroups)
+        {
+            supplier.SupplierName = supplierNames.TryGetValue(supplier.SupplierId, out var sName)
+                ? sName : $"供应商{supplier.SupplierId}";
+            foreach (var product in supplier.TopProducts)
+            {
+                product.ProductName = productNames.TryGetValue(product.ProductId, out var pName)
+                    ? pName : $"商品{product.ProductId}";
+            }
+        }
+
+        var result = supplierGroups.OrderByDescending(s => s.TotalAmount).ToList();
+        return ApiResponseDto<List<SupplierPurchaseSummaryDto>>.Ok(result);
     }
 }

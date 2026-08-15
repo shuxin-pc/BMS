@@ -160,7 +160,7 @@
         <el-form-item label="手机号" prop="phone">
           <el-input v-model="formData.phone" placeholder="请输入手机号" />
         </el-form-item>
-        <el-form-item label="组织" prop="organizationId">
+        <el-form-item label="组织" prop="organizationId" :required="!isSuperAdmin">
           <el-cascader
             v-model="formData.organizationId"
             :options="orgTreeOptions"
@@ -244,7 +244,7 @@
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit, Key } from '@element-plus/icons-vue'
-import { getUsers, getUser, createUser, updateUser, deleteUser, deleteUsers, resetPassword, getAllRoles, getAllRolesWithoutFilter, getTenants, getOrganizations } from '@/api/system'
+import { getUsers, getUser, createUser, updateUser, deleteUser, deleteUsers, resetPassword, getAllRoles, getAllRolesWithoutFilter, getTenants, getOrganizationOptions } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { User, UserCreate, UserUpdate, Role, Tenant, Organization } from '@/api/system/types'
@@ -254,9 +254,8 @@ const systemConfigStore = useSystemConfigStore()
 const userStore = useUserStore()
 
 // 判断是否为超级管理员
-// 直接从 userStore 获取 isSuperAdmin 和 isTenantAdmin
+// 直接从 userStore 获取 isSuperAdmin
 const isSuperAdmin = computed(() => userStore.isSuperAdmin)
-const isTenantAdmin = computed(() => userStore.isTenantAdmin)
 // 获取当前登录用户的租户ID
 const currentTenantId = computed(() => userStore.currentTenantId)
 // 判断当前用户是否拥有指定权限（超级管理员不受限制）
@@ -295,11 +294,6 @@ const searchFilteredRoles = computed(() => {
     }
   }
   return roles
-})
-
-// 搜索下拉 - 组织列表
-const searchFilteredOrganizations = computed(() => {
-  return searchOrganizations.value || []
 })
 
 // 租户变更处理 - 超级管理员选择租户后清空组织和角色筛选，并重新加载搜索用的数据
@@ -468,9 +462,10 @@ const loadTenants = async () => {
 
 // 加载组织列表
 // targetRef: 'form' 更新表单编辑用的 organizationList，'search' 更新搜索用的 searchOrganizations
+// 使用下拉专用接口 getOrganizationOptions，避免依赖组织架构页面权限
 const loadOrganizations = async (tenantId?: number | string, targetRef: 'form' | 'search' = 'form') => {
   try {
-    const res = await getOrganizations({ tenantId })
+    const res = await getOrganizationOptions({ tenantId })
     if (targetRef === 'form') {
       organizationList.value = res || []
     } else {
@@ -506,6 +501,24 @@ const formRules: FormRules = {
   ],
   roleId: [
     { required: true, message: '请选择角色', trigger: 'change' }
+  ],
+  organizationId: [
+    {
+      validator: (_rule, value, callback) => {
+        // 超管可选（允许创建平台管理员等无组织用户）
+        if (isSuperAdmin.value) {
+          callback()
+          return
+        }
+        // 非超管必填
+        if (!value) {
+          callback(new Error('请选择组织'))
+          return
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
   ]
 }
 
@@ -626,12 +639,13 @@ const loadRoles = async (tenantId?: number | string, targetRef: 'form' | 'search
     return
   }
   // 获取不过滤的角色列表（仅 super_admin 跨租户场景需要，失败不阻塞用户管理主流程）
-  try {
-    const allRolesData = await getAllRolesWithoutFilter()
-    allRolesWithoutFilter.value = allRolesData || []
-  } catch (e: any) {
-    // 无 system:role:view 权限时忽略，不影响当前租户角色下拉
-    console.warn('[loadRoles] getAllRolesWithoutFilter 失败（预期行为，已静默处理）:', e?.message)
+  if (isSuperAdmin.value) {
+    try {
+      const allRolesData = await getAllRolesWithoutFilter()
+      allRolesWithoutFilter.value = allRolesData || []
+    } catch (e: any) {
+      console.warn('[loadRoles] getAllRolesWithoutFilter 失败:', e?.message)
+    }
   }
 }
 
@@ -778,7 +792,7 @@ const handleSubmit = async () => {
             phone: formData.phone,
             status: formData.status,
             roleIds: formData.roleId ? [formData.roleId] : [],
-            tenantId: submitTenantId,
+            tenantId: submitTenantId != null ? String(submitTenantId) : undefined,
             organizationId: formData.organizationId
           }
           await updateUser(data)
@@ -792,7 +806,7 @@ const handleSubmit = async () => {
             phone: formData.phone,
             status: formData.status,
             roleIds: formData.roleId ? [formData.roleId] : [],
-            tenantId: submitTenantId,
+            tenantId: submitTenantId != null ? String(submitTenantId) : undefined,
             organizationId: formData.organizationId
           }
           await createUser(data)

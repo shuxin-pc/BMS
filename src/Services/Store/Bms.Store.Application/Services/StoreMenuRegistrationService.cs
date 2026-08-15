@@ -55,15 +55,11 @@ public class StoreMenuRegistrationService : IHostedService
             httpClient.DefaultRequestHeaders.Add("X-Internal-Service", internalServiceName);
             httpClient.DefaultRequestHeaders.Add("X-Internal-Service-Key", internalServiceKey);
 
-            List<long> menuIds;
-
             // 先检查子系统是否已存在
             var existingSubsystemId = await GetExistingSubsystemIdAsync(httpClient, cancellationToken);
             if (existingSubsystemId.HasValue)
             {
                 _logger.LogInformation("门店管理子系统已存在，ID: {SubsystemId}", existingSubsystemId.Value);
-                // 获取子系统已有的菜单ID
-                menuIds = await GetSubsystemMenuIdsAsync(httpClient, existingSubsystemId.Value, cancellationToken);
             }
             else
             {
@@ -88,12 +84,7 @@ public class StoreMenuRegistrationService : IHostedService
 
                 // 将子系统分配给平台租户
                 await AssignSubsystemToTenantAsync(httpClient, subsystemId.Value, cancellationToken);
-
-                menuIds = menuIdMap.Values.ToList();
             }
-
-            // 将所有菜单授权给超级管理员
-            await AssignMenusToSuperAdminAsync(httpClient, menuIds, cancellationToken);
 
             _logger.LogInformation("门店管理系统菜单注册完成。");
         }
@@ -322,149 +313,4 @@ public class StoreMenuRegistrationService : IHostedService
             _logger.LogError(ex, "分配子系统给租户时发生错误");
         }
     }
-
-    /// <summary>
-    /// 获取子系统关联的菜单ID列表
-    /// </summary>
-    private async Task<List<long>> GetSubsystemMenuIdsAsync(
-        HttpClient httpClient,
-        long subsystemId,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var response = await httpClient.GetAsync($"/api/system/subsystems/{subsystemId}/menus", cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("获取子系统菜单列表失败，状态码: {StatusCode}", response.StatusCode);
-                return new List<long>();
-            }
-
-            var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var apiResponse = JsonSerializer.Deserialize<ApiResponseDto<List<long>>>(content, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                NumberHandling = JsonNumberHandling.AllowReadingFromString
-            });
-
-            return apiResponse?.Data ?? new List<long>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "获取子系统菜单列表时发生错误");
-            return new List<long>();
-        }
-    }
-
-    /// <summary>
-    /// 将菜单授权给超级管理员角色（合并已有权限，不覆盖）
-    /// </summary>
-    private async Task AssignMenusToSuperAdminAsync(
-        HttpClient httpClient,
-        List<long> menuIds,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            // 获取超级管理员角色ID
-            var superAdminRoleId = await GetSuperAdminRoleIdAsync(httpClient, cancellationToken);
-            if (superAdminRoleId == null)
-            {
-                _logger.LogWarning("未找到超级管理员角色，跳过菜单授权");
-                return;
-            }
-
-            // 获取超级管理员已有的菜单权限
-            var existingMenuIds = await GetRoleMenuAuthsAsync(httpClient, superAdminRoleId.Value, cancellationToken);
-
-            // 合并菜单ID（去重）
-            var mergedMenuIds = existingMenuIds.Union(menuIds).ToList();
-
-            // 如果没有新增的菜单，跳过更新
-            if (mergedMenuIds.Count == existingMenuIds.Count)
-            {
-                _logger.LogInformation("超级管理员已拥有所有门店管理菜单权限，无需更新");
-                return;
-            }
-
-            // 更新超级管理员的菜单权限（覆盖式，需传入完整列表）
-            var dto = new { MenuIds = mergedMenuIds };
-            var json = JsonSerializer.Serialize(dto);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await httpClient.PutAsync($"/api/system/roles/{superAdminRoleId.Value}/menus/auth", content, cancellationToken);
-            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("门店管理菜单授权给超级管理员成功，新增 {Count} 个菜单", mergedMenuIds.Count - existingMenuIds.Count);
-            }
-            else
-            {
-                _logger.LogWarning("授权菜单给超级管理员响应: {Response}", responseContent);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "授权菜单给超级管理员时发生错误");
-        }
-    }
-
-    /// <summary>
-    /// 获取超级管理员角色ID
-    /// </summary>
-    private async Task<long?> GetSuperAdminRoleIdAsync(HttpClient httpClient, CancellationToken cancellationToken)
-    {
-        var response = await httpClient.GetAsync("/api/system/roles/all-without-filter", cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("获取角色列表失败，状态码: {StatusCode}", response.StatusCode);
-            return null;
-        }
-
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        var apiResponse = JsonSerializer.Deserialize<ApiResponseDto<List<RoleListItemDto>>>(content, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
-        });
-
-        var superAdminRole = apiResponse?.Data?.FirstOrDefault(r => r.Code == "super_admin");
-        return superAdminRole?.Id;
-    }
-
-    /// <summary>
-    /// 获取角色已授权的菜单ID列表
-    /// </summary>
-    private async Task<List<long>> GetRoleMenuAuthsAsync(
-        HttpClient httpClient,
-        long roleId,
-        CancellationToken cancellationToken)
-    {
-        var response = await httpClient.GetAsync($"/api/system/roles/{roleId}/menus/auth", cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("获取角色菜单权限失败，状态码: {StatusCode}", response.StatusCode);
-            return new List<long>();
-        }
-
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        var apiResponse = JsonSerializer.Deserialize<ApiResponseDto<List<long>>>(content, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
-        });
-
-        return apiResponse?.Data ?? new List<long>();
-    }
-}
-
-/// <summary>
-/// 角色列表项DTO（仅用于反序列化System服务返回的角色信息）
-/// </summary>
-internal class RoleListItemDto
-{
-    public long Id { get; set; }
-    public string Code { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
 }

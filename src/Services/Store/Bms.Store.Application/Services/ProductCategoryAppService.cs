@@ -38,14 +38,19 @@ public class ProductCategoryAppService : IProductCategoryAppService
     {
         if (!_currentUser.TenantId.HasValue)
         {
-            return ApiResponseDto<List<ProductCategoryDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<ProductCategoryDto>>.Fail("登录状态异常，请重新登录", 401);
+        }
+
+        if (!_currentUser.StoreId.HasValue)
+        {
+            return ApiResponseDto<List<ProductCategoryDto>>.Fail("无法确定当前门店", 401);
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var categories = await _dbContext.ProductCategories
             .Where(c => !c.IsDeleted && c.TenantId == tenantId)
-            .OrderBy(c => c.Sort)
-            .ThenBy(c => c.Id)
+            .OrderBy(c => c.Id)
             .ToListAsync();
 
         var dtos = categories.Adapt<List<ProductCategoryDto>>();
@@ -61,7 +66,12 @@ public class ProductCategoryAppService : IProductCategoryAppService
     {
         if (!_currentUser.TenantId.HasValue)
         {
-            return ApiResponseDto<ProductCategoryDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ProductCategoryDto>.Fail("登录状态异常，请重新登录", 401);
+        }
+
+        if (!_currentUser.StoreId.HasValue)
+        {
+            return ApiResponseDto<ProductCategoryDto>.Fail("无法确定当前门店", 401);
         }
 
         var validation = await _createValidator.ValidateAsync(dto);
@@ -71,11 +81,22 @@ public class ProductCategoryAppService : IProductCategoryAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
+
+        // 编码唯一性校验（编码可选，仅在非空时校验，与技能分类对齐）
+        if (!string.IsNullOrWhiteSpace(dto.Code))
+        {
+            var codeExists = await _dbContext.ProductCategories
+                .AnyAsync(c => c.Code == dto.Code && c.TenantId == tenantId && !c.IsDeleted);
+            if (codeExists)
+                return ApiResponseDto<ProductCategoryDto>.Fail($"编码 {dto.Code} 已存在", 400);
+        }
+
         var category = new ProductCategoryEntity
         {
             Name = dto.Name,
+            Code = string.IsNullOrWhiteSpace(dto.Code) ? null : dto.Code,
             ParentId = dto.ParentId == 0 ? null : dto.ParentId,
-            Sort = dto.Sort,
             TenantId = tenantId,
             TenantCode = _currentUser.TenantCode ?? string.Empty,
             CreatedTime = DateTime.Now
@@ -94,7 +115,12 @@ public class ProductCategoryAppService : IProductCategoryAppService
     {
         if (!_currentUser.TenantId.HasValue)
         {
-            return ApiResponseDto<ProductCategoryDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ProductCategoryDto>.Fail("登录状态异常，请重新登录", 401);
+        }
+
+        if (!_currentUser.StoreId.HasValue)
+        {
+            return ApiResponseDto<ProductCategoryDto>.Fail("无法确定当前门店", 401);
         }
 
         var validation = await _updateValidator.ValidateAsync(dto);
@@ -104,6 +130,7 @@ public class ProductCategoryAppService : IProductCategoryAppService
         }
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var category = await _dbContext.ProductCategories
             .FirstOrDefaultAsync(c => c.Id == dto.Id && !c.IsDeleted && c.TenantId == tenantId);
         if (category == null)
@@ -111,9 +138,18 @@ public class ProductCategoryAppService : IProductCategoryAppService
             return ApiResponseDto<ProductCategoryDto>.Fail("分类不存在", 404);
         }
 
+        // 编码唯一性校验（编码可选，仅在非空且编码发生变化时校验，与技能分类对齐）
+        if (!string.IsNullOrWhiteSpace(dto.Code) && category.Code != dto.Code)
+        {
+            var codeExists = await _dbContext.ProductCategories
+                .AnyAsync(c => c.Code == dto.Code && c.TenantId == tenantId && !c.IsDeleted && c.Id != dto.Id);
+            if (codeExists)
+                return ApiResponseDto<ProductCategoryDto>.Fail($"编码 {dto.Code} 已存在", 400);
+        }
+
         category.Name = dto.Name;
+        category.Code = string.IsNullOrWhiteSpace(dto.Code) ? null : dto.Code;
         category.ParentId = dto.ParentId == 0 ? null : dto.ParentId;
-        category.Sort = dto.Sort;
         category.UpdatedTime = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
@@ -128,11 +164,18 @@ public class ProductCategoryAppService : IProductCategoryAppService
     {
         if (!_currentUser.TenantId.HasValue)
         {
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         }
 
+        if (!_currentUser.StoreId.HasValue)
+        {
+            return ApiResponseDto.Fail("无法确定当前门店", 401);
+        }
+
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var category = await _dbContext.ProductCategories
-            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == tenantId);
         if (category == null)
         {
             return ApiResponseDto.Fail("分类不存在", 404);
@@ -140,7 +183,7 @@ public class ProductCategoryAppService : IProductCategoryAppService
 
         // 检查是否有子分类
         var hasChildren = await _dbContext.ProductCategories
-            .AnyAsync(c => c.ParentId == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
+            .AnyAsync(c => c.ParentId == id && !c.IsDeleted && c.TenantId == tenantId);
         if (hasChildren)
         {
             return ApiResponseDto.Fail("请先删除子分类", 400);
@@ -148,7 +191,7 @@ public class ProductCategoryAppService : IProductCategoryAppService
 
         // 检查是否有关联商品
         var hasProducts = await _dbContext.Products
-            .AnyAsync(p => p.CategoryId == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
+            .AnyAsync(p => p.Master.CategoryId == id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (hasProducts)
         {
             return ApiResponseDto.Fail("该分类下有商品，无法删除", 400);

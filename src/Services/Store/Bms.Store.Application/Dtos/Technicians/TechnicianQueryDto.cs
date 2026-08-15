@@ -18,7 +18,7 @@ public class TechnicianQueryDto : PagedRequestDto
     public string? Phone { get; set; }
 
     /// <summary>
-    /// 状态筛选（0:禁用 1:启用）
+    /// 状态筛选（1:在岗 2:休息）
     /// </summary>
     public int? Status { get; set; }
 

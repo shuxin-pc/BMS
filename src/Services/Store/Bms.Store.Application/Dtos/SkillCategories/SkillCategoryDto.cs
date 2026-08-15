@@ -26,16 +26,6 @@ public class SkillCategoryDto
     public long? ParentId { get; set; }
 
     /// <summary>
-    /// 状态（0:禁用 1:启用）
-    /// </summary>
-    public int Status { get; set; }
-
-    /// <summary>
-    /// 备注
-    /// </summary>
-    public string? Remark { get; set; }
-
-    /// <summary>
     /// 创建时间
     /// </summary>
     public DateTime CreatedAt { get; set; }

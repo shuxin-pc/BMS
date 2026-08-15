@@ -18,11 +18,6 @@ public class Inventory : StoreBusinessEntityBase
     public decimal Quantity { get; set; }
 
     /// <summary>
-    /// 预警数量阈值
-    /// </summary>
-    public decimal AlertQuantity { get; set; }
-
-    /// <summary>
     /// 导航属性：商品
     /// </summary>
     public Product? Product { get; set; }

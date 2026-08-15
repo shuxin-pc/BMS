@@ -19,4 +19,11 @@ public interface ITreatmentCardSaleAppService
     /// 获取疗程卡到期提醒分页列表
     /// </summary>
     Task<ApiResponseDto<PagedResponseDto<TreatmentCardExpiryDto>>> GetExpiryListAsync(TreatmentCardExpiryQueryDto query);
+
+    /// <summary>
+    /// 退卡（规则6）
+    /// 全额冲减发卡门店销售业绩，已发生的核销业绩不冲回
+    /// 退卡金额 = 售价 - 已核销金额
+    /// </summary>
+    Task<ApiResponseDto<TreatmentCardSaleRefundResultDto>> RefundAsync(TreatmentCardSaleRefundDto dto);
 }

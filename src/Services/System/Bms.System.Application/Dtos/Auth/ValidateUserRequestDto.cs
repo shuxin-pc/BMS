@@ -179,3 +179,14 @@ public class UpdateLastLoginRequestDto
     /// </summary>
     public string? LastLoginIp { get; set; }
 }
+
+/// <summary>
+/// 刷新令牌时获取用户最新状态请求DTO
+/// </summary>
+public class RefreshUserInfoRequestDto
+{
+    /// <summary>
+    /// 用户ID
+    /// </summary>
+    public long UserId { get; set; }
+}

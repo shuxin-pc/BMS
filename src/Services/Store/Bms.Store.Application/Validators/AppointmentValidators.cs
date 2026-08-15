@@ -24,7 +24,6 @@ public class AppointmentUpdateDtoValidator : AbstractValidator<AppointmentUpdate
 {
     public AppointmentUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new AppointmentCreateDtoValidator());
     }
 }

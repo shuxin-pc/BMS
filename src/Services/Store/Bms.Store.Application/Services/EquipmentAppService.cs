@@ -35,7 +35,7 @@ public class EquipmentAppService : IEquipmentAppService
     public async Task<ApiResponseDto<PagedResponseDto<EquipmentDto>>> GetPagedListAsync(EquipmentQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<EquipmentDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<EquipmentDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.Equipments
@@ -57,7 +57,7 @@ public class EquipmentAppService : IEquipmentAppService
 
         var result = new PagedResponseDto<EquipmentDto>
         {
-            List = items.Adapt<List<EquipmentDto>>(),
+            List = await FillEquipmentTypeNamesAsync(items.Adapt<List<EquipmentDto>>(), tenantId),
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -68,19 +68,21 @@ public class EquipmentAppService : IEquipmentAppService
     public async Task<ApiResponseDto<EquipmentDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<EquipmentDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<EquipmentDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var equipment = await _dbContext.Equipments
             .FirstOrDefaultAsync(e => e.Id == id && !e.IsDeleted && e.TenantId == _currentUser.TenantId.Value);
         if (equipment == null)
             return ApiResponseDto<EquipmentDto?>.Fail("设备不存在", 404);
-        return ApiResponseDto<EquipmentDto?>.Ok(equipment.Adapt<EquipmentDto>());
+        var dto = equipment.Adapt<EquipmentDto>();
+        await FillEquipmentTypeNamesAsync(new List<EquipmentDto> { dto }, _currentUser.TenantId.Value);
+        return ApiResponseDto<EquipmentDto?>.Ok(dto);
     }
 
     public async Task<ApiResponseDto<EquipmentDto>> CreateAsync(EquipmentCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<EquipmentDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<EquipmentDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -91,6 +93,11 @@ public class EquipmentAppService : IEquipmentAppService
             .AnyAsync(e => e.Code == dto.Code && e.TenantId == tenantId && !e.IsDeleted);
         if (codeExists)
             return ApiResponseDto<EquipmentDto>.Fail($"编码 {dto.Code} 已存在", 400);
+
+        var typeExists = await _dbContext.EquipmentTypes
+            .AnyAsync(t => t.Id == dto.EquipmentTypeId && t.TenantId == tenantId && !t.IsDeleted);
+        if (!typeExists)
+            return ApiResponseDto<EquipmentDto>.Fail("设备类型不存在或已被删除", 400);
 
         var equipment = dto.Adapt<EquipmentEntity>();
         equipment.TenantId = tenantId;
@@ -106,7 +113,7 @@ public class EquipmentAppService : IEquipmentAppService
     public async Task<ApiResponseDto<EquipmentDto>> UpdateAsync(EquipmentUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<EquipmentDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<EquipmentDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -126,6 +133,12 @@ public class EquipmentAppService : IEquipmentAppService
                 return ApiResponseDto<EquipmentDto>.Fail($"编码 {dto.Code} 已存在", 400);
         }
 
+        var typeExists = await _dbContext.EquipmentTypes
+            .AnyAsync(t => t.Id == dto.EquipmentTypeId && t.TenantId == tenantId && !t.IsDeleted);
+        if (!typeExists)
+            return ApiResponseDto<EquipmentDto>.Fail("设备类型不存在或已被删除", 400);
+
+        equipment.EquipmentTypeId = dto.EquipmentTypeId;
         equipment.Name = dto.Name;
         equipment.Code = dto.Code;
         equipment.Model = dto.Model;
@@ -147,7 +160,7 @@ public class EquipmentAppService : IEquipmentAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var equipment = await _dbContext.Equipments
             .FirstOrDefaultAsync(e => e.Id == id && !e.IsDeleted && e.TenantId == _currentUser.TenantId.Value);
@@ -163,7 +176,7 @@ public class EquipmentAppService : IEquipmentAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -188,7 +201,7 @@ public class EquipmentAppService : IEquipmentAppService
     public async Task<ApiResponseDto<List<EquipmentDto>>> GetUpcomingMaintenanceAsync(int days = 7)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<EquipmentDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<EquipmentDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var threshold = DateTime.Today.AddDays(days);
@@ -200,7 +213,7 @@ public class EquipmentAppService : IEquipmentAppService
             .OrderBy(e => e.NextMaintenanceDate)
             .ToListAsync();
 
-        return ApiResponseDto<List<EquipmentDto>>.Ok(items.Adapt<List<EquipmentDto>>());
+        return ApiResponseDto<List<EquipmentDto>>.Ok(await FillEquipmentTypeNamesAsync(items.Adapt<List<EquipmentDto>>(), tenantId));
     }
 
     /// <summary>
@@ -217,7 +230,7 @@ public class EquipmentAppService : IEquipmentAppService
         long? excludeAppointmentId = null)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<EquipmentDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<EquipmentDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
 
@@ -257,6 +270,25 @@ public class EquipmentAppService : IEquipmentAppService
             .ToList();
 
         var available = equipments.Where(e => !conflictEquipmentIds.Contains(e.Id)).ToList();
-        return ApiResponseDto<List<EquipmentDto>>.Ok(available.Adapt<List<EquipmentDto>>());
+        return ApiResponseDto<List<EquipmentDto>>.Ok(await FillEquipmentTypeNamesAsync(available.Adapt<List<EquipmentDto>>(), tenantId));
+    }
+
+    /// <summary>
+    /// 批量填充设备列表的类型名称（设备类型为租户级共享数据）
+    /// </summary>
+    private async Task<List<EquipmentDto>> FillEquipmentTypeNamesAsync(List<EquipmentDto> dtos, long tenantId)
+    {
+        var typeIds = dtos.Select(d => d.EquipmentTypeId).Distinct().ToList();
+        if (typeIds.Count == 0)
+            return dtos;
+
+        var typeMap = await _dbContext.EquipmentTypes
+            .Where(t => typeIds.Contains(t.Id) && t.TenantId == tenantId && !t.IsDeleted)
+            .ToDictionaryAsync(t => t.Id, t => t.Name);
+
+        foreach (var dto in dtos)
+            dto.EquipmentTypeName = typeMap.GetValueOrDefault(dto.EquipmentTypeId);
+
+        return dtos;
     }
 }

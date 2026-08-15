@@ -7,6 +7,7 @@ public class PurchaseOrderItemDto
 {
     public long Id { get; set; }
     public long PurchaseOrderId { get; set; }
+    public long SupplierId { get; set; }
     public long ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }

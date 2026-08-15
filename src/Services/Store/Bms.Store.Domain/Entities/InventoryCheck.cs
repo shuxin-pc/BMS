@@ -38,6 +38,11 @@ public class InventoryCheck : StoreBusinessEntityBase
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作员姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 盘点单状态（0=草稿 1=已完成 2=已取消）
     /// 草稿：创建后初始状态，可修改/提交/取消
     /// 已完成：提交后终态，库存已联动调整
@@ -49,6 +54,32 @@ public class InventoryCheck : StoreBusinessEntityBase
     /// 备注
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 批次号（盘亏时取首批扣减批次号；盘盈时取新建盘盈批次号；无差异时为空）
+    /// 提交盘点时由后端写入，用于追溯本次盘点影响的批次
+    /// </summary>
+    public string? BatchNo { get; set; }
+
+    /// <summary>
+    /// 单价（盘亏时取首批扣减批次的 UnitPrice；盘盈时取录入的估值单价）
+    /// 用于 DiffAmount 计算，与 InventoryLog.UnitPrice 一致
+    /// </summary>
+    public decimal? UnitPrice { get; set; }
+
+    /// <summary>
+    /// 过期日期（盘亏时取首批扣减批次的过期日期；盘盈时取录入的过期日期）
+    /// 与 InventoryLog.ExpirationDate 一致
+    /// </summary>
+    public DateTime? ExpirationDate { get; set; }
+
+    /// <summary>
+    /// 差异金额（提交时持久化，按真实批次单价计算）
+    /// 盘亏 = -Σ(扣减数量 × 批次 UnitPrice)，负数
+    /// 盘盈 = 盘盈数量 × 录入 UnitPrice，正数
+    /// 无差异时为 null
+    /// </summary>
+    public decimal? DiffAmount { get; set; }
 
     /// <summary>
     /// 导航属性：商品

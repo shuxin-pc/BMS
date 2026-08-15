@@ -25,7 +25,6 @@ public class PurchaseOrderItemUpdateDtoValidator : AbstractValidator<PurchaseOrd
 {
     public PurchaseOrderItemUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new PurchaseOrderItemCreateDtoValidator());
     }
 }

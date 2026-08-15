@@ -27,6 +27,7 @@ public class OrderAppService : IOrderAppService
     private readonly IResourceConflictCheckService _resourceConflictCheckService;
     private readonly IStoredValueAccountAppService _storedValueAccountAppService;
     private readonly IDailySettlementAppService _dailySettlementAppService;
+    private readonly IPointsRuleService _pointsRuleService;
 
     public OrderAppService(
         StoreDbContext dbContext,
@@ -37,7 +38,8 @@ public class OrderAppService : IOrderAppService
         IInventoryAlertAppService alertAppService,
         IResourceConflictCheckService resourceConflictCheckService,
         IStoredValueAccountAppService storedValueAccountAppService,
-        IDailySettlementAppService dailySettlementAppService)
+        IDailySettlementAppService dailySettlementAppService,
+        IPointsRuleService pointsRuleService)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
@@ -48,47 +50,91 @@ public class OrderAppService : IOrderAppService
         _resourceConflictCheckService = resourceConflictCheckService;
         _storedValueAccountAppService = storedValueAccountAppService;
         _dailySettlementAppService = dailySettlementAppService;
+        _pointsRuleService = pointsRuleService;
     }
 
     /// <summary>
     /// 获取订单分页列表
+    /// 左连接 Customer（散客订单 CustomerId 为 null）和 Store，填充客户姓名、手机号、门店名称
+    /// 并从 OrderItems 聚合消费项目摘要
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<OrderDto>>> GetPagedListAsync(OrderQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<OrderDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<OrderDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
-        var queryable = _dbContext.Orders
-            .Where(o => o.TenantId == tenantId);
+
+        var queryable = from o in _dbContext.Orders
+                        where o.TenantId == tenantId
+                        join c in _dbContext.Customers on o.CustomerId equals c.Id into customers
+                        from c in customers.DefaultIfEmpty()
+                        join s in _dbContext.Stores on o.StoreId equals s.Id into stores
+                        from s in stores.DefaultIfEmpty()
+                        select new { o, c, s };
 
         if (!string.IsNullOrWhiteSpace(query.OrderNo))
-            queryable = queryable.Where(o => o.OrderNo.Contains(query.OrderNo));
+            queryable = queryable.Where(x => x.o.OrderNo.Contains(query.OrderNo));
         if (query.CustomerId.HasValue)
-            queryable = queryable.Where(o => o.CustomerId == query.CustomerId.Value);
+            queryable = queryable.Where(x => x.o.CustomerId == query.CustomerId.Value);
+        if (!string.IsNullOrWhiteSpace(query.CustomerName))
+            queryable = queryable.Where(x => x.c != null && x.c.Name.Contains(query.CustomerName));
+        if (!string.IsNullOrWhiteSpace(query.Phone))
+            queryable = queryable.Where(x => x.c != null && x.c.Phone.Contains(query.Phone));
         if (query.OrderType.HasValue)
-            queryable = queryable.Where(o => o.OrderType == query.OrderType.Value);
+            queryable = queryable.Where(x => x.o.OrderType == query.OrderType.Value);
         if (query.Status.HasValue)
-            queryable = queryable.Where(o => o.Status == query.Status.Value);
+            queryable = queryable.Where(x => x.o.Status == query.Status.Value);
         if (query.PayMethod.HasValue)
-            queryable = queryable.Where(o => o.PayMethod == query.PayMethod.Value);
+            queryable = queryable.Where(x => x.o.PayMethod == query.PayMethod.Value);
         if (query.BackfillStatus.HasValue)
-            queryable = queryable.Where(o => o.BackfillStatus == query.BackfillStatus.Value);
+            queryable = queryable.Where(x => x.o.BackfillStatus == query.BackfillStatus.Value);
         if (query.StartDate.HasValue)
-            queryable = queryable.Where(o => o.OrderTime >= query.StartDate.Value);
+            queryable = queryable.Where(x => x.o.OrderTime >= query.StartDate.Value);
         if (query.EndDate.HasValue)
-            queryable = queryable.Where(o => o.OrderTime < query.EndDate.Value.AddDays(1));
+            queryable = queryable.Where(x => x.o.OrderTime < query.EndDate.Value.AddDays(1));
 
         var total = await queryable.CountAsync();
         var items = await queryable
-            .OrderByDescending(o => o.CreatedTime)
+            .OrderByDescending(x => x.o.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(x => new OrderDto
+            {
+                Id = x.o.Id,
+                OrderNo = x.o.OrderNo,
+                CustomerId = x.o.CustomerId,
+                CustomerName = x.c != null ? x.c.Name : null,
+                Phone = x.c != null ? x.c.Phone : null,
+                StoreName = x.s != null ? x.s.Name : null,
+                ProjectSummary = string.Join("、", x.o.OrderItems.Select(oi => oi.ProductName).Distinct()),
+                OrderType = x.o.OrderType,
+                Status = x.o.Status,
+                BackfillStatus = x.o.BackfillStatus,
+                ProductAmount = x.o.ProductAmount,
+                DiscountAmount = x.o.DiscountAmount,
+                PaidAmount = x.o.PaidAmount,
+                Points = x.o.Points,
+                PayMethod = x.o.PayMethod,
+                CashAmount = x.o.CashAmount,
+                CashPayMethod = x.o.CashPayMethod,
+                StoredValueAmount = x.o.StoredValueAmount,
+                PointsAmount = x.o.PointsAmount,
+                OrderTime = x.o.OrderTime,
+                CompleteTime = x.o.CompleteTime,
+                RefundAmount = x.o.RefundAmount,
+                RefundTime = x.o.RefundTime,
+                RefundReason = x.o.RefundReason,
+                OperatorId = x.o.OperatorId,
+                Remark = x.o.Remark,
+                CreatedAt = x.o.CreatedTime,
+                UpdatedAt = x.o.UpdatedTime
+            })
             .ToListAsync();
 
         var result = new PagedResponseDto<OrderDto>
         {
-            List = items.Adapt<List<OrderDto>>(),
+            List = items,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -103,7 +149,7 @@ public class OrderAppService : IOrderAppService
     public async Task<ApiResponseDto<List<OrderDto>>> GetTodayBackfillOrdersAsync()
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<OrderDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<OrderDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var tomorrow = DateTime.Today.AddDays(1);
@@ -125,7 +171,7 @@ public class OrderAppService : IOrderAppService
     public async Task<ApiResponseDto<OrderDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<OrderDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<OrderDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Orders
             .Include(o => o.OrderItems).ThenInclude(oi => oi.Batches)
@@ -167,7 +213,7 @@ public class OrderAppService : IOrderAppService
     public async Task<ApiResponseDto<OrderDto>> CreateAsync(OrderCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<OrderDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<OrderDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -197,7 +243,7 @@ public class OrderAppService : IOrderAppService
         var orderProductIds = dto.Items.Select(i => i.ProductId).Distinct().ToList();
         var productTypeMap = await _dbContext.Products
             .Where(p => orderProductIds.Contains(p.Id) && !p.IsDeleted)
-            .ToDictionaryAsync(p => p.Id, p => p.Type);
+            .ToDictionaryAsync(p => p.Id, p => p.Master.Type);
 
         var sampleProductIds = productTypeMap
             .Where(kv => kv.Value == 4)
@@ -210,7 +256,7 @@ public class OrderAppService : IOrderAppService
         }
 
         // 识别 Type=5 赠品，供后续库存扣减分流使用
-        // 赠品走 DeductSampleGiftOutAsync（写 SampleGiftOut + InventoryLog SourceType=GiftOutbound）
+        // 赠品走 DeductSampleGiftOutAsync（仅写 InventoryLog SourceType=GiftOutbound）
         // 非赠品走原 DeductRetailInventoryAsync（销售出库）
         var giftProductIds = productTypeMap
             .Where(kv => kv.Value == 5)
@@ -251,8 +297,8 @@ public class OrderAppService : IOrderAppService
             // 预加载每个 OrderItem 的服务时长（按 ProductId 聚合），用于计算占用结束时间
             var productIds = dto.Items.Select(i => i.ProductId).Distinct().ToList();
             var productDurations = await _dbContext.ServiceProducts
-                .Where(sp => productIds.Contains(sp.ProductId))
-                .ToDictionaryAsync(sp => sp.ProductId, sp => sp.Duration ?? 0);
+                .Where(sp => productIds.Contains(sp.MasterId))
+                .ToDictionaryAsync(sp => sp.MasterId, sp => sp.Duration ?? 0);
 
             var orderStart = dto.OrderTime == default ? now : dto.OrderTime;
 
@@ -386,7 +432,7 @@ public class OrderAppService : IOrderAppService
             await transaction.CommitAsync();
 
             // 库存变动后即时检测低库存预警
-            await CheckLowStockAfterInventoryChangeAsync(entity.Id, tenantId, entity.StoreId);
+            await CheckAlertsAfterInventoryChangeAsync(entity.Id, tenantId, entity.StoreId);
 
             var message = reversedDates.Any()
                 ? $"创建成功，订单下单日 {string.Join("、", reversedDates.Select(d => d.ToString("yyyy-MM-dd")))} 日结已自动反日结/补建，请前往日结管理重新确认"
@@ -407,9 +453,9 @@ public class OrderAppService : IOrderAppService
     }
 
     /// <summary>
-    /// 库存变动后即时检测低库存预警（通过 InventoryLog 查找涉及的商品）
+    /// 库存变动后即时检测低库存和积压预警（通过 InventoryLog 查找涉及的商品）
     /// </summary>
-    private async Task CheckLowStockAfterInventoryChangeAsync(long orderId, long tenantId, long storeId)
+    private async Task CheckAlertsAfterInventoryChangeAsync(long orderId, long tenantId, long storeId)
     {
         var affectedProductIds = await _dbContext.InventoryLogs
             .Where(l => l.RelatedId == orderId && l.TenantId == tenantId && l.StoreId == storeId)
@@ -421,7 +467,7 @@ public class OrderAppService : IOrderAppService
         {
             try
             {
-                await _alertAppService.CheckLowStockAsync(tenantId, storeId, productId);
+                await _alertAppService.CheckInventoryAlertsAsync(tenantId, storeId, productId);
             }
             catch
             {
@@ -444,14 +490,14 @@ public class OrderAppService : IOrderAppService
 
             var item = order.OrderItems[i];
             await DeductItemBatchesAsync(order, item, dtoItem, now,
-                InventoryLogSourceTypes.SalesOutbound, createSampleGiftOut: false);
+                InventoryLogSourceTypes.SalesOutbound, activityId: null);
         }
     }
 
     /// <summary>
     /// 赠品出库扣减：遍历 dto.Items 中的 Type=5 赠品，调用 DeductItemBatchesAsync 按效期扣减批次库存。
-    /// 每个扣减批次创建独立 SampleGiftOut 记录（与 SampleGiftOut 实体的"单批次"设计一致），
-    /// 跨批次扣减时创建多条记录，均关联同一 OrderId（由订单创建事务保证原子性，P-SG-03）。
+    /// 解耦 SampleGiftOut 二次记录（R4），仅保留批次扣减 + InventoryLog(SourceType=GiftOutbound) 流水。
+    /// 赠品项可选关联活动（dtoItem.ActivityId），传入时校验活动存在且未删除，写入 InventoryLog.ActivityId。
     /// </summary>
     private async Task DeductSampleGiftOutAsync(
         OrderEntity order, List<OrderItemCreateDto> dtoItems, HashSet<long> giftProductIds, DateTime now)
@@ -461,9 +507,19 @@ public class OrderAppService : IOrderAppService
             var dtoItem = dtoItems[i];
             if (!giftProductIds.Contains(dtoItem.ProductId)) continue;
 
+            // 校验赠品项关联活动：传入时验证活动存在且未删除（软删除活动历史流水仍可显示）
+            if (dtoItem.ActivityId.HasValue)
+            {
+                var activityExists = await _dbContext.Activities
+                    .AnyAsync(a => a.Id == dtoItem.ActivityId.Value && !a.IsDeleted
+                        && a.TenantId == order.TenantId && a.StoreId == order.StoreId);
+                if (!activityExists)
+                    throw new InvalidOperationException($"赠品关联活动不存在（活动ID：{dtoItem.ActivityId}）");
+            }
+
             var item = order.OrderItems[i];
             await DeductItemBatchesAsync(order, item, dtoItem, now,
-                InventoryLogSourceTypes.GiftOutbound, createSampleGiftOut: true);
+                InventoryLogSourceTypes.GiftOutbound, activityId: dtoItem.ActivityId);
         }
     }
 
@@ -473,11 +529,11 @@ public class OrderAppService : IOrderAppService
     /// 店员未选效期或允许自动补足时，按 FEFO（近效期优先）自动扣减。
     /// 选中效期不足且 AllowAutoFillBeyondSelection=false 时抛带 INSUFFICIENT_EXPIRY_STOCK 前缀的异常，
     /// 由 CreateAsync 捕获并返回 409，前端弹窗让店员决定是否自动从近效期补足。
-    /// 通过 sourceType 区分 InventoryLog.SourceType，通过 createSampleGiftOut 控制是否创建 SampleGiftOut 记录。
+    /// 通过 sourceType 区分 InventoryLog.SourceType，通过 activityId 写入 InventoryLog.ActivityId（赠品出库路径传值，销售出库传 null）。
     /// </summary>
     private async Task DeductItemBatchesAsync(
         OrderEntity order, OrderItem item, OrderItemCreateDto dtoItem, DateTime now,
-        int sourceType, bool createSampleGiftOut)
+        int sourceType, long? activityId)
     {
         var remaining = item.Quantity;
         // 记录已扣减的效期日期（自动补足时排除）；null 表示"无效期限制"批次
@@ -518,7 +574,7 @@ public class OrderAppService : IOrderAppService
                         .ToListAsync();
                 }
 
-                remaining = await DeductFromBatchesAsync(order, item, batches, remaining, now, sourceType, createSampleGiftOut);
+                remaining = await DeductFromBatchesAsync(order, item, batches, remaining, now, sourceType, activityId);
                 processedExpirationDates.Add(expirationDate);
             }
         }
@@ -562,7 +618,7 @@ public class OrderAppService : IOrderAppService
                 .ThenBy(b => b.CreatedTime)                       // null 批次按 CreatedTime 升序，兜底稳定排序
                 .ToListAsync();
 
-            remaining = await DeductFromBatchesAsync(order, item, fefoBatches, remaining, now, sourceType, createSampleGiftOut);
+            remaining = await DeductFromBatchesAsync(order, item, fefoBatches, remaining, now, sourceType, activityId);
         }
 
         // 3. 仍有剩余 = 库存不足
@@ -607,11 +663,11 @@ public class OrderAppService : IOrderAppService
     /// 从指定批次列表中逐批扣减库存，更新 Inventory 汇总表，记 InventoryLog。
     /// 返回未满足的剩余数量（0 表示全部扣减完成）。
     /// 通过 sourceType 区分销售出库（SalesOutbound）与赠品出库（GiftOutbound），
-    /// 通过 createSampleGiftOut 控制是否额外创建 SampleGiftOut 记录（赠品出库路径使用）。
+    /// 通过 activityId 写入 InventoryLog.ActivityId（赠品出库路径传值，销售出库传 null）。
     /// </summary>
     private async Task<decimal> DeductFromBatchesAsync(
         OrderEntity order, OrderItem item, List<InventoryBatch> batches, decimal needQty, DateTime now,
-        int sourceType, bool createSampleGiftOut)
+        int sourceType, long? activityId)
     {
         var remaining = needQty;
 
@@ -642,10 +698,8 @@ public class OrderAppService : IOrderAppService
             }
 
             // 记录库存流水（Type=2 出库），SourceType 由调用方传入区分销售/赠品出库
-            // P-SG-02：赠品出库统一使用 GiftOutbound，与 SampleGiftOutAppService.CreateAsync 一致
-            var remark = sourceType == InventoryLogSourceTypes.GiftOutbound
-                ? $"赠品出库-{order.OrderNo}"
-                : $"零售出库-{order.OrderNo}";
+            // P-SG-02：赠品出库统一使用 GiftOutbound（R2 后 SampleGiftOuts 表已删除，仅写 InventoryLog）
+            var remark = order.OrderNo;
             _dbContext.InventoryLogs.Add(new InventoryLog
             {
                 ProductId = item.ProductId,
@@ -658,7 +712,10 @@ public class OrderAppService : IOrderAppService
                 BatchNo = batch.BatchNo,
                 ExpirationDate = batch.ExpirationDate,
                 RelatedId = order.Id,
+                ActivityId = activityId,
                 Remark = remark,
+                OperatorId = _currentUser.UserId,
+                OperatorName = _currentUser.RealName ?? _currentUser.UserName,
                 TenantId = order.TenantId,
                 TenantCode = order.TenantCode,
                 StoreId = order.StoreId,
@@ -686,27 +743,6 @@ public class OrderAppService : IOrderAppService
                 StoreCode = order.StoreCode,
                 CreatedTime = now
             });
-
-            // 赠品出库路径：每个扣减批次创建独立 SampleGiftOut 记录
-            // 与 SampleGiftOut 实体的"单批次"设计一致；跨批次扣减时创建多条记录，均关联同一 OrderId
-            if (createSampleGiftOut)
-            {
-                _dbContext.SampleGiftOuts.Add(new SampleGiftOut
-                {
-                    ProductId = item.ProductId,
-                    InventoryBatchId = batch.Id,
-                    Quantity = deduct,
-                    OutTime = now,
-                    OrderId = order.Id,
-                    OperatorId = order.OperatorId,
-                    Remark = $"订单赠品-{order.OrderNo}",
-                    TenantId = order.TenantId,
-                    TenantCode = order.TenantCode,
-                    StoreId = order.StoreId,
-                    StoreCode = order.StoreCode,
-                    CreatedTime = now
-                });
-            }
 
             remaining -= deduct;
         }
@@ -782,7 +818,9 @@ public class OrderAppService : IOrderAppService
                         BatchNo = batch.BatchNo,
                         ExpirationDate = batch.ExpirationDate,
                         RelatedId = order.Id,
-                        Remark = $"服务耗材出库-{order.OrderNo}",
+                        Remark = order.OrderNo,
+                        OperatorId = _currentUser.UserId,
+                        OperatorName = _currentUser.RealName ?? _currentUser.UserName,
                         TenantId = order.TenantId,
                         TenantCode = order.TenantCode,
                         StoreId = order.StoreId,
@@ -861,7 +899,7 @@ public class OrderAppService : IOrderAppService
         if (amount <= 0)
             throw new InvalidOperationException("积分抵扣金额必须大于0");
 
-        var rule = await GetEffectivePointsRuleAsync(order.TenantId, order.StoreId);
+        var rule = await _pointsRuleService.GetEffectivePointsRuleAsync(order.TenantId, order.StoreId);
         if (rule == null || rule.DeductRate <= 0)
             throw new InvalidOperationException("未配置启用的积分规则或抵扣比例为0");
 
@@ -880,6 +918,7 @@ public class OrderAppService : IOrderAppService
         if (customer.TotalPoints < pointsToDeduct)
             throw new InvalidOperationException($"客户积分不足（当前 {customer.TotalPoints}，需要 {pointsToDeduct}）");
 
+        var beforePoints = customer.TotalPoints;
         customer.TotalPoints -= pointsToDeduct;
         customer.UpdatedTime = now;
 
@@ -905,28 +944,31 @@ public class OrderAppService : IOrderAppService
             TenantCode = order.TenantCode,
             CreatedTime = now
         });
-    }
 
-    /// <summary>
-    /// 查询生效的积分规则：优先门店级（StoreId 匹配），回退租户级默认规则（StoreId=0）
-    /// 修复原查询未按 StoreId 过滤的 bug，支持门店级配置回退租户级
-    /// </summary>
-    private async Task<PointsRule?> GetEffectivePointsRuleAsync(long tenantId, long storeId)
-    {
-        // 优先查门店级规则
-        var rule = await _dbContext.PointsRules
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.StoreId == storeId && r.Status == 1);
-        if (rule != null) return rule;
-
-        // 回退到租户级默认规则（StoreId=0 表示租户级通用规则）
-        return await _dbContext.PointsRules
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.StoreId == 0 && r.Status == 1);
+        // G5.3: 积分抵扣支付属于积分使用场景，必须记录积分流水
+        _dbContext.CustomerPointsLogs.Add(new CustomerPointsLog
+        {
+            CustomerId = customer.Id,
+            Type = CustomerPointsLogType.PointsDeduct, // 积分抵扣
+            Points = -pointsToDeduct,
+            BeforePoints = beforePoints,
+            AfterPoints = customer.TotalPoints,
+            OrderId = order.Id,
+            OperatorId = _currentUser.UserId,
+            Remark = $"订单 {order.OrderNo} 积分抵扣 {amount:F2}元",
+            TenantId = order.TenantId,
+            TenantCode = order.TenantCode,
+            StoreId = order.StoreId,
+            StoreCode = order.StoreCode,
+            CreatedTime = now
+        });
     }
 
     /// <summary>
     /// 积分发放：按积分规则 PointsRate 计算，Floor 取整
     /// 内置显式防护：OrderType=3 疗程卡核销直接返回（购买时已发放）
     /// PayMethod=5/6 不发积分的判断已由 CreateAsync 调用方控制，本方法不再重复
+    /// 生效规则查询与生日当天双倍逻辑由 IPointsRuleService 统一处理
     /// </summary>
     /// <param name="baseAmount">发放基数（单一支付为 PaidAmount；组合支付为 CashAmount+StoredValueAmount，排除积分抵扣部分）</param>
     private async Task AwardPointsAsync(OrderEntity order, decimal baseAmount, DateTime now)
@@ -936,17 +978,21 @@ public class OrderAppService : IOrderAppService
         // 显式防护：疗程卡核销不发积分（购买时已发放），与 CreateAsync 调用处条件形成双重保险
         if (order.OrderType == 3) return;
 
-        var pointsRule = await GetEffectivePointsRuleAsync(order.TenantId, order.StoreId);
-        if (pointsRule == null || pointsRule.PointsRate <= 0) return;
+        var pointsRule = await _pointsRuleService.GetEffectivePointsRuleAsync(order.TenantId, order.StoreId);
+        if (pointsRule == null) return;
 
-        var points = (int)Math.Floor(baseAmount * pointsRule.PointsRate);
-        if (points <= 0) return;
-
-        order.Points = points;
-
+        // 先查客户（生日当天双倍判断需要客户生日）
         var customer = await _dbContext.Customers
             .FirstOrDefaultAsync(c => c.Id == order.CustomerId.Value && c.TenantId == order.TenantId);
         if (customer == null) return;
+
+        // 计算应发积分（含生日当天双倍）
+        var points = _pointsRuleService.CalculateAwardPoints(pointsRule, customer.Birthday, baseAmount, now);
+        if (points <= 0) return;
+
+        order.Points = points;
+        // 记录下单时的抵扣比例快照，用于退款时折算积分不足部分（避免规则变更后计算错误）
+        order.DeductRate = pointsRule.DeductRate;
 
         var beforePoints = customer.TotalPoints;
         customer.TotalPoints += points;
@@ -1169,7 +1215,7 @@ public class OrderAppService : IOrderAppService
     public async Task<ApiResponseDto> CancelAsync(long id, OrderCancelDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _cancelValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -1233,7 +1279,7 @@ public class OrderAppService : IOrderAppService
     public async Task<ApiResponseDto<RefundResultDto>> RefundAsync(RefundRequestDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<RefundResultDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<RefundResultDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _refundValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -1348,14 +1394,11 @@ public class OrderAppService : IOrderAppService
                 actions.Add($"订单下单日 {string.Join("、", reversedDates.Select(d => d.ToString("yyyy-MM-dd")))} 日结已自动反日结/补建，请前往日结管理重新确认");
             }
 
-            // 10. 全额退款时删除订单关联的赠品出库记录（部分退款保留出库记录以保留部分出库事实）
-            if (order.Status == 3)
-            {
-                await ReverseSampleGiftOutAsync(order, actions);
-            }
-
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            // 退款可能涉及库存回库，即时检测低库存和积压预警（失败不影响退款结果，定时任务兜底）
+            await CheckAlertsAfterInventoryChangeAsync(order.Id, order.TenantId, order.StoreId);
 
             var message = reversedDates.Any()
                 ? $"退款成功，订单下单日 {string.Join("、", reversedDates.Select(d => d.ToString("yyyy-MM-dd")))} 日结已自动反日结，请前往日结管理重新确认"
@@ -1513,9 +1556,6 @@ public class OrderAppService : IOrderAppService
                 break;
         }
 
-        // 1.1 删除订单关联的赠品出库记录（取消订单视为未发生赠品出库，与批次库存回滚配套）
-        await ReverseSampleGiftOutAsync(order, actions);
-
         // 2. 积分扣减（按全额比例，OrderType=3 核销不发积分，order.Points=0 自动跳过）
         if (order.Points > 0)
         {
@@ -1569,23 +1609,6 @@ public class OrderAppService : IOrderAppService
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// 回滚订单关联的赠品出库记录（P-SG-03 配套修复）
-    /// 取消订单或全额退款时，需删除该订单通过 DeductSampleGiftOutAsync 创建的 SampleGiftOut 记录，
-    /// 与 RefundRetailInventoryAsync 退回的批次库存一一对应，避免出现"库存已退但出库记录仍存在"的数据不一致。
-    /// 注意：SampleGiftOut 继承 StoreBusinessEntityBase，无软删除字段，采用物理删除。
-    /// </summary>
-    private async Task ReverseSampleGiftOutAsync(OrderEntity order, List<string> actions)
-    {
-        var sampleGiftOuts = await _dbContext.SampleGiftOuts
-            .Where(sgo => sgo.OrderId == order.Id)
-            .ToListAsync();
-        if (!sampleGiftOuts.Any()) return;
-
-        _dbContext.SampleGiftOuts.RemoveRange(sampleGiftOuts);
-        actions.Add($"删除赠品出库记录 {sampleGiftOuts.Count} 条（订单 {order.OrderNo} 回滚）");
     }
 
     /// <summary>
@@ -1672,7 +1695,6 @@ public class OrderAppService : IOrderAppService
                 {
                     ProductId = itemBatch.ProductId,
                     Quantity = refundQty,
-                    AlertQuantity = 0,
                     TenantId = order.TenantId,
                     TenantCode = order.TenantCode,
                     StoreId = order.StoreId,
@@ -1696,7 +1718,9 @@ public class OrderAppService : IOrderAppService
                 BatchNo = targetBatch.BatchNo,
                 ExpirationDate = itemBatch.ExpirationDate,
                 RelatedId = order.Id,
-                Remark = $"订单 {order.OrderNo} 退款退货",
+                Remark = order.OrderNo,
+                OperatorId = _currentUser.UserId,
+                OperatorName = _currentUser.RealName ?? _currentUser.UserName,
                 TenantId = order.TenantId,
                 TenantCode = order.TenantCode,
                 StoreId = order.StoreId,
@@ -1754,7 +1778,6 @@ public class OrderAppService : IOrderAppService
                 {
                     ProductId = item.ProductId,
                     Quantity = returnQty,
-                    AlertQuantity = 0,
                     TenantId = order.TenantId,
                     TenantCode = order.TenantCode,
                     StoreId = order.StoreId,
@@ -1778,7 +1801,7 @@ public class OrderAppService : IOrderAppService
                     Quantity = returnQty,
                     UnitPrice = item.Price,
                     Status = 1,
-                    Remark = $"订单 {order.OrderNo} 退款退货",
+                    Remark = order.OrderNo,
                     TenantId = order.TenantId,
                     TenantCode = order.TenantCode,
                     StoreId = order.StoreId,
@@ -1799,7 +1822,9 @@ public class OrderAppService : IOrderAppService
                 AfterQuantity = beforeQty + returnQty,
                 BatchNo = batch.BatchNo,
                 RelatedId = order.Id,
-                Remark = $"订单 {order.OrderNo} 退款退货",
+                Remark = order.OrderNo,
+                OperatorId = _currentUser.UserId,
+                OperatorName = _currentUser.RealName ?? _currentUser.UserName,
                 TenantId = order.TenantId,
                 TenantCode = order.TenantCode,
                 StoreId = order.StoreId,
@@ -1827,7 +1852,7 @@ public class OrderAppService : IOrderAppService
         }
 
         var sale = await _dbContext.TreatmentCardSales
-            .FirstOrDefaultAsync(s => s.Id == verify.CardSaleId && s.TenantId == order.TenantId);
+            .FirstOrDefaultAsync(s => s.Id == verify.CardSaleId && s.TenantId == order.TenantId && !s.IsDeleted);
         if (sale == null)
         {
             actions.Add("未找到疗程卡销售记录，跳过疗程卡回退");
@@ -1892,6 +1917,7 @@ public class OrderAppService : IOrderAppService
     /// <summary>
     /// 储值支付订单退款：退到 StoredValueAccount.RealBalance（赠送余额不退），更新 Balance 和 TotalConsume，记 StoredValueLog
     /// 当订单 PayMethod=5(储值卡支付)时，退款金额退还到客户储值账户的实收余额
+    /// 同步客户档案 Customer.Balance（口径为账户总余额，含赠送）
     /// </summary>
     private async Task RefundStoredValueAsync(OrderEntity order, decimal refundAmount, List<string> actions, DateTime now)
     {
@@ -1919,6 +1945,15 @@ public class OrderAppService : IOrderAppService
         account.TotalConsume -= refundAmount;
         account.UpdatedTime = now;
 
+        // 同步客户档案余额：口径与储值账户总余额一致（实收+赠送）
+        var customer = await _dbContext.Customers
+            .FirstOrDefaultAsync(c => c.Id == order.CustomerId.Value && c.TenantId == order.TenantId);
+        if (customer != null)
+        {
+            customer.Balance = account.Balance;
+            customer.UpdatedTime = now;
+        }
+
         _dbContext.StoredValueLogs.Add(new StoredValueLog
         {
             CustomerId = account.CustomerId,
@@ -1936,6 +1971,8 @@ public class OrderAppService : IOrderAppService
             AfterGiftBalance = beforeGiftBalance,
             OrderId = order.Id,
             Remark = $"订单 {order.OrderNo} 退款",
+            OperatorId = _currentUser.UserId,
+            OperatorName = _currentUser.RealName ?? _currentUser.UserName,
             TenantId = order.TenantId,
             TenantCode = order.TenantCode,
             StoreId = order.StoreId,
@@ -1947,8 +1984,9 @@ public class OrderAppService : IOrderAppService
     }
 
     /// <summary>
-    /// 积分抵扣订单退款：按 DeductRate 将退款金额换算为积分退还客户账户
+    /// 积分抵扣订单退款：按订单 DeductRate 快照将退款金额换算为积分退还客户账户
     /// 当订单 PayMethod=6(积分抵扣)时，退款金额按比例换算为积分退还
+    /// 使用订单快照而非当前规则，避免规则变更后退还积分数量不一致
     /// </summary>
     private async Task RefundPointsPaymentAsync(OrderEntity order, decimal refundAmount, List<string> actions, DateTime now)
     {
@@ -1958,10 +1996,11 @@ public class OrderAppService : IOrderAppService
             return;
         }
 
-        var rule = await GetEffectivePointsRuleAsync(order.TenantId, order.StoreId);
-        if (rule == null || rule.DeductRate <= 0)
+        // 使用订单 DeductRate 快照，避免规则变更后退还积分数量不一致
+        var deductRate = order.DeductRate;
+        if (deductRate <= 0)
         {
-            actions.Add("未找到启用的积分规则，跳过积分退还");
+            actions.Add("订单未记录积分抵扣比例快照，跳过积分退还");
             return;
         }
 
@@ -1974,7 +2013,7 @@ public class OrderAppService : IOrderAppService
         }
 
         // 退还积分按比例换算（向下取整，避免多退）
-        var pointsToRefund = (int)Math.Floor(refundAmount / rule.DeductRate);
+        var pointsToRefund = (int)Math.Floor(refundAmount / deductRate);
         if (pointsToRefund <= 0)
         {
             actions.Add($"退款金额 {refundAmount:F2} 不足1积分，跳过积分退还");
@@ -1983,7 +2022,7 @@ public class OrderAppService : IOrderAppService
 
         customer.TotalPoints += pointsToRefund;
         customer.UpdatedTime = now;
-        actions.Add($"客户 ID:{customer.Id} 退还积分 {pointsToRefund}（退款 {refundAmount:F2} × 比例 1/{rule.DeductRate}）");
+        actions.Add($"客户 ID:{customer.Id} 退还积分 {pointsToRefund}（退款 {refundAmount:F2} × 比例 1/{deductRate}）");
     }
 
     /// <summary>
@@ -2011,11 +2050,11 @@ public class OrderAppService : IOrderAppService
         var pointsToDeduct = -(int)Math.Round(order.Points * ratio);
         if (pointsToDeduct == 0) return 0;
 
-        // 积分不足：扣减全部剩余积分，不足部分按 DeductRate 折算现金从退款扣除
+        // 积分不足：扣减全部剩余积分，不足部分按订单 DeductRate 快照折算现金从退款扣除
+        // 使用订单快照而非当前规则，避免规则变更后折现计算错误
         if (customer.TotalPoints + pointsToDeduct < 0)
         {
-            var pointsRule = await GetEffectivePointsRuleAsync(order.TenantId, order.StoreId);
-            var deductRate = pointsRule?.DeductRate ?? 0m;
+            var deductRate = order.DeductRate > 0 ? order.DeductRate : 0m;
 
             var shortfallPoints = Math.Abs(pointsToDeduct) - customer.TotalPoints;
             var cashDeduction = shortfallPoints * deductRate;

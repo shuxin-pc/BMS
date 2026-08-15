@@ -46,8 +46,8 @@ export interface InventoryLog {
   productCode?: string
   /** 库存操作类型：1-入库 2-出库 3-盘点 4-调拨 */
   type: InventoryOpType
-  /** 来源类型（入库 1-4 或出库 3/6/10/11 等） */
-  sourceType?: InboundSourceType | OutboundSourceType
+  /** 来源类型（0-13，详见 InventoryLogSourceType） */
+  sourceType?: InventoryLogSourceType
   /** 供应商ID（采购入库时有值） */
   supplierId?: number
   /** 供应商名称（冗余字段，便于展示） */
@@ -72,22 +72,34 @@ export interface InventoryLog {
   createdAt: string
   /** 操作人名称（冗余字段，便于展示） */
   operatorName?: string
+  /** 操作前批次库存（后端按同商品同批次流水累加计算，无 productId 查询时为 null） */
+  batchBeforeQuantity?: number | null
+  /** 操作后批次库存（后端按同商品同批次流水累加计算，无 productId 查询时为 null） */
+  batchAfterQuantity?: number | null
+  /** 操作前商品总库存（后端按同商品流水累加计算，无 productId 查询时为 null） */
+  totalBeforeQuantity?: number | null
+  /** 操作后商品总库存（后端按同商品流水累加计算，无 productId 查询时为 null） */
+  totalAfterQuantity?: number | null
 }
 
 /**
  * 库存日志查询参数
  */
 export interface InventoryLogQuery {
+  /** 商品ID（按商品筛选流水时传入，后端 long 序列化为字符串，前端用 string 避免大整数精度丢失） */
+  productId?: number | string
   /** 商品名称（模糊匹配） */
   productName?: string
   /** 操作类型 */
   type?: InventoryOpType
-  /** 来源类型（入库或出库） */
-  sourceType?: InboundSourceType | OutboundSourceType
+  /** 来源类型（0-13，详见 InventoryLogSourceType） */
+  sourceType?: InventoryLogSourceType
   /** 开始日期 */
   startDate?: string
   /** 结束日期 */
   endDate?: string
+  /** 批次号（模糊匹配） */
+  batchNo?: string
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
@@ -95,39 +107,32 @@ export interface InventoryLogQuery {
 }
 
 /**
- * 入库请求
- */
-export interface InboundRequest {
-  /** 商品ID */
-  productId: number
-  /** 入库来源类型：1-采购入库 2-退货入库 3-盘点入库 4-调拨入库 */
-  sourceType: InboundSourceType
-  /** 供应商ID（采购入库时必填） */
-  supplierId?: number
-  /** 单价 */
-  unitPrice?: number
-  /** 入库数量（正数） */
-  quantity: number
-  /** 批次号 */
-  batchNo?: string
-  /** 生产日期 */
-  productionDate?: string
-  /** 保质期天数 */
-  shelfLifeDays?: number
-  /** 过期日期（录入生产日期+保质期天数时系统自动计算） */
-  expirationDate?: string
-  /** 备注 */
-  remark?: string
-}
-
-/**
  * 出库来源类型（前端暴露的常用手动来源）
  * - 3: 盘点盘亏
- * - 6: 其他
- * - 10: 样品领用
- * - 11: 赠品活动
+ * - 9: 样品领用
+ * - 10: 赠品活动
+ * - 11: 其他
  */
-export type OutboundSourceType = 3 | 6 | 10 | 11
+export type OutboundSourceType = 3 | 9 | 10 | 11
+
+/**
+ * 库存流水来源类型（完整枚举，对应后端 InventoryLogSourceTypes 常量）
+ * - 0: 销售出库
+ * - 1: 采购入库
+ * - 2: 退货入库
+ * - 3: 盘点调整
+ * - 4: 调拨入库
+ * - 5: 调拨出库
+ * - 6: 采购退货出库
+ * - 7: 疗程卡核销出库
+ * - 8: 样品/赠品出库（历史）
+ * - 9: 样品领用出库
+ * - 10: 赠品活动出库
+ * - 11: 其他
+ * - 12: 样品赠品调拨出库
+ * - 13: 样品赠品调拨入库
+ */
+export type InventoryLogSourceType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
 
 /**
  * 批次扣减明细（手动模式）

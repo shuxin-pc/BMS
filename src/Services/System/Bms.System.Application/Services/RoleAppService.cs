@@ -4,6 +4,7 @@ using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Domain.Entities;
+using Bms.System.Domain.Enums;
 using Bms.System.Domain.Exceptions;
 using Bms.System.Domain.Interfaces;
 using Bms.System.Domain.IRepositories;
@@ -15,7 +16,6 @@ public class RoleAppService : IRoleAppService
 {
     private readonly IRoleRepository _roleRepository;
     private readonly IMenuRepository _menuRepository;
-    private readonly IPermissionRepository _permissionRepository;
     private readonly IDataPermissionRepository _dataPermissionRepository;
     private readonly ICurrentUser _currentUser;
     private readonly SystemDbContext _context;
@@ -31,7 +31,6 @@ public class RoleAppService : IRoleAppService
     public RoleAppService(
         IRoleRepository roleRepository,
         IMenuRepository menuRepository,
-        IPermissionRepository permissionRepository,
         IDataPermissionRepository dataPermissionRepository,
         ICurrentUser currentUser,
         SystemDbContext context,
@@ -39,7 +38,6 @@ public class RoleAppService : IRoleAppService
     {
         _roleRepository = roleRepository;
         _menuRepository = menuRepository;
-        _permissionRepository = permissionRepository;
         _dataPermissionRepository = dataPermissionRepository;
         _currentUser = currentUser;
         _context = context;
@@ -119,6 +117,103 @@ public class RoleAppService : IRoleAppService
         if (targetRole.TenantId != currentTenantId)
         {
             throw new PermissionDeniedException("无权操作其他租户的角色");
+        }
+    }
+
+    /// <summary>
+    /// 校验当前用户能否查询目标角色详情/菜单配置
+    /// 修复 H1：角色详情与菜单权限信息泄露
+    /// 查询场景校验：super_admin 放行 + ProtectedCode 保护 + 租户隔离
+    /// </summary>
+    private async Task CheckCanReadRoleAsync(Role targetRole)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        // 允许查看自己的角色：目标角色属于当前用户已拥有的角色集合时放行
+        if (ctx.RoleIds.Contains(targetRole.Id))
+        {
+            return;
+        }
+
+        // ProtectedCode 保护：非 super_admin 不得查看系统保留角色信息
+        if (ProtectedRoleCodes.Contains(targetRole.Code))
+        {
+            throw new PermissionDeniedException("无权查看系统保留角色信息");
+        }
+
+        // 租户隔离
+        var currentTenantId = _currentUser.TenantId ?? 0;
+        if (targetRole.TenantId != currentTenantId)
+        {
+            throw new PermissionDeniedException("无权查看其他租户的角色");
+        }
+    }
+
+    /// <summary>
+    /// 校验当前用户能否为角色设置指定的数据范围
+    /// 修复 S2：原 UpdateAsync 未校验 DataScopeType/CustomOrganizationIds，
+    /// 导致部门管理员可放大下级角色数据范围到全租户。
+    /// 规则（权限不放大原则：下级角色数据范围不得超过操作者自身数据范围）：
+    /// - super_admin：放行
+    /// - 操作者自身 ScopeType 非 All 时，不得设置 DataScopeType=All
+    /// - 操作者自身 ScopeType 为 Self 时，不得设置 DataScopeType=DepartmentAndBelow
+    /// - 自定义数据范围时，CustomOrganizationIds 必须是操作者数据权限范围内组织 ID 的子集
+    /// </summary>
+    private async Task CheckCanWriteDataScopeAsync(int dataScopeType, List<long>? customOrganizationIds)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == null)
+        {
+            throw new PermissionDeniedException("无法识别当前用户身份");
+        }
+
+        var ctx = await _userPermissionChecker.GetContextAsync(_currentUser.UserId.Value);
+        if (ctx.IsSuperAdmin)
+        {
+            return;
+        }
+
+        // 权限不放大原则：下级角色数据范围不得超过操作者自身数据范围
+        // 范围宽度排序：All > DepartmentAndBelow > Self；Custom 取决于 CustomOrganizationIds 子集
+        // 操作者自身 ScopeType 非 All 时，不得给下级设置 All
+        if (dataScopeType == (int)DataScopeType.All && ctx.DataScope.ScopeType != DataScopeType.All)
+        {
+            throw new PermissionDeniedException("无权设置全部数据范围");
+        }
+
+        // 操作者自身 ScopeType 为 Self 时，不得给下级设置 DepartmentAndBelow（范围放大）
+        if (dataScopeType == (int)DataScopeType.DepartmentAndBelow && ctx.DataScope.ScopeType == DataScopeType.Self)
+        {
+            throw new PermissionDeniedException("无权设置部门及以下数据范围");
+        }
+
+        // 自定义数据范围时，CustomOrganizationIds 必须是操作者数据权限范围内组织 ID 的子集
+        // 操作者 Self 时 OrganizationIds 为空，任何非空 customOrganizationIds 都会被拒绝
+        if (dataScopeType == (int)DataScopeType.Custom)
+        {
+            if (customOrganizationIds == null || !customOrganizationIds.Any())
+            {
+                throw new PermissionDeniedException("自定义数据范围必须指定组织");
+            }
+
+            var allowedOrgIds = ctx.DataScope.OrganizationIds;
+            var unauthorizedIds = customOrganizationIds.Where(id => !allowedOrgIds.Contains(id)).ToList();
+            if (unauthorizedIds.Any())
+            {
+                var unauthorizedOrgNames = await _context.Organizations
+                    .Where(o => unauthorizedIds.Contains(o.Id))
+                    .Select(o => o.Name)
+                    .ToListAsync();
+                throw new PermissionDeniedException($"无权访问以下组织：{string.Join(",", unauthorizedOrgNames)}");
+            }
         }
     }
 
@@ -266,6 +361,10 @@ public class RoleAppService : IRoleAppService
             return ApiResponseDto<RoleDto?>.Fail("角色不存在", 404);
         }
 
+        // 修复 H1：校验当前用户能否查询此角色（租户隔离 + ProtectedCode 保护）
+        // 注意：CreateAsync/UpdateAsync 内部调用此方法时，已通过更严格的 CheckCanWriteRoleAsync/CheckCanModifyRoleAsync，此处校验不会阻断
+        await CheckCanReadRoleAsync(role);
+
         var dto = new RoleDto
         {
             Id = role.Id,
@@ -289,6 +388,8 @@ public class RoleAppService : IRoleAppService
     {
         // 权限校验：Code 约束 + Level 约束 + 租户隔离
         await CheckCanWriteRoleAsync(dto.Code, dto.Level, currentTenantId);
+        // 权限校验：数据范围约束（DataScopeType/CustomOrganizationIds）
+        await CheckCanWriteDataScopeAsync(dto.DataScopeType, dto.CustomOrganizationIds);
 
         if (await _roleRepository.ExistsCodeAsync(dto.Code))
         {
@@ -315,33 +416,18 @@ public class RoleAppService : IRoleAppService
         await _roleRepository.AddAsync(role);
 
         // 添加数据权限
-        if (dto.DataScopeType > 1)
+        // 无论 DataScopeType 为何值都写入记录：DataScopeType=1（All）也必须存在 DataPermission 记录，
+        // 否则 DataPermissionFilter 会将"无记录"视为 Self，导致显示与实际权限不一致
+        var dataPermission = new DataPermission
         {
-            var dataPermission = new DataPermission
-            {
-                RoleId = role.Id,
-                DataScopeType = dto.DataScopeType,
-                CustomOrganizationIds = dto.CustomOrganizationIds != null
-                    ? string.Join(",", dto.CustomOrganizationIds)
-                    : null
-            };
-            await _dataPermissionRepository.AddAsync(dataPermission);
-        }
-
-        // 添加权限
-        if (dto.PermissionIds.Any())
-        {
-            foreach (var permissionId in dto.PermissionIds)
-            {
-                var rolePermission = new RolePermission
-                {
-                    RoleId = role.Id,
-                    PermissionId = permissionId
-                };
-                role.RolePermissions.Add(rolePermission);
-            }
-            await _roleRepository.UpdateAsync(role);
-        }
+            RoleId = role.Id,
+            DataScopeType = dto.DataScopeType,
+            // 仅自定义数据范围保存组织 ID 列表，与 UpdateAsync 逻辑保持一致
+            CustomOrganizationIds = dto.DataScopeType == (int)DataScopeType.Custom && dto.CustomOrganizationIds != null
+                ? string.Join(",", dto.CustomOrganizationIds)
+                : null
+        };
+        await _dataPermissionRepository.AddAsync(dataPermission);
 
         var result = await GetByIdAsync(role.Id);
         if (result.Data == null)
@@ -362,6 +448,8 @@ public class RoleAppService : IRoleAppService
         // 权限校验：目标角色 + 新 Code/Level 约束
         await CheckCanModifyRoleAsync(role);
         await CheckCanWriteRoleAsync(dto.Code, dto.Level, role.TenantId);
+        // 权限校验：数据范围约束（DataScopeType/CustomOrganizationIds）
+        await CheckCanWriteDataScopeAsync(dto.DataScopeType, dto.CustomOrganizationIds);
 
         if (role.IsSystem)
         {
@@ -393,6 +481,8 @@ public class RoleAppService : IRoleAppService
         entry.Property(e => e.TenantCode).IsModified = false;
 
         // 更新数据权限（数据范围类型：1-全部数据，2-部门及以下，3-仅本人，4-自定义）
+        // 无论 DataScopeType 为何值都写入记录：DataScopeType=1（All）也必须存在 DataPermission 记录，
+        // 否则 DataPermissionFilter 会将"无记录"视为 Self，导致显示与实际权限不一致
         var existingDataPermission = await _dataPermissionRepository.GetByRoleIdAsync(dto.Id);
         if (existingDataPermission != null)
         {
@@ -408,7 +498,7 @@ public class RoleAppService : IRoleAppService
             }
             _context.DataPermissions.Update(existingDataPermission);
         }
-        else if (dto.DataScopeType > 1)
+        else
         {
             var dataPermission = new DataPermission
             {
@@ -448,6 +538,12 @@ public class RoleAppService : IRoleAppService
             throw new InvalidOperationException("系统角色不能删除");
         }
 
+        // 修复 H3：删除前检查是否有用户绑定，避免 UserRoles 关联悬挂导致残留权限
+        if (role.UserRoles != null && role.UserRoles.Count > 0)
+        {
+            throw new InvalidOperationException($"该角色已绑定 {role.UserRoles.Count} 个用户，请先解绑后再删除");
+        }
+
         await _roleRepository.DeleteAsync(id);
         return ApiResponseDto.Success(null, "删除成功");
     }
@@ -462,6 +558,7 @@ public class RoleAppService : IRoleAppService
         var deletedCount = 0;
         var systemRoleCount = 0;
         var skippedNoPermission = 0;
+        var skippedBoundUser = 0;
 
         foreach (var id in ids)
         {
@@ -488,13 +585,20 @@ public class RoleAppService : IRoleAppService
                 continue;
             }
 
+            // 修复 H3：跳过有用户绑定的角色，避免 UserRoles 关联悬挂导致残留权限
+            if (role.UserRoles != null && role.UserRoles.Count > 0)
+            {
+                skippedBoundUser++;
+                continue;
+            }
+
             await _roleRepository.DeleteAsync(id);
             deletedCount++;
         }
 
-        if (systemRoleCount > 0 || skippedNoPermission > 0)
+        if (systemRoleCount > 0 || skippedNoPermission > 0 || skippedBoundUser > 0)
         {
-            return ApiResponseDto.Success(null, $"成功删除 {deletedCount} 个角色，{systemRoleCount} 个系统角色被跳过，{skippedNoPermission} 个无权操作被跳过");
+            return ApiResponseDto.Success(null, $"成功删除 {deletedCount} 个角色，{systemRoleCount} 个系统角色被跳过，{skippedNoPermission} 个无权操作被跳过，{skippedBoundUser} 个有用户绑定被跳过");
         }
 
         return ApiResponseDto.Success(null, $"成功删除 {deletedCount} 个角色");
@@ -502,6 +606,15 @@ public class RoleAppService : IRoleAppService
 
     public async Task<ApiResponseDto<List<MenuDto>>> GetRoleMenusAsync(long roleId)
     {
+        var role = await _roleRepository.GetByIdAsync(roleId);
+        if (role == null)
+        {
+            return ApiResponseDto<List<MenuDto>>.Fail("角色不存在", 404);
+        }
+
+        // 修复 H1：校验当前用户能否查询此角色（租户隔离 + ProtectedCode 保护）
+        await CheckCanReadRoleAsync(role);
+
         var menus = await _menuRepository.GetByRoleIdAsync(roleId);
         var result = menus.Select(m => new MenuDto
         {
@@ -512,38 +625,5 @@ public class RoleAppService : IRoleAppService
             Type = m.Type
         }).ToList();
         return ApiResponseDto<List<MenuDto>>.Success(result);
-    }
-
-    public async Task<ApiResponseDto> AssignPermissionsAsync(long roleId, List<long> permissionIds)
-    {
-        var role = await _roleRepository.GetByIdAsync(roleId);
-        if (role == null)
-        {
-            throw new InvalidOperationException("角色不存在");
-        }
-
-        // 权限校验：目标角色 Code 与租户约束
-        await CheckCanModifyRoleAsync(role);
-
-        if (role.IsSystem)
-        {
-            throw new InvalidOperationException("系统角色不能修改权限");
-        }
-
-        // 移除现有权限
-        role.RolePermissions.Clear();
-
-        // 添加新权限
-        foreach (var permissionId in permissionIds)
-        {
-            role.RolePermissions.Add(new RolePermission
-            {
-                RoleId = roleId,
-                PermissionId = permissionId
-            });
-        }
-
-        await _roleRepository.UpdateAsync(role);
-        return ApiResponseDto.Success(null, "权限分配成功");
     }
 }

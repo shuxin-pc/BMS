@@ -31,25 +31,52 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<PagedResponseDto<BodyDataRecordDto>>> GetPagedListAsync(BodyDataRecordQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<BodyDataRecordDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<BodyDataRecordDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
-        var queryable = _dbContext.BodyDataRecords
-            .Where(p => p.TenantId == tenantId);
+        var storeId = _currentUser.StoreId ?? 0;
+        var queryable = from p in _dbContext.BodyDataRecords
+                        join c in _dbContext.Customers on p.CustomerId equals c.Id
+                        where p.TenantId == tenantId && p.StoreId == storeId && !c.IsDeleted
+                        select new { p, c };
 
         if (query.CustomerId.HasValue)
-            queryable = queryable.Where(p => p.CustomerId == query.CustomerId.Value);
+            queryable = queryable.Where(x => x.p.CustomerId == query.CustomerId.Value);
+        if (!string.IsNullOrWhiteSpace(query.CustomerName))
+            queryable = queryable.Where(x => x.c.Name.Contains(query.CustomerName));
+        if (!string.IsNullOrWhiteSpace(query.CustomerPhone))
+            queryable = queryable.Where(x => x.c.Phone.Contains(query.CustomerPhone));
+        if (query.StartDate.HasValue)
+            queryable = queryable.Where(x => x.p.RecordDate >= query.StartDate.Value);
+        if (query.EndDate.HasValue)
+            queryable = queryable.Where(x => x.p.RecordDate <= query.EndDate.Value);
 
         var total = await queryable.CountAsync();
         var items = await queryable
-            .OrderByDescending(p => p.CreatedTime)
+            .OrderByDescending(x => x.p.RecordDate)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(x => new BodyDataRecordDto
+            {
+                Id = x.p.Id,
+                CustomerId = x.p.CustomerId,
+                CustomerName = x.c.Name,
+                CustomerPhone = x.c.Phone,
+                RecordDate = x.p.RecordDate,
+                Weight = x.p.Weight,
+                BodyFat = x.p.BodyFat,
+                Bust = x.p.Bust,
+                Waist = x.p.Waist,
+                Hip = x.p.Hip,
+                Remark = x.p.Remark,
+                CreatedAt = x.p.CreatedTime,
+                UpdatedAt = x.p.UpdatedTime
+            })
             .ToListAsync();
 
         var result = new PagedResponseDto<BodyDataRecordDto>
         {
-            List = items.Adapt<List<BodyDataRecordDto>>(),
+            List = items,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -60,10 +87,12 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<BodyDataRecordDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<BodyDataRecordDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<BodyDataRecordDto?>.Fail("登录状态异常，请重新登录", 401);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.BodyDataRecords
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<BodyDataRecordDto?>.Fail("身体数据记录不存在", 404);
         return ApiResponseDto<BodyDataRecordDto?>.Ok(entity.Adapt<BodyDataRecordDto>());
@@ -72,16 +101,19 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<BodyDataRecordDto>> CreateAsync(BodyDataRecordCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<BodyDataRecordDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<BodyDataRecordDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<BodyDataRecordDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = dto.Adapt<BodyDataRecordEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = storeId;
+        entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.BodyDataRecords.Add(entity);
@@ -92,15 +124,16 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<BodyDataRecordDto>> UpdateAsync(BodyDataRecordUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<BodyDataRecordDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<BodyDataRecordDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<BodyDataRecordDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.BodyDataRecords
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<BodyDataRecordDto>.Fail("身体数据记录不存在", 404);
 
@@ -121,10 +154,12 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.BodyDataRecords
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto.Fail("身体数据记录不存在", 404);
 
@@ -136,12 +171,14 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entities = await _dbContext.BodyDataRecords
-            .Where(p => ids.Contains(p.Id) && p.TenantId == _currentUser.TenantId.Value)
+            .Where(p => ids.Contains(p.Id) && p.TenantId == tenantId && p.StoreId == storeId)
             .ToListAsync();
 
         _dbContext.BodyDataRecords.RemoveRange(entities);
@@ -155,11 +192,12 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<BodyDataRecordDto?>> GetLatestAsync(long customerId)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<BodyDataRecordDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<BodyDataRecordDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.BodyDataRecords
-            .Where(p => p.CustomerId == customerId && p.TenantId == tenantId)
+            .Where(p => p.CustomerId == customerId && p.TenantId == tenantId && p.StoreId == storeId)
             .OrderByDescending(p => p.RecordDate)
             .FirstOrDefaultAsync();
 
@@ -176,14 +214,15 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<BodyDataTrendDto>> GetTrendAsync(long customerId, DateTime startDate, DateTime endDate)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<BodyDataTrendDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<BodyDataTrendDto>.Fail("登录状态异常，请重新登录", 401);
 
         if (startDate > endDate)
             return ApiResponseDto<BodyDataTrendDto>.Fail("起始日期不能晚于结束日期", 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var records = await _dbContext.BodyDataRecords
-            .Where(r => r.CustomerId == customerId && r.TenantId == tenantId
+            .Where(r => r.CustomerId == customerId && r.TenantId == tenantId && r.StoreId == storeId
                 && r.RecordDate >= startDate && r.RecordDate <= endDate)
             .OrderBy(r => r.RecordDate)
             .ToListAsync();
@@ -221,20 +260,21 @@ public class BodyDataRecordAppService : IBodyDataRecordAppService
     public async Task<ApiResponseDto<BodyDataComparisonDto>> GetComparisonAsync(long customerId, DateTime startDate, DateTime endDate)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<BodyDataComparisonDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<BodyDataComparisonDto>.Fail("登录状态异常，请重新登录", 401);
 
         if (startDate > endDate)
             return ApiResponseDto<BodyDataComparisonDto>.Fail("起始日期不能晚于结束日期", 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
 
         var startRecord = await _dbContext.BodyDataRecords
-            .Where(r => r.CustomerId == customerId && r.TenantId == tenantId && r.RecordDate <= startDate)
+            .Where(r => r.CustomerId == customerId && r.TenantId == tenantId && r.StoreId == storeId && r.RecordDate <= startDate)
             .OrderByDescending(r => r.RecordDate)
             .FirstOrDefaultAsync();
 
         var endRecord = await _dbContext.BodyDataRecords
-            .Where(r => r.CustomerId == customerId && r.TenantId == tenantId && r.RecordDate <= endDate)
+            .Where(r => r.CustomerId == customerId && r.TenantId == tenantId && r.StoreId == storeId && r.RecordDate <= endDate)
             .OrderByDescending(r => r.RecordDate)
             .FirstOrDefaultAsync();
 

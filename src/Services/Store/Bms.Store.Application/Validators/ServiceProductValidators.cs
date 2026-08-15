@@ -26,7 +26,6 @@ public class ServiceProductUpdateDtoValidator : AbstractValidator<ServiceProduct
 {
     public ServiceProductUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new ServiceProductCreateDtoValidator());
     }
 }

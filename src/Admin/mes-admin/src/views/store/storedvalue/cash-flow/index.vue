@@ -39,7 +39,7 @@
         <div class="stat-value">{{ formatMoney(cashFlow.totalRefund) }}</div>
       </div>
       <div class="stat-card balance">
-        <div class="stat-label">沉淀资金（期末余额）</div>
+        <div class="stat-label">沉淀资金</div>
         <div class="stat-value">{{ formatMoney(cashFlow.totalBalance) }}</div>
         <div class="stat-extra">
           实收 {{ formatMoney(cashFlow.totalRealBalance) }} / 赠送 {{ formatMoney(cashFlow.totalGiftBalance) }}
@@ -93,6 +93,13 @@ const formatMoney = (val: number) => {
   return val.toFixed(2)
 }
 
+/** 格式化本地日期为 YYYY-MM-DD（不能用 toISOString，会按 UTC 偏移到前一天） */
+const formatDate = (date: Date) => {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 /** 加载数据 */
 const loadData = async () => {
   loading.value = true
@@ -122,10 +129,7 @@ onMounted(() => {
   // 默认查询本月
   const now = new Date()
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-  searchForm.dateRange = [
-    firstDay.toISOString().slice(0, 10),
-    now.toISOString().slice(0, 10)
-  ]
+  searchForm.dateRange = [formatDate(firstDay), formatDate(now)]
   loadData()
 })
 </script>

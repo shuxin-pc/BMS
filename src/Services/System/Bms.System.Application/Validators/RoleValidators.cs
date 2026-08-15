@@ -65,18 +65,3 @@ public class RoleUpdateDtoValidator : AbstractValidator<RoleUpdateDto>
             .InclusiveBetween(1, 4).WithMessage("数据范围类型只能是1-4");
     }
 }
-
-/// <summary>
-/// 角色权限分配 DTO 验证器
-/// </summary>
-public class RoleAssignPermissionsDtoValidator : AbstractValidator<RoleAssignPermissionsDto>
-{
-    public RoleAssignPermissionsDtoValidator()
-    {
-        RuleFor(x => x.RoleId)
-            .GreaterThan(0).WithMessage("角色ID无效");
-
-        RuleFor(x => x.PermissionIds)
-            .Must(x => x != null).WithMessage("权限列表不能为空");
-    }
-}

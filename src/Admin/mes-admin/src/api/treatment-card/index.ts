@@ -89,10 +89,9 @@ export async function createTreatmentCardConfig(data: TreatmentCardConfigCreate)
  * @returns 更新后的疗程卡配置
  */
 export async function updateTreatmentCardConfig(data: TreatmentCardConfigUpdate): Promise<TreatmentCardConfig> {
-  const { id, ...rest } = data
-  return request<TreatmentCardConfig>(`/treatmentCards/${id}`, {
+  return request<TreatmentCardConfig>(`/treatmentCards/${data.id}`, {
     method: 'PUT',
-    body: JSON.stringify(rest)
+    body: JSON.stringify(data)
   })
 }
 

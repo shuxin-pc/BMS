@@ -367,7 +367,7 @@ import {
   type MessageReadStats
 } from '@/api/message/types'
 import { useUserStore } from '@/stores/user'
-import { getUserList, getAllRoles, getOrganizations, getTenants } from '@/api/system'
+import { getUserList, getAllRoles, getOrganizationOptions, getTenants } from '@/api/system'
 
 const userStore = useUserStore()
 const isSuperAdmin = computed(() => userStore.isSuperAdmin)
@@ -629,7 +629,7 @@ async function loadTargetOptions() {
       // 平台管理员场景：每个租户的组织树作为 forest 的一棵树合并展示，
       // 根节点 name 拼接租户名前缀，子节点保持原样（树形结构已表达归属）
       const results = await Promise.all(
-        tenants.map(t => getOrganizations({ tenantId: t.id }).then(orgs => (orgs || []).map(o => ({
+        tenants.map(t => getOrganizationOptions({ tenantId: t.id }).then(orgs => (orgs || []).map(o => ({
           ...o,
           name: isSuperAdmin.value && t.name ? `${t.name} - ${o.name}` : o.name,
           tenantId: t.id,

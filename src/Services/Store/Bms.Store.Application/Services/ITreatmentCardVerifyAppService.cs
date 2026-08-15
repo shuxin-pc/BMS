@@ -14,4 +14,12 @@ public interface ITreatmentCardVerifyAppService
     Task<ApiResponseDto<TreatmentCardVerifyDto?>> GetByIdAsync(long id);
     Task<ApiResponseDto<TreatmentCardVerifyDto>> CreateAsync(TreatmentCardVerifyCreateDto dto);
     Task<ApiResponseDto<TreatmentCardVerifyDto>> UpdateAsync(TreatmentCardVerifyUpdateDto dto);
+
+    /// <summary>
+    /// 核销冲正（规则7）
+    /// 通过 ReverseStatus 状态机实现，不物理删除核销记录
+    /// 冲正时：恢复疗程卡剩余次数、冲减累计消费金额、取消关联订单
+    /// 冲正金额冲减原核销门店服务业绩
+    /// </summary>
+    Task<ApiResponseDto> ReverseAsync(TreatmentCardVerifyReverseDto dto);
 }

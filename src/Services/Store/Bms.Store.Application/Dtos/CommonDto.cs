@@ -106,3 +106,14 @@ public class BatchDeleteRequest
     /// </summary>
     public List<long> Ids { get; set; } = new();
 }
+
+/// <summary>
+/// 门店用户分配请求（全量替换语义）
+/// </summary>
+public class AssignUsersRequest
+{
+    /// <summary>
+    /// 最终选中的用户ID列表（后端按此列表做 diff：新增/删除）
+    /// </summary>
+    public List<long> UserIds { get; set; } = new();
+}

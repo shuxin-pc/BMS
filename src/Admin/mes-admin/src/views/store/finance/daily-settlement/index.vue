@@ -113,9 +113,6 @@
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <span class="toolbar-title">日结记录列表</span>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -1032,27 +1029,15 @@ onUnmounted(() => {
 /* 操作栏 */
 .table-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   padding: 0 4px;
 }
 
-.toolbar-left {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
 .toolbar-right {
   display: flex;
   gap: 8px;
-}
-
-.toolbar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 /* 分页 */

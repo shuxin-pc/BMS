@@ -1,47 +1,30 @@
 namespace Bms.Store.Domain.Entities;
 
 /// <summary>
-/// 商品档案
+/// 门店商品档案（门店隔离，承载分店差异化属性，每店一份）
+/// 对应设计文档 3.2 节
+/// Master 字段（编码/名称/类型/分类等本质属性）已移至 ProductMaster，通过 MasterId 关联
+/// 唯一约束：TenantId + StoreId + MasterId（同一门店同一主档只能有一份档案）
 /// </summary>
 public class Product : StoreEntity
 {
     /// <summary>
-    /// 商品名称
+    /// 关联商品主档ID（引用 ProductMaster.Id）
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public long MasterId { get; set; }
 
     /// <summary>
-    /// 商品编码
-    /// </summary>
-    public string Code { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 商品类型（1:实物商品 2:服务商品 3:耗材 4:样品 5:赠品）
-    /// </summary>
-    public int Type { get; set; } = 1;
-
-    /// <summary>
-    /// 商品分类ID
-    /// </summary>
-    public long CategoryId { get; set; }
-
-    /// <summary>
-    /// 单位（如：个、瓶、盒）
-    /// </summary>
-    public string? Unit { get; set; }
-
-    /// <summary>
-    /// 零售价
+    /// 零售价（分店独立定价）
     /// </summary>
     public decimal Price { get; set; }
 
     /// <summary>
-    /// 成本价
+    /// 成本价（分店独立）
     /// </summary>
     public decimal? CostPrice { get; set; }
 
     /// <summary>
-    /// 上次采购价（采购入库时自动更新）
+    /// 上次采购价（采购入库时自动更新，分店独立采购）
     /// </summary>
     public decimal? LastPurchasePrice { get; set; }
 
@@ -61,44 +44,17 @@ public class Product : StoreEntity
     public decimal? OverstockThreshold { get; set; }
 
     /// <summary>
-    /// 规格
-    /// </summary>
-    public string? Specification { get; set; }
-
-    /// <summary>
-    /// 品牌
-    /// </summary>
-    public string? Brand { get; set; }
-
-    /// <summary>
-    /// 供应商ID
-    /// </summary>
-    public long? SupplierId { get; set; }
-
-    /// <summary>
-    /// 商品状态（1:上架 2:下架）
+    /// 商品状态（1:上架 2:下架，分店选择性上架）
     /// </summary>
     public int Status { get; set; } = 1;
 
     /// <summary>
-    /// 是否可销售（true=可通过 POS 销售下单；false=样品/赠品等不可销售品项）
-    /// 类型为 4(样品)/5(赠品) 时强制为 false，其他类型默认为 true
-    /// 依据：B6.1 "设置「不可销售」标识"
-    /// </summary>
-    public bool IsSalable { get; set; } = true;
-
-    /// <summary>
-    /// 商品图片URL
-    /// </summary>
-    public string? ImageUrl { get; set; }
-
-    /// <summary>
-    /// 备注
+    /// 分店级备注
     /// </summary>
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 导航属性：分类
+    /// 导航属性：商品主档
     /// </summary>
-    public ProductCategory? Category { get; set; }
+    public ProductMaster? Master { get; set; }
 }

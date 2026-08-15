@@ -10,7 +10,7 @@ namespace Bms.Store.Api.Controllers;
 /// 商品分类管理控制器
 /// </summary>
 [ApiController]
-[Route("api/product/[controller]")]
+[Route("api/store/product/[controller]")]
 [Authorize]
 public class CategoriesController : ControllerBase
 {

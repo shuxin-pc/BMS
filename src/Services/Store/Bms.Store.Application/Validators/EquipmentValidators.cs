@@ -11,6 +11,8 @@ public class EquipmentCreateDtoValidator : AbstractValidator<EquipmentCreateDto>
 {
     public EquipmentCreateDtoValidator()
     {
+        RuleFor(x => x.EquipmentTypeId)
+            .GreaterThan(0).WithMessage("请选择设备类型");
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("设备名称不能为空")
             .MaximumLength(100).WithMessage("设备名称最多100个字符");
@@ -37,7 +39,6 @@ public class EquipmentUpdateDtoValidator : AbstractValidator<EquipmentUpdateDto>
 {
     public EquipmentUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new EquipmentCreateDtoValidator());
     }
 }

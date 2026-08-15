@@ -91,6 +91,13 @@
             {{ formatDate(row.checkTime) }}
           </template>
         </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.status)" size="small">
+              {{ getStatusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
       </el-table>
 
@@ -112,7 +119,7 @@
     <el-dialog
       v-model="dialogVisible"
       title="新增盘点"
-      width="500px"
+      width="760px"
       :close-on-click-modal="false"
     >
       <el-form
@@ -159,10 +166,137 @@
           </span>
         </el-form-item>
         <el-form-item label="差异金额">
-          <span :class="getDiffClass(formData.diffQuantity)">
-            {{ formData.diffAmount != null ? formatCurrency(formData.diffAmount) : '--' }}
+          <span v-if="formData.diffAmount != null" :class="getDiffClass(formData.diffQuantity)">
+            {{ formatCurrency(formData.diffAmount) }}
           </span>
+          <span v-else class="diff-pending">提交后由后端按批次实际单价计算</span>
         </el-form-item>
+
+        <!-- 盘亏：批次扣减选择区（差异为负时显示，留空走 FIFO 兜底） -->
+        <template v-if="formData.diffQuantity !== null && formData.diffQuantity < 0">
+          <el-divider content-position="left">
+            <span class="batch-divider-title">盘亏批次扣减</span>
+            <span class="batch-divider-hint">留空按先进先出自动扣减</span>
+          </el-divider>
+          <div v-if="formData.batches.length === 0" class="batch-empty">
+            当前商品无在库批次，提交时后端将返回"无可用库存批次"
+          </div>
+          <div v-else>
+            <el-table
+              :data="formData.batches"
+              class="batch-table"
+              size="small"
+              border
+              style="width: 100%"
+            >
+              <el-table-column label="选择" width="56" align="center">
+                <template #default="{ row }">
+                  <el-checkbox v-model="row.selected" />
+                </template>
+              </el-table-column>
+              <el-table-column prop="batchNo" label="批次号" min-width="140" show-overflow-tooltip />
+              <el-table-column label="在库" width="80" align="right">
+                <template #default="{ row }">
+                  {{ formatNumber(row.quantity) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="单价" width="100" align="right">
+                <template #default="{ row }">
+                  ¥{{ formatNumber(row.unitPrice) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="到期日" width="150">
+                <template #default="{ row }">
+                  <span v-if="!row.expirationDate" class="batch-no-expiry">无</span>
+                  <div v-else class="batch-expiry">
+                    <span>{{ row.expirationDate.split('T')[0] }}</span>
+                    <el-tag
+                      v-if="getExpirationStatus(row.expirationDate).type === 'expired'"
+                      type="danger"
+                      size="small"
+                      effect="dark"
+                    >过期</el-tag>
+                    <el-tag
+                      v-else-if="getExpirationStatus(row.expirationDate).type === 'warning'"
+                      type="warning"
+                      size="small"
+                    >{{ getExpirationStatus(row.expirationDate).label }}</el-tag>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="扣减数量" width="150" align="center">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-if="row.selected"
+                    v-model="row.deductQty"
+                    :min="0"
+                    :max="row.quantity"
+                    :precision="2"
+                    :step="1"
+                    size="small"
+                    style="width: 120px"
+                  />
+                  <span v-else class="batch-deduct-placeholder">—</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="batch-summary">
+              <span class="batch-summary-label">
+                已选扣减：<strong>{{ formatNumber(selectedDeductTotal) }}</strong>
+                / 需扣减：<strong class="batch-summary-required">{{ formatNumber(-formData.diffQuantity) }}</strong>
+              </span>
+              <span
+                v-if="selectedDeductTotal > 0 && selectedDeductTotal !== -formData.diffQuantity"
+                class="batch-warn"
+              >
+                ⚠ 合计需与需扣减量匹配，否则后端将拒绝
+              </span>
+              <span v-else-if="selectedDeductTotal === 0" class="batch-fifo">
+                未选批次，将按先进先出自动扣减
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 盘盈：批次录入区（差异为正时显示，累加到已有批次） -->
+        <template v-if="formData.diffQuantity !== null && formData.diffQuantity > 0">
+          <el-divider content-position="left">
+            <span class="gain-divider-title">盘盈批次录入</span>
+            <span class="batch-divider-hint">输入已有批次号，库存将累加到原批次</span>
+          </el-divider>
+          <el-form-item label="批次号">
+            <el-input
+              v-model="formData.gainBatchNo"
+              placeholder="请输入已有批次号"
+              style="width: 100%"
+              :disabled="gainBatchCheckState === 'checking'"
+              @blur="handleGainBatchBlur"
+            >
+              <template #append>
+                <el-button :loading="gainBatchCheckState === 'checking'" @click="handleGainBatchBlur">校验</el-button>
+              </template>
+            </el-input>
+            <div v-if="gainBatchCheckState === 'invalid'" class="gain-batch-feedback gain-batch-invalid">
+              <el-icon><WarningFilled /></el-icon> 批次号不存在于当前商品/门店
+            </div>
+            <div v-else-if="gainBatchCheckState === 'valid'" class="gain-batch-feedback gain-batch-valid">
+              <el-icon><CircleCheckFilled /></el-icon> 已匹配批次（在库 {{ formatNumber(gainBatchMatchedQuantity ?? 0) }}）
+            </div>
+          </el-form-item>
+          <el-form-item label="单价">
+            <el-input-number v-model="formData.gainUnitPrice" :min="0" :precision="2" :step="1" style="width: 100%" disabled />
+          </el-form-item>
+          <el-form-item label="生产日期">
+            <el-date-picker v-model="formData.gainProductionDate" type="date" value-format="YYYY-MM-DD" placeholder="可选" style="width: 100%" disabled />
+          </el-form-item>
+          <el-form-item label="保质天数">
+            <el-input-number v-model="formData.gainShelfLifeDays" :min="1" :step="1" placeholder="可选" style="width: 100%" disabled />
+          </el-form-item>
+          <el-form-item label="过期日期">
+            <el-date-picker v-model="formData.gainExpirationDate" type="date" value-format="YYYY-MM-DD" placeholder="可选" style="width: 100%" disabled />
+          </el-form-item>
+        </template>
+
         <el-form-item label="备注" prop="remark">
           <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入盘点说明/差异原因" />
         </el-form-item>
@@ -178,16 +312,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Search, Refresh, Plus, WarningFilled, CircleCheckFilled } from '@element-plus/icons-vue'
 import {
   getInventoryCheckList,
-  createInventoryCheck,
-  getProductOptionsForCheck
+  createAndSubmitInventoryCheck,
+  checkProductCheckedToday,
+  getProductOptionsForCheck,
+  getBatchLookup
 } from '@/api/inventory-check'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { InventoryCheck } from '@/api/inventory-check/types'
+import type { InventoryCheck, InventoryCheckProductOption, InventoryCheckBatchOption, BatchDeductItem } from '@/api/inventory-check/types'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -209,14 +345,7 @@ const pagination = reactive({
 })
 
 // 下拉选项
-const productOptions = ref<{
-  id: number
-  name: string
-  code: string
-  unit: string
-  stock: number
-  costPrice: number
-}[]>([])
+const productOptions = ref<InventoryCheckProductOption[]>([])
 
 // 加载数据
 const loadData = async () => {
@@ -265,6 +394,12 @@ const dialogVisible = ref(false)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
+// 批次选项前端展示态（在 InventoryCheckBatchOption 基础上加 selected/deductQty）
+interface BatchSelection extends InventoryCheckBatchOption {
+  selected: boolean
+  deductQty: number
+}
+
 const formData = reactive({
   productId: undefined as number | undefined,
   beforeQuantity: null as number | null,
@@ -272,7 +407,15 @@ const formData = reactive({
   actualQuantity: 0,
   diffQuantity: null as number | null,
   diffAmount: null as number | null,
-  remark: ''
+  remark: '',
+  // 盘亏批次选择
+  batches: [] as BatchSelection[],
+  // 盘盈批次录入
+  gainBatchNo: '',
+  gainUnitPrice: null as number | null,
+  gainProductionDate: '',
+  gainShelfLifeDays: null as number | null,
+  gainExpirationDate: ''
 })
 
 const formRules: FormRules = {
@@ -285,25 +428,126 @@ const formRules: FormRules = {
   ]
 }
 
-// 商品选择变化时带出账面库存和成本价，并自动计算差异
-const handleProductChange = (productId: number) => {
-  const product = productOptions.value.find(p => p.id === productId)
-  if (product) {
-    formData.beforeQuantity = product.stock
-    formData.unitCost = product.costPrice
-    // 重置实际数量并重新计算差异
-    formData.actualQuantity = product.stock
-    calculateDiff()
+// 已选批次扣减合计
+const selectedDeductTotal = computed(() => {
+  return formData.batches
+    .filter(b => b.selected)
+    .reduce((sum, b) => sum + (b.deductQty || 0), 0)
+})
+
+// 临期判定阈值（天）：到期日在阈值内视为临期，提示操作员关注
+const NEAR_EXPIRY_DAYS = 30
+
+// 批次到期日状态：过期 / 临期 / 正常，用于盘亏批次表格标签展示
+const getExpirationStatus = (dateStr?: string): { type: 'expired' | 'warning' | 'normal', label?: string } => {
+  if (!dateStr) return { type: 'normal' }
+  const exp = new Date(dateStr)
+  if (isNaN(exp.getTime())) return { type: 'normal' }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  exp.setHours(0, 0, 0, 0)
+  const diffDays = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return { type: 'expired', label: '过期' }
+  if (diffDays <= NEAR_EXPIRY_DAYS) return { type: 'warning', label: `临期${diffDays}天` }
+  return { type: 'normal' }
+}
+
+// ========== 盘盈批次号校验（累加到已有批次模式） ==========
+// 校验状态：idle 未校验 / checking 校验中 / valid 通过 / invalid 不存在
+const gainBatchCheckState = ref<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
+// 校验通过时记录原批次在库量，用于提示
+const gainBatchMatchedQuantity = ref<number | null>(null)
+
+// 盘盈批次号失焦校验：调用后端查询批次号在当前商品/门店的存在性
+const handleGainBatchBlur = async () => {
+  const batchNo = formData.gainBatchNo?.trim()
+  if (!batchNo) {
+    gainBatchCheckState.value = 'idle'
+    gainBatchMatchedQuantity.value = null
+    return
+  }
+  if (!formData.productId) {
+    ElMessage.warning('请先选择商品')
+    return
+  }
+  gainBatchCheckState.value = 'checking'
+  try {
+    const result = await getBatchLookup(formData.productId, batchNo)
+    if (result) {
+      gainBatchCheckState.value = 'valid'
+      gainBatchMatchedQuantity.value = result.quantity
+      // 带出原批次属性（累加模式不改属性，字段只读展示）
+      formData.gainUnitPrice = result.unitPrice
+      formData.gainProductionDate = result.productionDate ? result.productionDate.split('T')[0] : ''
+      formData.gainShelfLifeDays = result.shelfLifeDays ?? null
+      formData.gainExpirationDate = result.expirationDate ? result.expirationDate.split('T')[0] : ''
+    } else {
+      gainBatchCheckState.value = 'invalid'
+      gainBatchMatchedQuantity.value = null
+      formData.gainUnitPrice = null
+      formData.gainProductionDate = ''
+      formData.gainShelfLifeDays = null
+      formData.gainExpirationDate = ''
+    }
+  } catch (error: any) {
+    gainBatchCheckState.value = 'invalid'
+    gainBatchMatchedQuantity.value = null
+    ElMessage.error(error.message || '批次号校验失败')
   }
 }
 
-// 自动计算差异
+// 商品选择变化时带出账面库存、成本价、在库批次
+const handleProductChange = async (productId: number) => {
+  const product = productOptions.value.find(p => p.id === productId)
+  if (product) {
+    formData.beforeQuantity = product.stock
+    formData.unitCost = product.costPrice ?? null
+    formData.actualQuantity = product.stock
+    // 同步在库批次到前端选择态
+    formData.batches = (product.batches || []).map(b => ({
+      ...b,
+      selected: false,
+      deductQty: 0
+    }))
+    // 切换商品时重置盘盈批次录入（批次号、校验状态、带出字段）
+    formData.gainBatchNo = ''
+    formData.gainUnitPrice = null
+    formData.gainProductionDate = ''
+    formData.gainShelfLifeDays = null
+    formData.gainExpirationDate = ''
+    gainBatchCheckState.value = 'idle'
+    gainBatchMatchedQuantity.value = null
+    calculateDiff()
+
+    // 软约束：查询当日该商品是否已盘点，已盘则提示是否继续作为纠错盘点
+    try {
+      const hasChecked = await checkProductCheckedToday(productId)
+      if (hasChecked) {
+        await ElMessageBox.confirm(
+          '当日已存在该商品的盘点记录，本次是否作为纠错盘点继续？',
+          '提示',
+          { confirmButtonText: '继续盘点', cancelButtonText: '取消', type: 'warning' }
+        ).catch(() => {
+          // 用户取消，重置商品选择
+          formData.productId = undefined
+          formData.beforeQuantity = null
+          formData.actualQuantity = 0
+          formData.diffQuantity = null
+          formData.batches = []
+        })
+      }
+    } catch {
+      // 查询失败不阻塞流程
+    }
+  }
+}
+
+// 自动计算差异（差异金额改为后端返回，前端不再自算）
 const calculateDiff = () => {
   if (formData.beforeQuantity != null && formData.actualQuantity != null) {
     formData.diffQuantity = formData.actualQuantity - formData.beforeQuantity
-    if (formData.unitCost != null) {
-      formData.diffAmount = formData.diffQuantity * formData.unitCost
-    }
+    // 差异金额由后端按批次实际单价计算并持久化，前端不预填
+    formData.diffAmount = null
   }
 }
 
@@ -316,6 +560,14 @@ const resetFormData = () => {
   formData.diffQuantity = null
   formData.diffAmount = null
   formData.remark = ''
+  formData.batches = []
+  formData.gainBatchNo = ''
+  formData.gainUnitPrice = null
+  formData.gainProductionDate = ''
+  formData.gainShelfLifeDays = null
+  formData.gainExpirationDate = ''
+  gainBatchCheckState.value = 'idle'
+  gainBatchMatchedQuantity.value = null
 }
 
 // 新增
@@ -324,26 +576,79 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-// 提交表单
+// 盘点单状态标签类型（颜色）
+const getStatusTagType = (status: number): 'info' | 'success' | 'warning' => {
+  switch (status) {
+    case 0: return 'info'      // 草稿
+    case 1: return 'success'   // 已完成
+    case 2: return 'warning'   // 已取消
+    default: return 'info'
+  }
+}
+
+// 盘点单状态文本
+const getStatusLabel = (status: number): string => {
+  switch (status) {
+    case 0: return '草稿'
+    case 1: return '已完成'
+    case 2: return '已取消'
+    default: return '未知'
+  }
+}
+
+// 提交表单：原子操作（创建并提交），事务内完成不产生草稿残留
 const handleSubmit = async () => {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
-    if (valid) {
-      submitLoading.value = true
-      try {
-        await createInventoryCheck({
-          productId: formData.productId!,
-          actualQuantity: formData.actualQuantity,
-          remark: formData.remark || undefined
-        })
-        ElMessage.success('盘点成功')
-        dialogVisible.value = false
-        loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '盘点失败')
-      } finally {
-        submitLoading.value = false
+    if (!valid) return
+
+    // 盘亏指定批次模式：校验合计与差异数量匹配
+    const diff = formData.diffQuantity ?? 0
+    const selectedBatches = formData.batches.filter(b => b.selected && b.deductQty > 0)
+    if (diff < 0 && selectedBatches.length > 0) {
+      const total = selectedBatches.reduce((s, b) => s + b.deductQty, 0)
+      if (total !== -diff) {
+        ElMessage.error(`指定批次扣减合计 ${total} 与需扣减量 ${-diff} 不匹配`)
+        return
       }
+    }
+
+    // 盘盈校验：批次号必须通过校验（累加到已有批次，禁止凭空造批次号）
+    if (diff > 0 && gainBatchCheckState.value !== 'valid') {
+      ElMessage.error('请先校验盘盈批次号，确认批次号已存在')
+      return
+    }
+
+    submitLoading.value = true
+    try {
+      // 原子操作：创建并提交盘点单（事务内完成，不产生草稿残留）
+      const payload: import('@/api/inventory-check/types').CreateAndSubmitRequest = {
+        productId: formData.productId!,
+        beforeQuantity: formData.beforeQuantity ?? 0,
+        actualQuantity: formData.actualQuantity,
+        remark: formData.remark || undefined
+      }
+      if (diff < 0 && selectedBatches.length > 0) {
+        // 盘亏指定批次模式
+        payload.deductBatches = selectedBatches.map(b => ({
+          batchId: b.id,
+          quantity: b.deductQty
+        } as BatchDeductItem))
+      }
+      // 盘亏未选批次 -> 不传 deductBatches，后端走 FIFO 兜底
+      if (diff > 0) {
+        // 盘盈：只传批次号，后端查找已有批次并累加库存（单价/日期等由原批次决定，前端不传）
+        payload.gainBatchNo = formData.gainBatchNo || undefined
+      }
+
+      await createAndSubmitInventoryCheck(payload)
+      ElMessage.success('盘点成功')
+      dialogVisible.value = false
+      loadData()
+    } catch (error: any) {
+      ElMessage.error(error.message || '盘点失败')
+    } finally {
+      submitLoading.value = false
     }
   })
 }
@@ -389,6 +694,36 @@ const formatDate = (dateStr: string) => {
 import { watch } from 'vue'
 watch(() => formData.actualQuantity, () => {
   calculateDiff()
+})
+
+// 盘盈：生产日期+保质期天数变化时自动计算过期日期
+watch(
+  () => [formData.gainProductionDate, formData.gainShelfLifeDays],
+  () => {
+    if (formData.gainProductionDate && formData.gainShelfLifeDays && formData.gainShelfLifeDays > 0) {
+      const date = new Date(formData.gainProductionDate)
+      date.setDate(date.getDate() + formData.gainShelfLifeDays)
+      formData.gainExpirationDate = date.toISOString().split('T')[0]
+    }
+  }
+)
+
+// 盘盈：过期日期变更时（保质期已输入）反推计算生产日期
+watch(
+  () => formData.gainExpirationDate,
+  () => {
+    if (formData.gainExpirationDate && formData.gainShelfLifeDays && formData.gainShelfLifeDays > 0) {
+      const date = new Date(formData.gainExpirationDate)
+      date.setDate(date.getDate() - formData.gainShelfLifeDays)
+      formData.gainProductionDate = date.toISOString().split('T')[0]
+    }
+  }
+)
+
+// 盘盈批次号变化时重置校验状态（用户修改批次号后需重新校验）
+watch(() => formData.gainBatchNo, () => {
+  gainBatchCheckState.value = 'idle'
+  gainBatchMatchedQuantity.value = null
 })
 
 onMounted(async () => {
@@ -508,5 +843,118 @@ onMounted(async () => {
   margin-left: 8px;
   color: var(--text-tertiary);
   font-size: 14px;
+}
+
+/* 差异金额待计算提示 */
+.diff-pending {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* 盘亏批次扣减区分隔标题 */
+.batch-divider-title {
+  font-weight: 600;
+  color: var(--el-color-danger);
+}
+
+.batch-divider-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: normal;
+}
+
+/* 盘盈批次录入区分隔标题（绿色，区别于盘亏红色） */
+.gain-divider-title {
+  font-weight: 600;
+  color: var(--el-color-success);
+}
+
+/* 盘盈批次号校验反馈 */
+.gain-batch-feedback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.gain-batch-invalid {
+  color: var(--el-color-danger);
+}
+
+.gain-batch-valid {
+  color: var(--el-color-success);
+}
+
+/* 批次表格 */
+.batch-table {
+  margin-top: 4px;
+}
+
+.batch-table :deep(.el-table__header-wrapper th) {
+  background: var(--bg-hover) !important;
+  color: var(--text-secondary) !important;
+  font-weight: 600;
+}
+
+.batch-table :deep(.el-table__row:hover > td) {
+  background-color: var(--bg-hover) !important;
+}
+
+/* 到期日单元格 */
+.batch-expiry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.batch-no-expiry {
+  color: var(--text-tertiary);
+}
+
+/* 未选中时的扣减数量占位 */
+.batch-deduct-placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 批次合计区 */
+.batch-summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batch-summary-label strong {
+  color: var(--text-primary);
+}
+
+.batch-summary-required {
+  color: var(--el-color-danger);
+}
+
+.batch-warn {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+.batch-fifo {
+  color: var(--el-color-primary);
+}
+
+.batch-empty {
+  padding: 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  background: var(--bg-hover);
+  border-radius: 4px;
 }
 </style>

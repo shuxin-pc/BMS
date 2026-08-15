@@ -9,7 +9,10 @@ import type {
   Supplier,
   SupplierQuery,
   SupplierCreate,
-  SupplierUpdate
+  SupplierUpdate,
+  ProductSupplier,
+  BindProductsRequest,
+  SetDefaultSupplierRequest
 } from './types'
 
 // 导出类型供外部使用
@@ -18,6 +21,9 @@ export type {
   SupplierQuery,
   SupplierCreate,
   SupplierUpdate,
+  ProductSupplier,
+  BindProductsRequest,
+  SetDefaultSupplierRequest,
   PagedResponse
 }
 
@@ -34,6 +40,7 @@ export async function getSuppliers(query?: SupplierQuery): Promise<PagedResponse
     name: query?.name,
     code: query?.code,
     status: query?.status,
+    scope: query?.scope,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })
@@ -97,4 +104,67 @@ export async function deleteSuppliers(ids: number[]): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ ids })
   })
+}
+
+// ==================== 供应商-品项关联 ====================
+
+/**
+ * 批量绑定品项到供应商
+ * 对接后端：POST /api/store/suppliers/bind-products
+ * @param data 绑定请求（供应商ID + 品项ID列表）
+ * @returns 本次绑定的关联记录列表
+ */
+export async function bindProducts(data: BindProductsRequest): Promise<ProductSupplier[]> {
+  return request<ProductSupplier[]>('/suppliers/bind-products', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 解除品项与供应商的关联
+ * 对接后端：DELETE /api/store/suppliers/products/{productId}/{supplierId}
+ * @param productId 品项ID
+ * @param supplierId 供应商ID
+ */
+export async function unbindProduct(productId: number, supplierId: number): Promise<void> {
+  await request<void>(`/suppliers/products/${productId}/${supplierId}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 设置品项的默认供应商
+ * 对接后端：POST /api/store/suppliers/default-supplier
+ * @param data 设置请求（品项ID + 供应商ID + 可选参考价/供货周期）
+ * @returns 更新后的关联记录
+ */
+export async function setDefaultSupplier(data: SetDefaultSupplierRequest): Promise<ProductSupplier> {
+  return request<ProductSupplier>('/suppliers/default-supplier', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 更新品项-供应商关联的参考价与供货周期（不改变默认供应商状态）
+ * 对接后端：PUT /api/store/suppliers/product-relation
+ * @param data 更新请求（品项ID + 供应商ID + 参考价/供货周期）
+ * @returns 更新后的关联记录
+ */
+export async function updateProductRelation(data: SetDefaultSupplierRequest): Promise<ProductSupplier> {
+  return request<ProductSupplier>('/suppliers/product-relation', {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 查询供应商关联的品项列表
+ * 对接后端：GET /api/store/suppliers/{supplierId}/products
+ * @param supplierId 供应商ID
+ * @returns 关联品项列表（默认供应商排在首位）
+ */
+export async function getProductsBySupplier(supplierId: number): Promise<ProductSupplier[]> {
+  return request<ProductSupplier[]>(`/suppliers/${supplierId}/products`)
 }

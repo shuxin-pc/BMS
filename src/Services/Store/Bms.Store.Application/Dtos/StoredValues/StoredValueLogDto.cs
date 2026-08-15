@@ -13,6 +13,16 @@ public class StoredValueLogDto
     public long CustomerId { get; set; }
 
     /// <summary>
+    /// 客户姓名（关联 Customer 查询返回）
+    /// </summary>
+    public string? CustomerName { get; set; }
+
+    /// <summary>
+    /// 客户手机号（关联 Customer 查询返回）
+    /// </summary>
+    public string? Phone { get; set; }
+
+    /// <summary>
     /// 流水类型（1:充值 2:消费 3:退款 4:调整）
     /// </summary>
     public int Type { get; set; }
@@ -91,6 +101,11 @@ public class StoredValueLogDto
     /// 操作人ID（System 服务用户ID）
     /// </summary>
     public long? OperatorId { get; set; }
+
+    /// <summary>
+    /// 操作人姓名（写入时的姓名快照）
+    /// </summary>
+    public string? OperatorName { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

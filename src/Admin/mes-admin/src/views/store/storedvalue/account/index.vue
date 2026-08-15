@@ -20,12 +20,6 @@
               style="width: 160px"
             />
           </el-form-item>
-          <el-form-item label="账户状态">
-            <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 120px">
-              <el-option label="正常" :value="1" />
-              <el-option label="冻结" :value="2" />
-            </el-select>
-          </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleSearch">
               <el-icon><Search /></el-icon>
@@ -42,9 +36,6 @@
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <span class="toolbar-title">储值账户列表</span>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -59,8 +50,8 @@
         :data="tableData"
         style="width: 100%"
       >
-        <el-table-column prop="customerName" label="客户名称" width="120" />
-        <el-table-column prop="phone" label="手机号" width="140" />
+        <el-table-column prop="customerName" label="客户名称" min-width="120" />
+        <el-table-column prop="phone" label="手机号" min-width="140" />
         <el-table-column label="当前余额" width="120" align="right">
           <template #default="{ row }">
             <span class="balance-text">¥{{ formatPrice(row.balance) }}</span>
@@ -91,34 +82,16 @@
             <span class="bonus-text">¥{{ formatPrice(row.totalGift) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="账户状态" width="100" align="center">
+        <el-table-column label="开户时间" min-width="170">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small" effect="dark">
-              {{ row.status === 1 ? '正常' : '冻结' }}
-            </el-tag>
+            <span>{{ formatDateTime(row.createdAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="openTime" label="开卡时间" width="170" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button
-              v-if="row.status === 1"
-              link
-              type="primary"
-              size="small"
-              @click="handleRecharge(row)"
-            >
+            <el-button link type="primary" size="small" @click="handleRecharge(row)">
               <el-icon><Wallet /></el-icon>
               充值
-            </el-button>
-            <el-button
-              link
-              :type="row.status === 1 ? 'danger' : 'success'"
-              size="small"
-              @click="handleToggleStatus(row)"
-            >
-              <el-icon><Lock v-if="row.status === 1" /><Unlock v-else /></el-icon>
-              {{ row.status === 1 ? '冻结' : '解冻' }}
             </el-button>
           </template>
         </el-table-column>
@@ -138,84 +111,32 @@
       </div>
     </div>
 
-    <!-- 充值弹窗 -->
-    <el-dialog
+    <!-- 充值弹窗（与客户详情共用同一组件） -->
+    <RechargeDialog
       v-model="rechargeVisible"
-      title="储值充值"
-      width="500px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="rechargeFormRef"
-        :model="rechargeForm"
-        :rules="rechargeRules"
-        label-width="100px"
-      >
-        <el-form-item label="客户">
-          <span class="customer-name">{{ rechargeForm.customerName }}</span>
-        </el-form-item>
-        <el-form-item label="当前余额">
-          <span class="balance-text">¥{{ formatPrice(rechargeForm.currentBalance) }}</span>
-        </el-form-item>
-        <el-form-item label="充值金额" prop="amount">
-          <el-input-number
-            v-model="rechargeForm.amount"
-            :min="0.01"
-            :precision="2"
-            :step="100"
-            controls-position="right"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="赠送金额" prop="bonusAmount">
-          <el-input-number
-            v-model="rechargeForm.bonusAmount"
-            :min="0"
-            :precision="2"
-            :step="10"
-            controls-position="right"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="支付方式" prop="paymentMethod">
-          <el-radio-group v-model="rechargeForm.paymentMethod">
-            <el-radio :value="1">现金</el-radio>
-            <el-radio :value="2">微信</el-radio>
-            <el-radio :value="3">支付宝</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="充值后余额">
-          <span class="price-text">¥{{ formatPrice(rechargeForm.currentBalance + rechargeForm.amount + rechargeForm.bonusAmount) }}</span>
-        </el-form-item>
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="rechargeForm.remark" type="textarea" :rows="2" placeholder="请输入备注" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="rechargeVisible = false">取消</el-button>
-        <el-button type="primary" :loading="rechargeLoading" @click="handleRechargeSubmit">
-          确认充值
-        </el-button>
-      </template>
-    </el-dialog>
+      :customer-id="rechargeTarget.customerId"
+      :customer-name="rechargeTarget.customerName"
+      :current-balance="rechargeTarget.balance"
+      @success="loadData"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Wallet, Lock, Unlock } from '@element-plus/icons-vue'
-import { getMemberAccounts, rechargeAccount } from '@/api/member'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh, Wallet } from '@element-plus/icons-vue'
+import { getMemberAccounts } from '@/api/member'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { MemberAccount } from '@/api/member/types'
+import RechargeDialog from '../components/RechargeDialog.vue'
 
 const systemConfigStore = useSystemConfigStore()
 
 // 搜索表单
 const searchForm = reactive({
   customerName: '',
-  phone: '',
-  status: undefined as number | undefined
+  phone: ''
 })
 
 // 表格数据
@@ -236,7 +157,6 @@ const loadData = async () => {
     const res = await getMemberAccounts({
       customerName: searchForm.customerName || undefined,
       phone: searchForm.phone || undefined,
-      status: searchForm.status,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
@@ -259,78 +179,22 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.customerName = ''
   searchForm.phone = ''
-  searchForm.status = undefined
   handleSearch()
 }
 
 // ==================== 充值 ====================
 const rechargeVisible = ref(false)
-const rechargeLoading = ref(false)
-const rechargeFormRef = ref<FormInstance>()
-
-const rechargeForm = reactive({
-  accountId: 0,
+const rechargeTarget = reactive({
+  customerId: 0,
   customerName: '',
-  currentBalance: 0,
-  amount: 100,
-  bonusAmount: 0,
-  paymentMethod: 2,
-  remark: ''
+  balance: 0
 })
 
-const rechargeRules: FormRules = {
-  amount: [
-    { required: true, message: '充值金额不能为空', trigger: 'blur' },
-    { type: 'number', min: 0.01, message: '充值金额必须大于0', trigger: 'blur' }
-  ],
-  bonusAmount: [
-    { type: 'number', min: 0, message: '赠送金额不能小于0', trigger: 'blur' }
-  ],
-  paymentMethod: [
-    { required: true, message: '请选择支付方式', trigger: 'change' }
-  ]
-}
-
 const handleRecharge = (row: MemberAccount) => {
-  rechargeForm.accountId = row.id
-  rechargeForm.customerName = row.customerName || ''
-  rechargeForm.currentBalance = row.balance
-  rechargeForm.amount = 100
-  rechargeForm.bonusAmount = 0
-  rechargeForm.paymentMethod = 2
-  rechargeForm.remark = ''
+  rechargeTarget.customerId = row.customerId
+  rechargeTarget.customerName = row.customerName || ''
+  rechargeTarget.balance = row.balance
   rechargeVisible.value = true
-}
-
-const handleRechargeSubmit = async () => {
-  if (!rechargeFormRef.value) return
-  await rechargeFormRef.value.validate(async (valid) => {
-    if (valid) {
-      rechargeLoading.value = true
-      try {
-        await rechargeAccount({
-          accountId: rechargeForm.accountId,
-          amount: rechargeForm.amount,
-          bonusAmount: rechargeForm.bonusAmount,
-          paymentMethod: rechargeForm.paymentMethod,
-          remark: rechargeForm.remark || undefined
-        })
-        ElMessage.success('充值成功')
-        rechargeVisible.value = false
-        loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '充值失败')
-      } finally {
-        rechargeLoading.value = false
-      }
-    }
-  })
-}
-
-// ==================== 冻结/解冻 ====================
-const handleToggleStatus = (row: MemberAccount) => {
-  const action = row.status === 1 ? '冻结' : '解冻'
-  ElMessage.info(`${action}功能开发中，敬请期待`)
 }
 
 // ==================== 工具方法 ====================
@@ -339,6 +203,19 @@ const handleToggleStatus = (row: MemberAccount) => {
 const formatPrice = (price: number | undefined) => {
   if (price === null || price === undefined) return '0.00'
   return price.toFixed(2)
+}
+
+/** 格式化日期时间 */
+const formatDateTime = (dateStr?: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 onMounted(async () => {
@@ -406,22 +283,10 @@ onMounted(async () => {
 /* 操作栏 */
 .table-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   padding: 0 4px;
-}
-
-.toolbar-left {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .toolbar-right {
@@ -435,22 +300,12 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.price-text {
-  color: var(--primary);
-  font-weight: 600;
-}
-
 .consume-text {
   color: var(--el-color-danger);
 }
 
 .bonus-text {
   color: var(--el-color-success);
-}
-
-.customer-name {
-  font-weight: 500;
-  color: var(--text-primary);
 }
 
 /* 分页 */

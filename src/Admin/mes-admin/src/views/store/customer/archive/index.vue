@@ -39,15 +39,12 @@
           >
             <el-empty v-if="!selectedCustomer" description="请先在上方选择客户" />
             <!-- 懒加载：仅渲染当前激活的面板，避免一次并发 4 个请求 -->
-            <template v-else-if="activeTab === tab.name">
-              <component
-                v-if="tab.component"
-                :is="tab.component"
-                :customer-id="selectedCustomer.id"
-                :customer-name="selectedCustomer.name"
-              />
-              <div v-else class="tab-placeholder">{{ tab.label }}面板待接入</div>
-            </template>
+            <component
+              v-else-if="activeTab === tab.name"
+              :is="tab.component"
+              :customer-id="selectedCustomer.id"
+              :customer-name="selectedCustomer.name"
+            />
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -61,6 +58,10 @@ import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getCustomerOptions } from '@/api/customer-profile'
 import type { CustomerOption } from '@/api/customer-profile/types'
+import BeautyProfilePanel from './components/BeautyProfilePanel.vue'
+import BodyDataPanel from './components/BodyDataPanel.vue'
+import ReactionPanel from './components/ReactionPanel.vue'
+import PhotoPanel from './components/PhotoPanel.vue'
 
 const userStore = useUserStore()
 
@@ -78,8 +79,8 @@ interface TabDefinition {
   name: string
   label: string
   permission: string
-  /** 面板组件；null 表示尚未接入，渲染占位内容 */
-  component: Component | null
+  /** 面板组件 */
+  component: Component
 }
 
 /**
@@ -87,10 +88,10 @@ interface TabDefinition {
  * 系统权限只有目录/菜单/按钮三级，选项卡级控制依托 Type=2 按钮权限实现
  */
 const tabDefinitions: TabDefinition[] = [
-  { name: 'beauty', label: '美容档案', permission: 'store:customer:archive:beauty', component: null },
-  { name: 'bodyData', label: '体型数据', permission: 'store:customer:archive:body-data', component: null },
-  { name: 'reaction', label: '反应记录', permission: 'store:customer:archive:reaction', component: null },
-  { name: 'photo', label: '照片管理', permission: 'store:customer:archive:photo', component: null }
+  { name: 'beauty', label: '美容档案', permission: 'store:customer:archive:beauty', component: BeautyProfilePanel },
+  { name: 'bodyData', label: '体型数据', permission: 'store:customer:archive:body-data', component: BodyDataPanel },
+  { name: 'reaction', label: '反应记录', permission: 'store:customer:archive:reaction', component: ReactionPanel },
+  { name: 'photo', label: '照片管理', permission: 'store:customer:archive:photo', component: PhotoPanel }
 ]
 
 /** 当前用户有权查看的选项卡 */
@@ -162,13 +163,24 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.tab-placeholder {
-  padding: 40px;
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
 :deep(.el-tabs) {
   padding: 0 24px;
+}
+
+/* Tabs样式 */
+:deep(.el-tabs__item) {
+  color: var(--text-secondary);
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: var(--primary);
+}
+
+:deep(.el-tabs__active-bar) {
+  background-color: var(--primary);
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  border-color: var(--border-primary);
 }
 </style>

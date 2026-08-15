@@ -44,4 +44,10 @@ public class OrderItemCreateDto
     public bool AllowAutoFillBeyondSelection { get; set; } = false;
 
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 关联活动ID（可选，仅赠品项 Type=5 有意义，用于活动维度归因统计）。
+    /// 非必填，传入时后端校验活动存在且未删除，写入 InventoryLog.ActivityId。
+    /// </summary>
+    public long? ActivityId { get; set; }
 }

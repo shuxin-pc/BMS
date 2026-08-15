@@ -6,6 +6,10 @@ namespace Bms.Store.Application.Dtos.PurchaseOrders;
 public class PurchaseOrderItemCreateDto
 {
     public long PurchaseOrderId { get; set; }
+
+    /// <summary>供应商ID（明细级，支持一个订单多供应商）</summary>
+    public long SupplierId { get; set; }
+
     public long ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }

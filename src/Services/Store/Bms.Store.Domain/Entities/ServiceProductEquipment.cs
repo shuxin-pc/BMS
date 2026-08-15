@@ -4,7 +4,7 @@ namespace Bms.Store.Domain.Entities;
 /// 服务项目-设备类型 关联表
 /// 对应需求 B7.2：服务项目关联"需要的设备类型"（而非具体设备实例，由预约时动态分配）
 /// </summary>
-public class ServiceProductEquipment : StoreEntity
+public class ServiceProductEquipment : StoreBusinessEntityBase
 {
     /// <summary>
     /// 服务项目子表 ID（关联 ServiceProduct.Id）

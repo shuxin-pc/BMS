@@ -45,8 +45,8 @@ export type CalendarDimension = 'technician' | 'room'
 
 /**
  * 技师来源
- * - 1: 平台技师
- * - 2: 商家技师
+ * - 1: 商家技师
+ * - 2: 平台技师
  */
 export type TechnicianSource = 1 | 2
 
@@ -74,7 +74,7 @@ export interface Appointment {
   status: AppointmentStatus
   /** 技师ID */
   technicianId?: number
-  /** 技师来源：1-平台技师，2-商家技师 */
+  /** 技师来源：1-商家技师，2-平台技师 */
   technicianSource?: TechnicianSource
   /** 房间/床位ID */
   roomId?: number
@@ -104,14 +104,16 @@ export interface Appointment {
 export interface AppointmentQuery {
   /** 客户ID */
   customerId?: number
+  /** 客户名称（模糊匹配） */
+  customerName?: string
+  /** 客户手机号（模糊匹配） */
+  phone?: string
   /** 预约状态 */
   status?: AppointmentStatus
   /** 预约日期起始（yyyy-MM-dd） */
   appointmentDateStart?: string
   /** 预约日期截止（yyyy-MM-dd） */
   appointmentDateEnd?: string
-  /** 技师来源筛选 */
-  technicianSource?: TechnicianSource
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */

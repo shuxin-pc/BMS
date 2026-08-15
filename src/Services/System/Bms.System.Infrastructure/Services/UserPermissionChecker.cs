@@ -60,6 +60,7 @@ public class UserPermissionChecker : IUserPermissionChecker
             IsTenantAdmin = isTenantAdmin,
             TenantId = user.TenantId,
             MaxRoleLevel = maxRoleLevel,
+            RoleIds = roles.Select(r => r.Id).ToList(),
             DataScope = dataScope
         };
     }
@@ -89,23 +90,10 @@ public class UserPermissionChecker : IUserPermissionChecker
             targetRoles.Add(role);
         }
 
-        if (ctx.IsTenantAdmin)
-        {
-            foreach (var role in targetRoles)
-            {
-                if (ProtectedRoleCodes.Contains(role.Code))
-                {
-                    throw new PermissionDeniedException("无权分配系统保留角色");
-                }
-                if (role.TenantId != ctx.TenantId)
-                {
-                    throw new PermissionDeniedException("无权分配其他租户的角色");
-                }
-            }
-            return;
-        }
-
-        // 普通用户
+        // 非超级管理员（含 tenant_admin 与普通用户）统一校验：
+        // ① 目标角色必须属于本租户（tenant_admin 角色属于平台租户，仅 super_admin 可分配）
+        // ② 受保护角色（super_admin/tenant_admin）仅 super_admin 可分配
+        // ③ 只能分配严格低于自己等级的角色（Level 数字越大权限越低）
         foreach (var role in targetRoles)
         {
             if (role.TenantId != ctx.TenantId)
@@ -133,6 +121,13 @@ public class UserPermissionChecker : IUserPermissionChecker
             throw new PermissionDeniedException("无权操作自己的账号");
         }
 
+        // 显式允许操作自己时，跳过后续级别/组织范围校验
+        // 自身对自身的级别比较无意义（必然相等），否则会误报"无权操作同级或更高级别的用户"
+        if (allowSelf && targetUserId == ctx.UserId)
+        {
+            return;
+        }
+
         if (ctx.IsSuperAdmin)
         {
             return;
@@ -150,17 +145,12 @@ public class UserPermissionChecker : IUserPermissionChecker
         var targetIsSuperAdmin = targetRoles.Any(r => string.Equals(r.Code, "super_admin", StringComparison.OrdinalIgnoreCase));
         var targetIsTenantAdmin = targetRoles.Any(r => string.Equals(r.Code, "tenant_admin", StringComparison.OrdinalIgnoreCase));
 
-        if (ctx.IsTenantAdmin)
-        {
-            // tenant_admin 不能操作 super_admin
-            if (targetIsSuperAdmin)
-            {
-                throw new PermissionDeniedException("无权操作超级管理员账号");
-            }
-            return;
-        }
-
-        // 普通用户
+        // 非超级管理员（含 tenant_admin 与普通用户）统一校验：
+        // - 不能操作 super_admin / tenant_admin 账号（受保护角色，仅 super_admin 可操作）
+        // - 只能操作严格高于自己等级的用户（Level 数字越大权限越低）
+        // - 目标用户当前组织必须在数据权限范围内
+        // 注：tenant_admin 之间 Level 相同（均为 1），自然被"严格高于自己等级"规则拒绝，
+        //     无需专门的同级越权校验（H4 校验已移除）
         if (targetIsSuperAdmin || targetIsTenantAdmin)
         {
             throw new PermissionDeniedException("无权操作管理员账号");
@@ -186,16 +176,21 @@ public class UserPermissionChecker : IUserPermissionChecker
     }
 
     /// <inheritdoc />
-    public async Task CheckCanMoveToOrganizationAsync(CurrentUserPermissionContext ctx, long? targetOrganizationId)
+    public async Task CheckCanMoveToOrganizationAsync(CurrentUserPermissionContext ctx, long? targetOrganizationId, bool isCreate = false)
     {
         if (!targetOrganizationId.HasValue)
         {
-            // 清空组织：super_admin/tenant_admin 放行；普通用户不允许（避免逃避组织约束）
-            if (!ctx.IsSuperAdmin && !ctx.IsTenantAdmin)
+            // null 语义按场景区分：
+            // - super_admin：创建/编辑均放行（平台管理员等无组织用户）
+            // - 非超管 + 创建场景：组织必填，提示「创建用户时必须指定组织归属」
+            // - 非超管 + 编辑场景：禁止清空已有组织，提示「无权清空用户的组织归属」（原逻辑）
+            if (ctx.IsSuperAdmin)
             {
-                throw new PermissionDeniedException("无权清空用户的组织归属");
+                return;
             }
-            return;
+            throw new PermissionDeniedException(isCreate
+                ? "创建用户时必须指定组织归属"
+                : "无权清空用户的组织归属");
         }
 
         if (ctx.IsSuperAdmin)
@@ -209,16 +204,9 @@ public class UserPermissionChecker : IUserPermissionChecker
             throw new PermissionDeniedException("目标组织不存在");
         }
 
-        if (ctx.IsTenantAdmin)
-        {
-            if (targetOrg.TenantId != ctx.TenantId)
-            {
-                throw new PermissionDeniedException("无权将用户移动到其他租户的组织");
-            }
-            return;
-        }
-
-        // 普通用户
+        // 非超级管理员（含 tenant_admin 与普通用户）：目标组织必须在数据权限范围内
+        // tenant_admin 的 DataScope=All，OrganizationIds 自然包含本租户全量组织，
+        // 跨租户组织不在范围内会被拒绝（等价于租户隔离校验）
         if (!ctx.DataScope.OrganizationIds.Contains(targetOrganizationId.Value))
         {
             throw new PermissionDeniedException("目标组织不在你的数据权限范围内");

@@ -18,6 +18,12 @@
               <el-option label="已停止" :value="2" />
             </el-select>
           </el-form-item>
+          <el-form-item label="数据范围">
+            <el-select v-model="searchForm.scope" placeholder="全部范围" clearable style="width: 130px">
+              <el-option label="门店通用" :value="1" />
+              <el-option label="本门店" :value="2" />
+            </el-select>
+          </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleSearch">
               <el-icon><Search /></el-icon>
@@ -67,13 +73,6 @@
         <el-table-column prop="name" label="供应商名称" min-width="180" />
         <el-table-column prop="contact" label="联系人" width="100" />
         <el-table-column prop="phone" label="联系电话" width="130" />
-        <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="supplyCategory" label="供应品类" width="120" />
-        <el-table-column prop="bankAccount" label="银行账户" width="180" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.bankAccount || '-' }}
-          </template>
-        </el-table-column>
         <el-table-column prop="totalPurchaseAmount" label="累计采购额" width="130" align="right">
           <template #default="{ row }">
             ¥{{ (row.totalPurchaseAmount || 0).toFixed(2) }}
@@ -86,18 +85,22 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
+        <el-table-column label="数据范围" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.scope === 1" type="primary" size="small">门店通用</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleViewProducts(row)">
               <el-icon><View /></el-icon>
-              查看品项
+              管理品项
             </el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button v-if="canEditSupplier(row)" link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button v-if="canEditSupplier(row)" link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -139,25 +142,34 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="联系人" prop="contact">
-              <el-input v-model="formData.contact" placeholder="请输入联系人" />
+            <el-form-item label="供应商编码" prop="code">
+              <el-input v-model="formData.code" placeholder="如 GYS-001" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
+            <el-form-item label="联系人" prop="contact">
+              <el-input v-model="formData.contact" placeholder="请输入联系人" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="联系电话" prop="phone">
               <el-input v-model="formData.phone" placeholder="请输入联系电话" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="供应品类" prop="supplyCategory">
-              <el-input v-model="formData.supplyCategory" placeholder="如 洗护用品" />
-            </el-form-item>
-          </el-col>
         </el-row>
+        <el-form-item label="银行账户" prop="bankAccount">
+          <el-input v-model="formData.bankAccount" placeholder="请输入银行账户" />
+        </el-form-item>
         <el-form-item label="地址" prop="address">
           <el-input v-model="formData.address" placeholder="请输入供应商地址" />
+        </el-form-item>
+        <el-form-item v-if="canCreatePublic" label="数据范围" prop="scope">
+          <el-radio-group v-model="formData.scope">
+            <el-radio :value="2">本门店</el-radio>
+            <el-radio :value="1">门店通用</el-radio>
+          </el-radio-group>
         </el-form-item>
         <el-form-item label="合作状态" prop="status">
           <el-radio-group v-model="formData.status">
@@ -177,50 +189,114 @@
       </template>
     </el-dialog>
 
-    <!-- 查看品项弹窗 -->
+    <!-- 管理品项弹窗 -->
     <el-dialog
       v-model="productDialogVisible"
-      :title="`供应商品项 - ${currentSupplierName}`"
-      width="800px"
+      :title="`管理品项 - ${currentSupplierName}`"
+      width="900px"
       :close-on-click-modal="false"
     >
+      <el-alert
+        title="本弹窗内的修改即时保存，无需点击确定按钮"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      />
+      <!-- 添加品项 -->
+      <div class="add-product-bar">
+        <el-select
+          v-model="addProductId"
+          placeholder="选择未绑定的品项"
+          filterable
+          clearable
+          style="width: 360px"
+        >
+          <el-option
+            v-for="item in unboundProductOptions"
+            :key="item.id"
+            :label="`${item.name} (${item.code})`"
+            :value="item.id"
+          />
+        </el-select>
+        <el-button
+          type="primary"
+          :disabled="!addProductId"
+          @click="handleAddProduct"
+        >
+          添加品项
+        </el-button>
+      </div>
+      <!-- 已绑定品项列表 -->
       <el-table
         v-loading="productLoading"
-        :data="productList"
-        style="width: 100%"
+        :data="supplierProductList"
+        style="width: 100%; margin-top: 12px"
       >
-        <el-table-column prop="name" label="商品名称" min-width="160" />
-        <el-table-column prop="code" label="商品编码" width="120" />
-        <el-table-column prop="categoryName" label="分类" width="120" />
-        <el-table-column label="售价" width="100" align="right">
+        <el-table-column prop="productName" label="商品名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="productCode" label="商品编码" width="140" show-overflow-tooltip />
+        <el-table-column label="是否默认" width="100" align="center">
           <template #default="{ row }">
-            <span class="price-text">¥{{ (row.price || 0).toFixed(2) }}</span>
+            <el-tag v-if="row.isDefault" type="success" size="small" effect="dark">默认</el-tag>
+            <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80">
+        <el-table-column label="参考价" width="140" align="right">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small" effect="dark">
-              {{ row.status === 1 ? '上架' : '下架' }}
-            </el-tag>
+            <el-input-number
+              v-model="row.referencePrice"
+              :min="0"
+              :precision="2"
+              :step="1"
+              :controls="false"
+              size="small"
+              style="width: 120px"
+              @change="(val: number | undefined) => handleUpdateProductReferencePrice(row, val)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="供货周期(天)" width="140" align="right">
+          <template #default="{ row }">
+            <el-input-number
+              v-model="row.leadTimeDays"
+              :min="0"
+              :step="1"
+              :precision="0"
+              :controls="false"
+              size="small"
+              style="width: 120px"
+              @change="(val: number | undefined) => handleUpdateProductLeadTime(row, val)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="!row.isDefault"
+              link
+              type="primary"
+              size="small"
+              @click="handleSetDefaultProduct(row)"
+            >
+              设为默认
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              @click="handleUnbindProduct(row)"
+            >
+              解除关联
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="productPagination.pageIndex"
-          v-model:page-size="productPagination.pageSize"
-          :page-sizes="systemConfigStore.defaultPageSizes"
-          :total="productPagination.total"
-          layout="total, prev, pager, next"
-          @current-change="loadSupplierProducts"
-        />
-      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit, View } from '@element-plus/icons-vue'
 import {
@@ -228,19 +304,33 @@ import {
   createSupplier,
   updateSupplier,
   deleteSupplier,
-  deleteSuppliers
+  deleteSuppliers,
+  getProductsBySupplier,
+  bindProducts,
+  unbindProduct,
+  setDefaultSupplier
 } from '@/api/supplier'
 import { getProducts } from '@/api/product'
 import type { Product } from '@/api/product/types'
+import type { Supplier, ProductSupplier } from '@/api/supplier/types'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { Supplier } from '@/api/supplier/types'
+import { useUserStore } from '@/stores/user'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+
+// 是否可创建公用供应商（前端按权限码控制显隐，后端不额外校验）
+const canCreatePublic = computed(() => userStore.hasPermission('store:product:supplier:create:public'))
+// 是否可编辑公用供应商
+const canEditPublic = computed(() => userStore.hasPermission('store:product:supplier:edit:public'))
+// 公用供应商的编辑/删除需要 edit:public 权限；私用供应商有 edit 权限即可
+const canEditSupplier = (row: Supplier) => row.scope !== 1 || canEditPublic.value
 
 // 搜索表单
 const searchForm = reactive({
   name: '',
-  status: undefined as number | undefined
+  status: undefined as number | undefined,
+  scope: undefined as number | undefined
 })
 
 // 表格数据
@@ -248,16 +338,20 @@ const tableLoading = ref(false)
 const tableData = ref<Supplier[]>([])
 const selectedRows = ref<Supplier[]>([])
 
-// 查看品项
+// 管理品项弹窗
 const productDialogVisible = ref(false)
 const productLoading = ref(false)
 const currentSupplierName = ref('')
 const currentSupplierId = ref<number>(0)
-const productList = ref<Product[]>([])
-const productPagination = reactive({
-  pageIndex: 1,
-  pageSize: 10,
-  total: 0
+const supplierProductList = ref<ProductSupplier[]>([])
+const addProductId = ref<number | undefined>(undefined)
+// 用于"添加品项"下拉的候选商品列表（当前门店全部商品，弹窗打开时加载一次）
+const allProductOptions = ref<Product[]>([])
+
+// 未绑定的品项选项（已绑定的品项不在选项中）
+const unboundProductOptions = computed(() => {
+  const boundIds = supplierProductList.value.map(ps => ps.productId)
+  return allProductOptions.value.filter(p => !boundIds.includes(p.id))
 })
 
 // 分页
@@ -274,6 +368,7 @@ const loadData = async () => {
     const res = await getSuppliers({
       name: searchForm.name || undefined,
       status: searchForm.status,
+      scope: searchForm.scope,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
@@ -296,6 +391,7 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.name = ''
   searchForm.status = undefined
+  searchForm.scope = undefined
   handleSearch()
 }
 
@@ -312,8 +408,9 @@ const formData = reactive({
   contact: '',
   phone: '',
   address: '',
-  supplyCategory: '',
+  bankAccount: '',
   status: 1,
+  scope: 2,
   remark: ''
 })
 
@@ -322,18 +419,12 @@ const formRules: FormRules = {
     { required: true, message: '供应商名称不能为空', trigger: 'blur' },
     { max: 100, message: '供应商名称最多100个字符', trigger: 'blur' }
   ],
-  contact: [
-    { required: true, message: '联系人不能为空', trigger: 'blur' }
+  code: [
+    { required: true, message: '供应商编码不能为空', trigger: 'blur' },
+    { max: 50, message: '供应商编码最多50个字符', trigger: 'blur' }
   ],
   phone: [
-    { required: true, message: '联系电话不能为空', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码', trigger: 'blur' }
-  ],
-  address: [
-    { required: true, message: '地址不能为空', trigger: 'blur' }
-  ],
-  supplyCategory: [
-    { required: true, message: '供应品类不能为空', trigger: 'blur' }
   ],
   status: [
     { required: true, message: '请选择合作状态', trigger: 'change' }
@@ -348,8 +439,9 @@ const resetFormData = () => {
   formData.contact = ''
   formData.phone = ''
   formData.address = ''
-  formData.supplyCategory = ''
+  formData.bankAccount = ''
   formData.status = 1
+  formData.scope = 2
   formData.remark = ''
 }
 
@@ -369,9 +461,9 @@ const handleEdit = (row: Supplier) => {
   formData.contact = row.contact || ''
   formData.phone = row.phone || ''
   formData.address = row.address || ''
-  // TODO: 后端 Supplier 不返回 supplyCategory 字段
-  formData.supplyCategory = ''
+  formData.bankAccount = row.bankAccount || ''
   formData.status = row.status
+  formData.scope = row.scope || 2
   formData.remark = row.remark || ''
   dialogVisible.value = true
 }
@@ -435,7 +527,9 @@ const handleSubmit = async () => {
           contact: formData.contact,
           phone: formData.phone,
           address: formData.address,
+          bankAccount: formData.bankAccount || undefined,
           status: formData.status,
+          scope: formData.scope,
           remark: formData.remark || undefined
         }
         if (isEdit.value) {
@@ -456,30 +550,131 @@ const handleSubmit = async () => {
   })
 }
 
-// 查看品项
-const handleViewProducts = (row: Supplier) => {
+// 打开管理品项弹窗
+const handleViewProducts = async (row: Supplier) => {
   currentSupplierName.value = row.name
   currentSupplierId.value = row.id
-  productPagination.pageIndex = 1
+  addProductId.value = undefined
   productDialogVisible.value = true
-  loadSupplierProducts()
+  // 并行加载已绑定品项与候选品项列表
+  await Promise.all([
+    loadSupplierProducts(),
+    loadAllProductOptions()
+  ])
 }
 
-// 加载供应商品项
+// 加载供应商已绑定的品项列表（不分页）
 const loadSupplierProducts = async () => {
   productLoading.value = true
   try {
-    const res = await getProducts({
-      supplierId: currentSupplierId.value,
-      pageIndex: productPagination.pageIndex,
-      pageSize: productPagination.pageSize
+    const list = await getProductsBySupplier(currentSupplierId.value)
+    // 供货周期 0 表示即时供货，前端展示为空避免显示默认值 0
+    list.forEach(ps => {
+      if (ps.leadTimeDays === 0) ps.leadTimeDays = undefined
     })
-    productList.value = res.list
-    productPagination.total = res.total
-  } catch (error) {
-    ElMessage.error('加载品项失败')
+    supplierProductList.value = list
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载品项失败')
   } finally {
     productLoading.value = false
+  }
+}
+
+// 加载当前门店全部商品（用于"添加品项"下拉），单页拉取较大 pageSize
+const loadAllProductOptions = async () => {
+  try {
+    const res = await getProducts({ pageIndex: 1, pageSize: 500 })
+    allProductOptions.value = res.list
+  } catch (error) {
+    allProductOptions.value = []
+  }
+}
+
+// 添加品项到当前供应商
+const handleAddProduct = async () => {
+  if (!addProductId.value) return
+  try {
+    await bindProducts({
+      supplierId: currentSupplierId.value,
+      productIds: [addProductId.value]
+    })
+    ElMessage.success('添加成功')
+    addProductId.value = undefined
+    await loadSupplierProducts()
+  } catch (error: any) {
+    ElMessage.error(error.message || '添加失败')
+  }
+}
+
+// 设为默认供应商
+const handleSetDefaultProduct = async (row: ProductSupplier) => {
+  try {
+    await setDefaultSupplier({
+      productId: row.productId,
+      supplierId: currentSupplierId.value,
+      referencePrice: row.referencePrice,
+      leadTimeDays: row.leadTimeDays
+    })
+    ElMessage.success('已设为默认')
+    await loadSupplierProducts()
+  } catch (error: any) {
+    ElMessage.error(error.message || '设置失败')
+  }
+}
+
+// 更新参考价（即时保存，仅默认供应商生效）
+const handleUpdateProductReferencePrice = async (row: ProductSupplier, val: number | undefined) => {
+  if (row.isDefault) {
+    try {
+      await setDefaultSupplier({
+        productId: row.productId,
+        supplierId: currentSupplierId.value,
+        referencePrice: val,
+        leadTimeDays: row.leadTimeDays
+      })
+      ElMessage.success('参考价已更新')
+    } catch (error: any) {
+      ElMessage.error(error.message || '更新失败')
+      await loadSupplierProducts()
+    }
+  }
+}
+
+// 更新供货周期（即时保存，仅默认供应商生效）
+const handleUpdateProductLeadTime = async (row: ProductSupplier, val: number | undefined) => {
+  if (row.isDefault) {
+    // 供货周期为空时按默认 0（即时供货）处理
+    const leadTimeDays = val ?? 0
+    try {
+      await setDefaultSupplier({
+        productId: row.productId,
+        supplierId: currentSupplierId.value,
+        referencePrice: row.referencePrice,
+        leadTimeDays
+      })
+      ElMessage.success('供货周期已更新')
+    } catch (error: any) {
+      ElMessage.error(error.message || '更新失败')
+      await loadSupplierProducts()
+    }
+  }
+}
+
+// 解除品项与当前供应商的关联
+const handleUnbindProduct = async (row: ProductSupplier) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定解除与品项 "${row.productName}" 的关联吗？`,
+      '警告',
+      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
+    )
+    await unbindProduct(row.productId, currentSupplierId.value)
+    ElMessage.success('解除关联成功')
+    await loadSupplierProducts()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '解除关联失败')
+    }
   }
 }
 
@@ -539,6 +734,41 @@ onMounted(async () => {
   background-color: var(--bg-hover) !important;
 }
 
+/* 查看品项弹窗内表格 - 浅色风格，与弹窗整体底色一致 */
+:deep(.el-dialog .el-table) {
+  --el-table-bg-color: #ffffff !important;
+  --el-table-text-color: #1f2937 !important;
+  --el-table-border-color: #e5e7eb !important;
+  --el-table-header-bg-color: #f3f4f6 !important;
+  --el-table-header-text-color: #4b5563 !important;
+  --el-table-row-hover-bg-color: #f3f4f6 !important;
+  background-color: #ffffff !important;
+}
+
+:deep(.el-dialog .el-table th.el-table__cell) {
+  background-color: #f3f4f6 !important;
+  color: #4b5563 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+:deep(.el-dialog .el-table td.el-table__cell) {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+:deep(.el-dialog .el-table__row) {
+  background-color: #ffffff !important;
+}
+
+:deep(.el-dialog .el-table__row:hover > td.el-table__cell) {
+  background-color: #f3f4f6 !important;
+}
+
+:deep(.el-dialog .el-table__body-wrapper) {
+  background-color: #ffffff;
+}
+
 /* 搜索区域 */
 .search-form {
   padding: 20px 24px 0;
@@ -581,5 +811,23 @@ onMounted(async () => {
 .price-text {
   color: var(--primary);
   font-weight: 600;
+}
+
+/* 管理品项弹窗 - 添加品项栏 */
+.add-product-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 隐藏 el-input-number 在 controls=false 时内部 input 的原生数字调节箭头 */
+:deep(.el-input-number.is-without-controls .el-input__inner::-webkit-inner-spin-button),
+:deep(.el-input-number.is-without-controls .el-input__inner::-webkit-outer-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+:deep(.el-input-number.is-without-controls .el-input__inner) {
+  -moz-appearance: textfield;
 }
 </style>

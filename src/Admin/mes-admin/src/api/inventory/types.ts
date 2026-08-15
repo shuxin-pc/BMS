@@ -14,25 +14,53 @@ export interface PagedResponse<T> {
 }
 
 /**
+ * 商品类型（与后端 ProductMaster.Type 对齐）
+ * - 1: 实物商品
+ * - 2: 服务商品
+ * - 3: 耗材
+ * - 4: 样品
+ * - 5: 赠品
+ */
+export type ProductType = 1 | 2 | 3 | 4 | 5
+
+/**
+ * 库存状态（与后端 InventoryAppService.CalculateInventoryStatus 对齐）
+ * - 1: 充足
+ * - 2: 偏低
+ * - 3: 不足
+ * - 4: 积压
+ */
+export type InventoryStatus = 1 | 2 | 3 | 4
+
+/**
  * 库存信息（与后端 InventoryDto 对齐）
+ * 以档案为主表左连接库存汇总表，档案存在即可见，无库存记录时数量为 0
  */
 export interface Inventory {
-  /** 库存记录ID */
+  /** 档案ID（Product.Id） */
   id: number
-  /** 商品ID */
+  /** 商品ID（同 id，保留用于按商品维度调用其他接口） */
   productId: number
-  /** 库存数量 */
+  /** 库存数量（无库存记录时为 0） */
   quantity: number
-  /** 预警数量阈值 */
-  alertQuantity: number
-  /** 过期日期 */
-  expirationDate?: string
-  /** 批次号 */
-  batchNo?: string
+  /** 低库存预警阈值（来源 Product.LowStockThreshold，未配置时为 null） */
+  alertQuantity: number | null
+  /** 积压预警阈值（来源 Product.OverstockThreshold，未配置时为 null） */
+  overstockThreshold: number | null
+  /** 库存状态：1-充足，2-偏低，3-不足，4-积压 */
+  inventoryStatus: InventoryStatus
   /** 创建时间 */
   createdAt: string
-  /** 更新时间 */
+  /** 更新时间（优先取 Inventory.UpdatedTime，无库存记录时取 Product.UpdatedTime） */
   updatedAt?: string
+  /** 商品名称（联表 ProductMaster.Name） */
+  productName: string
+  /** 商品编码（联表 ProductMaster.Code） */
+  productCode: string
+  /** 商品类型：1-实物商品，2-服务商品，3-耗材，4-样品，5-赠品 */
+  productType: ProductType
+  /** 商品分类名称（联表 ProductCategory.Name） */
+  categoryName?: string
 }
 
 /**
@@ -41,6 +69,14 @@ export interface Inventory {
 export interface InventoryQuery {
   /** 商品ID */
   productId?: number
+  /** 商品分类ID */
+  categoryId?: number
+  /** 商品名称（模糊匹配） */
+  productName?: string
+  /** 商品类型筛选 */
+  productType?: ProductType
+  /** 库存状态筛选（在内存中计算后过滤） */
+  inventoryStatus?: InventoryStatus
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
@@ -63,6 +99,8 @@ export interface InventoryAlert {
   alertValue: number
   /** 过期日期 */
   expirationDate?: string
+  /** 批次ID（仅效期预警有值） */
+  batchId?: number
   /** 是否已处理 */
   isProcessed: boolean
   /** 处理时间 */
@@ -73,6 +111,18 @@ export interface InventoryAlert {
   createdAt: string
   /** 更新时间 */
   updatedAt?: string
+  /** 商品名称（联表 ProductMaster.Name） */
+  productName?: string
+  /** 商品编码（联表 ProductMaster.Code） */
+  productCode?: string
+  /** 商品分类名称（联表 ProductCategory.Name） */
+  categoryName?: string
+  /** 批次号（联表 InventoryBatch.BatchNo，仅效期预警有值） */
+  batchNo?: string
+  /** 门店名称（联表 Store.Name） */
+  storeName?: string
+  /** 缺口数量（低库存预警时 = alertValue - currentQuantity，其余类型为 0） */
+  shortageAmount: number
 }
 
 /**
@@ -85,10 +135,26 @@ export interface InventoryAlertQuery {
   alertType?: number
   /** 是否已处理 */
   isProcessed?: boolean
+  /** 商品名称（模糊匹配） */
+  productName?: string
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
   pageSize?: number
+}
+
+/**
+ * 库存预警扫描结果（与后端 InventoryAlertScanResultDto 对齐）
+ */
+export interface InventoryAlertScanResult {
+  /** 新生成低库存预警数量 */
+  lowStockCreated: number
+  /** 新生成效期预警数量 */
+  expiryCreated: number
+  /** 新生成积压预警数量 */
+  overstockCreated: number
+  /** 标记为已过期的批次数量 */
+  batchExpired: number
 }
 
 /**
@@ -144,41 +210,6 @@ export interface ExpiryQuery {
  * - expired: 已过期
  */
 export type AlertLevel = 'expiring' | 'expired'
-
-/**
- * 效期预警项
- * 字段与后端 ExpiryDto 对齐（预警接口只返回 expiring/expired 状态）
- */
-export interface ExpiryAlert {
-  /** 记录ID */
-  id: number
-  /** 商品名称 */
-  productName: string
-  /** 商品编码 */
-  productCode: string
-  /** 批次号 */
-  batchNo: string
-  /** 过期日期 */
-  expirationDate?: string
-  /** 剩余天数（负数表示已过期） */
-  remainingDays: number
-  /** 效期状态（预警接口返回 expiring 或 expired） */
-  status: ExpiryStatus
-  /** 门店名称 */
-  storeName?: string
-}
-
-/**
- * 效期预警查询参数
- */
-export interface ExpiryAlertQuery {
-  /** 商品名称（模糊匹配） */
-  productName?: string
-  /** 页码 */
-  pageIndex?: number
-  /** 每页条数 */
-  pageSize?: number
-}
 
 /**
  * 商品可用效期选项（用于 POS 效期选择界面）

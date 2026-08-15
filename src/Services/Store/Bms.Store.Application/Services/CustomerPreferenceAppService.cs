@@ -31,7 +31,7 @@ public class CustomerPreferenceAppService : ICustomerPreferenceAppService
     public async Task<ApiResponseDto<PagedResponseDto<CustomerPreferenceDto>>> GetPagedListAsync(CustomerPreferenceQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<CustomerPreferenceDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<CustomerPreferenceDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.CustomerPreferences
@@ -60,7 +60,7 @@ public class CustomerPreferenceAppService : ICustomerPreferenceAppService
     public async Task<ApiResponseDto<CustomerPreferenceDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerPreferenceDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerPreferenceDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CustomerPreferences
             .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
@@ -72,7 +72,7 @@ public class CustomerPreferenceAppService : ICustomerPreferenceAppService
     public async Task<ApiResponseDto<CustomerPreferenceDto>> CreateAsync(CustomerPreferenceCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerPreferenceDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerPreferenceDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -92,7 +92,7 @@ public class CustomerPreferenceAppService : ICustomerPreferenceAppService
     public async Task<ApiResponseDto<CustomerPreferenceDto>> UpdateAsync(CustomerPreferenceUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerPreferenceDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerPreferenceDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -119,7 +119,7 @@ public class CustomerPreferenceAppService : ICustomerPreferenceAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CustomerPreferences
             .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
@@ -135,7 +135,7 @@ public class CustomerPreferenceAppService : ICustomerPreferenceAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

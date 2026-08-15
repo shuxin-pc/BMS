@@ -12,7 +12,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserAppService, UserAppService>();
         services.AddScoped<IRoleAppService, RoleAppService>();
         services.AddScoped<IMenuAppService, MenuAppService>();
-        services.AddScoped<IPermissionAppService, PermissionAppService>();
         services.AddScoped<IOrganizationAppService, OrganizationAppService>();
         services.AddScoped<IAuditLogAppService, AuditLogAppService>();
         services.AddScoped<ISystemConfigAppService, SystemConfigAppService>();

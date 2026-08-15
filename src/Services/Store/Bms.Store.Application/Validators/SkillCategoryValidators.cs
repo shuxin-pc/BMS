@@ -17,9 +17,6 @@ public class SkillCategoryCreateDtoValidator : AbstractValidator<SkillCategoryCr
         RuleFor(x => x.Code)
             .NotEmpty().WithMessage("编码不能为空")
             .MaximumLength(50).WithMessage("编码最多50个字符");
-
-        RuleFor(x => x.Status)
-            .Must(s => s == 0 || s == 1).WithMessage("状态只能为0(禁用)或1(启用)");
     }
 }
 

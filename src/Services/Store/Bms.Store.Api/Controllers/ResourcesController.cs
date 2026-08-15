@@ -48,7 +48,7 @@ public class ResourcesController : ControllerBase
         [FromQuery] long? serviceProductId = null)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ResourceAvailabilityDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ResourceAvailabilityDto>.Fail("登录状态异常，请重新登录", 401);
 
         // storeId 缺省时取当前用户的门店
         var effectiveStoreId = storeId ?? _currentUser.StoreId;

@@ -11,7 +11,7 @@ namespace Bms.Store.Api.Controllers;
 /// 手动汇总 -> 待确认 -> 确认 -> 已确认；支持反日结与重算
 /// </summary>
 [ApiController]
-[Route("api/store/[controller]")]
+[Route("api/store/daily-settlements")]
 [Authorize]
 public class DailySettlementsController : ControllerBase
 {

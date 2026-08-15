@@ -72,4 +72,12 @@ public class StoredValueAccountsController : ControllerBase
     [HttpPost("recharge")]
     public async Task<ApiResponseDto<StoredValueAccountDto>> Recharge([FromBody] StoredValueRechargeDto dto)
         => await _appService.RechargeAsync(dto);
+
+    /// <summary>
+    /// 储值退款（规则8）
+    /// 冲减原充值门店充值业绩，门店关店则冲减当前操作门店
+    /// </summary>
+    [HttpPost("refund")]
+    public async Task<ApiResponseDto<StoredValueAccountDto>> Refund([FromBody] StoredValueRefundDto dto)
+        => await _appService.RefundAsync(dto);
 }

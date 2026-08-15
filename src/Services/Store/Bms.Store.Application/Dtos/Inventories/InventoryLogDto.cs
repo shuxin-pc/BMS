@@ -30,6 +30,21 @@ public class InventoryLogDto
     /// <summary>供应商名称（查询时 JOIN 填充）</summary>
     public string? SupplierName { get; set; }
 
+    /// <summary>操作人ID（用于追责与同名操作人区分）</summary>
+    public long? OperatorId { get; set; }
+
     /// <summary>操作人姓名（写入时冗余存储）</summary>
     public string? OperatorName { get; set; }
+
+    /// <summary>操作前批次库存（按同商品同批次流水累加计算，无 productId 查询时为 null）</summary>
+    public decimal? BatchBeforeQuantity { get; set; }
+
+    /// <summary>操作后批次库存（按同商品同批次流水累加计算，无 productId 查询时为 null）</summary>
+    public decimal? BatchAfterQuantity { get; set; }
+
+    /// <summary>操作前商品总库存（按同商品流水累加计算，无 productId 查询时为 null）</summary>
+    public decimal? TotalBeforeQuantity { get; set; }
+
+    /// <summary>操作后商品总库存（按同商品流水累加计算，无 productId 查询时为 null）</summary>
+    public decimal? TotalAfterQuantity { get; set; }
 }

@@ -1,5 +1,5 @@
 // 样品赠品模块 - API 服务
-// 对接后端 SampleGiftsController / SampleGiftReceivesController / SampleGiftOutsController
+// 对接后端 SampleGiftsController / SampleGiftReceivesController
 import {
   request,
   buildQuery,
@@ -8,16 +8,9 @@ import {
 import type {
   Sample,
   SampleQuery,
-  SampleCreate,
-  SampleUpdate,
   SampleReceive,
   SampleReceiveQuery,
   SampleReceiveCreate,
-  SampleOutbound,
-  SampleOutboundQuery,
-  SampleOutboundCreate,
-  SampleInventory,
-  SampleInventoryQuery,
   SampleReport,
   SampleReportQuery
 } from './types'
@@ -26,16 +19,9 @@ import type {
 export type {
   Sample,
   SampleQuery,
-  SampleCreate,
-  SampleUpdate,
   SampleReceive,
   SampleReceiveQuery,
   SampleReceiveCreate,
-  SampleOutbound,
-  SampleOutboundQuery,
-  SampleOutboundCreate,
-  SampleInventory,
-  SampleInventoryQuery,
   SampleReport,
   SampleReportQuery,
   PagedResponse
@@ -76,55 +62,6 @@ export async function getAllSamples(): Promise<Sample[]> {
   return paged.list
 }
 
-/**
- * 创建样品/赠品
- * 对接后端：POST /api/store/sampleGifts
- * @param data 样品信息
- * @returns 创建后的样品信息
- */
-export async function createSample(data: SampleCreate): Promise<Sample> {
-  return request<Sample>('/sampleGifts', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  })
-}
-
-/**
- * 更新样品/赠品
- * 对接后端：PUT /api/store/sampleGifts/{id}
- * @param data 样品信息
- * @returns 更新后的样品信息
- */
-export async function updateSample(data: SampleUpdate): Promise<Sample> {
-  return request<Sample>(`/sampleGifts/${data.id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data)
-  })
-}
-
-/**
- * 删除样品/赠品
- * 对接后端：DELETE /api/store/sampleGifts/{id}
- * @param id 样品ID
- */
-export async function deleteSample(id: number): Promise<void> {
-  await request<void>(`/sampleGifts/${id}`, {
-    method: 'DELETE'
-  })
-}
-
-/**
- * 批量删除样品/赠品
- * 对接后端：POST /api/store/sampleGifts/batch
- * @param ids 样品ID列表
- */
-export async function deleteSamples(ids: number[]): Promise<void> {
-  await request<void>('/sampleGifts/batch', {
-    method: 'POST',
-    body: JSON.stringify({ ids })
-  })
-}
-
 // ==================== 样品领用 ====================
 
 /**
@@ -154,56 +91,6 @@ export async function createSampleReceive(data: SampleReceiveCreate): Promise<Sa
     method: 'POST',
     body: JSON.stringify(data)
   })
-}
-
-// ==================== 赠品出库 ====================
-
-/**
- * 获取出库记录分页列表
- * 对接后端：GET /api/store/sampleGiftOuts
- * @param query 查询参数
- * @returns 分页出库记录列表
- */
-export async function getSampleOutbounds(query?: SampleOutboundQuery): Promise<PagedResponse<SampleOutbound>> {
-  const qs = buildQuery({
-    productId: query?.productId,
-    pageIndex: query?.pageIndex,
-    pageSize: query?.pageSize
-  })
-  return request<PagedResponse<SampleOutbound>>(`/sampleGiftOuts${qs}`)
-}
-
-/**
- * 创建出库记录
- * 对接后端：POST /api/store/sampleGiftOuts
- * @param data 出库信息
- * @returns 创建后的出库记录
- */
-export async function createSampleOutbound(data: SampleOutboundCreate): Promise<SampleOutbound> {
-  return request<SampleOutbound>('/sampleGiftOuts', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  })
-}
-
-// ==================== 库存查询 ====================
-// 对接后端 SampleGiftsController 的 inventories 接口
-
-/**
- * 获取库存查询分页列表
- * 对接后端：GET /api/store/sampleGifts/inventories
- * @param query 查询参数
- * @returns 分页库存列表
- */
-export async function getSampleInventories(query?: SampleInventoryQuery): Promise<PagedResponse<SampleInventory>> {
-  const qs = buildQuery({
-    name: query?.name,
-    type: query?.type,
-    inventoryStatus: query?.inventoryStatus,
-    pageIndex: query?.pageIndex,
-    pageSize: query?.pageSize
-  })
-  return request<PagedResponse<SampleInventory>>(`/sampleGifts/inventories${qs}`)
 }
 
 // ==================== 统计报表 ====================

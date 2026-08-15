@@ -42,7 +42,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto<PagedResponseDto<StockTransferDto>>> GetPagedListAsync(StockTransferQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<StockTransferDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<StockTransferDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
@@ -62,10 +62,13 @@ public class StockTransferAppService : IStockTransferAppService
         if (query.EndDate.HasValue)
             // EndDate 含当日：用次日0点作为上界（exclusive）避免时间部分漏掉当天数据
             queryable = queryable.Where(t => t.TransferDate < query.EndDate.Value.AddDays(1));
+        if (query.ProductType.HasValue)
+            // 按商品类型筛选：返回明细中含该类型商品的调拨单
+            queryable = queryable.Where(t => t.Items.Any(i => i.Product != null && i.Product.Master.Type == query.ProductType.Value));
 
         var total = await queryable.CountAsync();
         var items = await queryable
-            .Include(t => t.Items)
+            .Include(t => t.Items).ThenInclude(i => i.Product.Master)
             .OrderByDescending(t => t.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
@@ -87,11 +90,11 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto<StockTransferDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<StockTransferDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<StockTransferDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.StockTransfers
-            .Include(t => t.Items)
+            .Include(t => t.Items).ThenInclude(i => i.Product.Master)
             .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _currentUser.TenantId.Value
                 && (t.FromStoreId == storeId || t.ToStoreId == storeId));
         if (entity == null)
@@ -106,7 +109,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto<StockTransferDto>> CreateAsync(StockTransferCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<StockTransferDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<StockTransferDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -127,9 +130,10 @@ public class StockTransferAppService : IStockTransferAppService
         if (toStore == null)
             return ApiResponseDto<StockTransferDto>.Fail("调入门店不存在", 400);
 
-        // 批量查询商品信息（填充明细冗余字段）
+        // 批量查询商品信息（填充明细冗余字段），Include Master 以访问主档字段
         var productIds = dto.Items.Select(i => i.ProductId).Distinct().ToList();
         var products = await _dbContext.Products
+            .Include(p => p.Master)
             .Where(p => p.TenantId == tenantId && productIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id);
         var missingProduct = productIds.FirstOrDefault(id => !products.ContainsKey(id));
@@ -159,9 +163,9 @@ public class StockTransferAppService : IStockTransferAppService
             item.TenantCode = tenantCode;
             item.StoreId = storeId;
             item.CreatedTime = now;
-            item.ProductName = products[item.ProductId].Name;
-            item.ProductCode = products[item.ProductId].Code;
-            item.Unit = products[item.ProductId].Unit;
+            item.ProductName = products[item.ProductId].Master?.Name;
+            item.ProductCode = products[item.ProductId].Master?.Code;
+            item.Unit = products[item.ProductId].Master?.Unit;
         }
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
@@ -185,7 +189,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto<StockTransferDto>> UpdateAsync(StockTransferUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<StockTransferDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<StockTransferDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -224,7 +228,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.StockTransfers
@@ -247,7 +251,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -278,12 +282,14 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto> ExecuteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
         var now = DateTime.Now;
         var storeId = _currentUser.StoreId ?? 0;
+        var operatorId = _currentUser.UserId;
+        var operatorName = _currentUser.RealName ?? _currentUser.UserName;
 
         var transfer = await _dbContext.StockTransfers
             .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == tenantId
@@ -305,11 +311,77 @@ public class StockTransferAppService : IStockTransferAppService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
+            // === P3.3: 按 MasterId 在调入门店查/建 Product 档案，构建 fromProductId -> toProductId 映射 ===
+            // 设计文档 6.3 节：调入门店无档案 -> 自动克隆一份 Product（仅 Store 字段，MasterId 指向同一 Master）
+            // 库存三件套的 ProductId 需替换为调入门店的 Product.Id，消除"B 门店看不到调拨入库商品"问题
+            var fromProductIds = items.Select(i => i.ProductId).Distinct().ToList();
+            var fromProducts = await _dbContext.Products
+                .Where(p => fromProductIds.Contains(p.Id) && p.TenantId == tenantId)
+                .ToDictionaryAsync(p => p.Id);
+
+            var masterIds = fromProducts.Values.Select(p => p.MasterId).Distinct().ToList();
+            var toProducts = await _dbContext.Products
+                .Where(p => masterIds.Contains(p.MasterId)
+                    && p.StoreId == transfer.ToStoreId
+                    && p.TenantId == tenantId
+                    && !p.IsDeleted)
+                .ToDictionaryAsync(p => p.MasterId);
+
+            // 调入门店信息（克隆 Product 时填充 StoreCode 冗余字段）
+            var toStore = await _dbContext.Stores
+                .FirstOrDefaultAsync(s => s.Id == transfer.ToStoreId && s.TenantId == tenantId);
+
+            // 构建 ProductId 映射：缺失的克隆一份（复制调出门店 Store 字段，保证调入后立即可销售）
+            var productIdMap = new Dictionary<long, long>();
             foreach (var item in items)
             {
+                if (!fromProducts.TryGetValue(item.ProductId, out var fromProduct))
+                    throw new InvalidOperationException($"调出商品(ID:{item.ProductId})不存在");
+
+                if (!toProducts.TryGetValue(fromProduct.MasterId, out var toProduct))
+                {
+                    toProduct = new Product
+                    {
+                        MasterId = fromProduct.MasterId,
+                        // 复制 Store 字段：Price=0 会导致 POS 异常，故复制调出门店值保证可销售
+                        Price = fromProduct.Price,
+                        CostPrice = fromProduct.CostPrice,
+                        LastPurchasePrice = fromProduct.LastPurchasePrice,
+                        LowStockThreshold = fromProduct.LowStockThreshold,
+                        ExpiryAlertDays = fromProduct.ExpiryAlertDays,
+                        OverstockThreshold = fromProduct.OverstockThreshold,
+                        Status = fromProduct.Status,
+                        Remark = fromProduct.Remark,
+                        TenantId = tenantId,
+                        TenantCode = tenantCode,
+                        StoreId = transfer.ToStoreId,
+                        StoreCode = toStore?.Code ?? string.Empty,
+                        CreatedTime = now
+                    };
+                    _dbContext.Products.Add(toProduct);
+                    await _dbContext.SaveChangesAsync(); // 获取 toProduct.Id
+                    toProducts[fromProduct.MasterId] = toProduct;
+                }
+                productIdMap[item.ProductId] = toProduct.Id;
+            }
+
+            // 跨 items 累计调入门店已生成批次数，避免事务内 CountAsync 漏算未落库批次导致批次号序号重复
+            var batchCountGenerated = 0;
+            foreach (var item in items)
+            {
+                // 调入门店对应的 Product.Id（按 MasterId 映射）
+                var toProductId = productIdMap[item.ProductId];
+
                 // === 1. 调出门店：扣减批次（helper 处理，库存不足/批次不存在抛 InvalidOperationException） ===
                 var deductions = await StockBatchTransferHelper.DeductBatchesAsync(
                     _dbContext, tenantId, transfer.FromStoreId, item.ProductId, item.BatchNo, item.Quantity, now);
+
+                // FEFO 模式（item.BatchNo 为空）回写实际扣减批次号到明细，便于详情查看；多批次用逗号拼接
+                if (string.IsNullOrEmpty(item.BatchNo) && deductions.Count > 0)
+                {
+                    item.BatchNo = string.Join(", ", deductions.Select(d => d.BatchNo).Distinct());
+                    item.UpdatedTime = now;
+                }
 
                 // 读取调出门店 Inventory 汇总（用于流水 BeforeQuantity/AfterQuantity 递推）
                 var fromInventory = await _dbContext.Inventories
@@ -329,34 +401,36 @@ public class StockTransferAppService : IStockTransferAppService
                         item.ProductId, InventoryLogSourceTypes.TransferOutbound,
                         -d.DeductQuantity, d.BatchNo, d.ExpirationDate, d.UnitPrice,
                         fromRunningQty + d.DeductQuantity, fromRunningQty,
-                        transfer.Id, $"调拨出库-{transfer.TransferNo}", now);
+                        transfer.Id, transfer.TransferNo, operatorId, operatorName, now);
                 }
 
                 // 同步扣减调出门店 Inventory 汇总表
                 fromInventory.Quantity -= item.Quantity;
                 fromInventory.UpdatedTime = now;
 
-                // === 3. 调入门店：批次合并（helper 处理，继承调出批次属性） ===
-                await StockBatchTransferHelper.MergeReceiveBatchesAsync(
-                    _dbContext, tenantId, transfer.ToStoreId, item.ProductId, deductions, now, tenantCode);
+                // === 3. 调入门店：批次合并（批次号在调入门店重新生成，不沿用调出门店批次号） ===
+                // 使用调入门店的 Product.Id（按 MasterId 映射），确保批次归属调入门店档案
+                var received = await StockBatchTransferHelper.MergeReceiveBatchesAsync(
+                    _dbContext, tenantId, transfer.ToStoreId, toProductId, deductions, now, tenantCode, batchCountGenerated);
+                batchCountGenerated += received.Count;
 
                 // 读取/新建调入门店 Inventory 汇总（用于流水 BeforeQuantity/AfterQuantity 递推）
                 var toInventory = await _dbContext.Inventories
-                    .FirstOrDefaultAsync(inv => inv.ProductId == item.ProductId
+                    .FirstOrDefaultAsync(inv => inv.ProductId == toProductId
                         && inv.TenantId == tenantId
                         && inv.StoreId == transfer.ToStoreId);
                 var toRunningQty = toInventory?.Quantity ?? 0;
 
-                // === 4. 写入库流水（按扣减明细，toRunningQty 递推） ===
-                foreach (var d in deductions)
+                // === 4. 写入库流水（按收货批次，使用调入门店新生成的批次号） ===
+                foreach (var r in received)
                 {
-                    toRunningQty += d.DeductQuantity;
+                    toRunningQty += r.Quantity;
                     StockBatchTransferHelper.WriteInventoryLog(
                         _dbContext, tenantId, tenantCode, transfer.ToStoreId,
-                        item.ProductId, InventoryLogSourceTypes.TransferInbound,
-                        d.DeductQuantity, d.BatchNo, d.ExpirationDate, d.UnitPrice,
-                        toRunningQty - d.DeductQuantity, toRunningQty,
-                        transfer.Id, $"调拨入库-{transfer.TransferNo}", now);
+                        toProductId, InventoryLogSourceTypes.TransferInbound,
+                        r.Quantity, r.NewBatchNo, r.ExpirationDate, r.UnitPrice,
+                        toRunningQty - r.Quantity, toRunningQty,
+                        transfer.Id, transfer.TransferNo, operatorId, operatorName, now);
                 }
 
                 // 同步增加调入门店 Inventory 汇总表（查找或新建）
@@ -364,9 +438,8 @@ public class StockTransferAppService : IStockTransferAppService
                 {
                     toInventory = new Inventory
                     {
-                        ProductId = item.ProductId,
+                        ProductId = toProductId,
                         Quantity = item.Quantity,
-                        AlertQuantity = 0,
                         TenantId = tenantId,
                         TenantCode = tenantCode,
                         StoreId = transfer.ToStoreId,
@@ -388,12 +461,21 @@ public class StockTransferAppService : IStockTransferAppService
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            // 调出方库存减少，即时检测低库存预警
+            // 调拨后即时检测双方门店预警（双向：调出方可能触发低库存，调入方可能触发积压）
             foreach (var item in items)
             {
                 try
                 {
-                    await _alertAppService.CheckLowStockAsync(tenantId, transfer.FromStoreId, item.ProductId);
+                    await _alertAppService.CheckInventoryAlertsAsync(tenantId, transfer.FromStoreId, item.ProductId);
+                }
+                catch
+                {
+                    // 预警检测失败不影响主流程，定时任务会兜底
+                }
+
+                try
+                {
+                    await _alertAppService.CheckInventoryAlertsAsync(tenantId, transfer.ToStoreId, item.ProductId);
                 }
                 catch
                 {
@@ -421,7 +503,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto> CancelAsync(long id, string? reason)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
@@ -480,13 +562,13 @@ public class StockTransferAppService : IStockTransferAppService
     }
 
     /// <summary>
-    /// 获取调出门店的库存商品选项（仅返回 Stock > 0 的商品，排除样品/赠品）
+    /// 获取调出门店的库存商品选项（仅返回 Stock > 0 的商品，含正品/样品/赠品）
     /// 左联 Inventory 以过滤有库存的商品；用 fromStoreId 替代 _currentUser.StoreId 实现跨门店查询
     /// </summary>
     public async Task<ApiResponseDto<List<StockTransferProductOptionDto>>> GetFromStoreProductsAsync(long fromStoreId)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<StockTransferProductOptionDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<StockTransferProductOptionDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var accessCheck = await ValidateFromStoreAccessAsync(fromStoreId);
         if (accessCheck != null)
@@ -499,15 +581,16 @@ public class StockTransferAppService : IStockTransferAppService
                                  .Where(i => i.ProductId == p.Id && i.TenantId == tenantId && i.StoreId == fromStoreId)
                                  .DefaultIfEmpty()
                              where p.TenantId == tenantId
-                                 && p.Type != 4 && p.Type != 5
+                                 && p.Master != null
                                  && !p.IsDeleted
                                  && i != null && i.Quantity > 0
                              select new StockTransferProductOptionDto
                              {
                                  Id = p.Id,
-                                 Name = p.Name,
-                                 Code = p.Code,
-                                 Unit = p.Unit,
+                                 Name = p.Master.Name,
+                                 Code = p.Master.Code,
+                                 Type = p.Master.Type,
+                                 Unit = p.Master.Unit,
                                  Stock = i.Quantity
                              }).ToListAsync();
 
@@ -521,7 +604,7 @@ public class StockTransferAppService : IStockTransferAppService
     public async Task<ApiResponseDto<List<StockTransferBatchOptionDto>>> GetFromStoreProductBatchesAsync(long fromStoreId, long productId)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<StockTransferBatchOptionDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<StockTransferBatchOptionDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var accessCheck = await ValidateFromStoreAccessAsync(fromStoreId);
         if (accessCheck != null)

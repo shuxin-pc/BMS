@@ -5,8 +5,8 @@
 
 /**
  * 技师状态
- * - 0: 禁用
- * - 1: 启用
+ * - 1: 在岗
+ * - 2: 休息
  */
 export type TechnicianStatus = number
 
@@ -26,21 +26,14 @@ export type Gender = number
 export type TechnicianSource = 1 | 2
 
 /**
- * 技师职级（后端 DTO 无此字段，保留供前端使用）
- * - 1: 初级
- * - 2: 中级
- * - 3: 高级
- * - 4: 总监
- */
-export type TechnicianLevel = number
-
-/**
  * 技师信息
  * 对齐后端 TechnicianDto
  */
 export interface Technician {
   /** 技师ID */
   id: number
+  /** 技师归属租户ID（用于判断当前租户是否可编辑/删除） */
+  tenantId?: number
   /** 技师姓名 */
   name: string
   /** 手机号 */
@@ -53,7 +46,7 @@ export interface Technician {
   skillCategoryNames?: string[]
   /** 头像URL */
   avatarUrl?: string
-  /** 状态（0:禁用 1:启用） */
+  /** 状态（1:在岗 2:休息） */
   status: TechnicianStatus
   /** 技师来源（1:商家技师 2:平台技师） */
   source: TechnicianSource
@@ -63,18 +56,6 @@ export interface Technician {
   createdAt: string
   /** 更新时间 */
   updatedAt?: string
-
-  // ---- 以下字段后端 DTO 不返回，保留为可选供前端页面使用 ----
-  /** @deprecated 后端无此字段 */
-  jobNumber?: string
-  /** @deprecated 使用 skillTags 替代（后端为字符串） */
-  skills?: string[]
-  /** @deprecated 后端无此字段 */
-  serviceItems?: string
-  /** @deprecated 后端无此字段 */
-  level?: number
-  /** @deprecated 后端无此字段 */
-  hireDate?: string
 }
 
 /**
@@ -86,7 +67,7 @@ export interface TechnicianQuery {
   name?: string
   /** 手机号（模糊匹配） */
   phone?: string
-  /** 状态筛选（0:禁用 1:启用） */
+  /** 状态筛选（1:在岗 2:休息） */
   status?: TechnicianStatus
   /** 技师来源（1:商家技师 2:平台技师） */
   source?: number
@@ -94,10 +75,6 @@ export interface TechnicianQuery {
   pageIndex?: number
   /** 每页条数 */
   pageSize?: number
-
-  // ---- 以下参数后端不支持，保留但不会传递 ----
-  /** @deprecated 后端无此筛选 */
-  level?: number
 }
 
 /**
@@ -116,22 +93,10 @@ export interface TechnicianCreate {
   skillCategoryIds?: number[]
   /** 头像URL */
   avatarUrl?: string
-  /** 状态（0:禁用 1:启用） */
+  /** 状态（1:在岗 2:休息） */
   status: TechnicianStatus
   /** 备注 */
   remark?: string
-
-  // ---- 以下字段后端不支持，保留为可选供前端页面使用 ----
-  /** @deprecated 后端无此字段 */
-  jobNumber?: string
-  /** @deprecated 使用 skillTags 替代 */
-  skills?: string[]
-  /** @deprecated 后端无此字段 */
-  serviceItems?: string
-  /** @deprecated 后端无此字段 */
-  level?: number
-  /** @deprecated 后端无此字段 */
-  hireDate?: string
 }
 
 /**
@@ -247,6 +212,25 @@ export interface TechnicianStatReport {
   pageIndex: number
   /** 每页条数 */
   pageSize: number
+}
+
+/**
+ * 技师可服务项目条目（技师页展示擅长项目，双向匹配展示用）
+ * 对齐后端 TechnicianServiceItemDto
+ */
+export interface TechnicianServiceItem {
+  /** 服务项目子表ID（ServiceProduct.Id） */
+  serviceProductId: number
+  /** 商品主档ID（ProductMaster.Id） */
+  productId: number
+  /** 服务项目名称（商品主档名称） */
+  name: string
+  /** 服务时长（分钟） */
+  duration?: number
+  /** 该服务项目在门店配置的适用技能分类ID列表 */
+  skillCategoryIds: number[]
+  /** 该服务项目在门店配置的适用技能分类名称列表 */
+  skillCategoryNames: string[]
 }
 
 /**

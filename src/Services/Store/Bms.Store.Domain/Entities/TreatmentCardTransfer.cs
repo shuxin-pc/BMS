@@ -4,18 +4,8 @@ namespace Bms.Store.Domain.Entities;
 /// 疗程卡转让记录
 /// 记录疗程卡在租户内的转让操作（MVP 支持租户内转让）
 /// </summary>
-public class TreatmentCardTransfer : StoreTenantEntityBase
+public class TreatmentCardTransfer : StoreBusinessEntityBase
 {
-    /// <summary>
-    /// 操作门店ID（可空，疗程卡跨店通用）
-    /// </summary>
-    public long? StoreId { get; set; }
-
-    /// <summary>
-    /// 操作门店编码
-    /// </summary>
-    public string? StoreCode { get; set; }
-
     /// <summary>
     /// 疗程卡销售记录ID
     /// </summary>
@@ -45,6 +35,12 @@ public class TreatmentCardTransfer : StoreTenantEntityBase
     /// 操作员ID
     /// </summary>
     public long? OperatorId { get; set; }
+
+    /// <summary>
+    /// 操作员姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
+    /// 冗余原因：Store 与 System 为独立服务，且用户可能改名/离职，历史转让记录需保留操作当时的姓名快照
+    /// </summary>
+    public string? OperatorName { get; set; }
 
     /// <summary>
     /// 状态（1:已转让）

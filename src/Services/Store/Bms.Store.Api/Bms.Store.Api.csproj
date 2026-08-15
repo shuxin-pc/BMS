@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\BuildingBlocks\Bms.BuildingBlocks.Web\Bms.BuildingBlocks.Web.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\Bms.BuildingBlocks.MultiTenant\Bms.BuildingBlocks.MultiTenant.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\Bms.BuildingBlocks.Storage\Bms.BuildingBlocks.Storage.csproj" />
     <ProjectReference Include="..\Bms.Store.Application\Bms.Store.Application.csproj" />
     <ProjectReference Include="..\Bms.Store.Infrastructure\Bms.Store.Infrastructure.csproj" />
   </ItemGroup>

@@ -9,8 +9,11 @@ import type {
   ServiceReactionQuery,
   ServiceReactionCreate,
   ServiceComparisonPhoto,
+  ServiceComparisonPhotoItem,
   ComparisonPhotoQuery,
   ComparisonPhotoCreate,
+  ComparisonPhotoItemSave,
+  ComparisonPhotoUpdate,
   BodyDataRecord,
   BodyDataQuery,
   BodyDataCreate,
@@ -29,8 +32,11 @@ export type {
   ServiceReactionQuery,
   ServiceReactionCreate,
   ServiceComparisonPhoto,
+  ServiceComparisonPhotoItem,
   ComparisonPhotoQuery,
   ComparisonPhotoCreate,
+  ComparisonPhotoItemSave,
+  ComparisonPhotoUpdate,
   BodyDataRecord,
   BodyDataQuery,
   BodyDataCreate,
@@ -199,6 +205,42 @@ export async function createComparisonPhoto(data: ComparisonPhotoCreate): Promis
   return request<ServiceComparisonPhoto>(`/servicecomparisonphotos`, {
     method: 'POST',
     body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 更新对比照片记录
+ * 对接后端：PUT /api/store/servicecomparisonphotos/{id}
+ * @param data 照片信息（含记录 ID）
+ * @returns 更新后的照片记录
+ */
+export async function updateComparisonPhoto(data: ComparisonPhotoUpdate): Promise<ServiceComparisonPhoto> {
+  return request<ServiceComparisonPhoto>(`/servicecomparisonphotos/${data.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 删除对比照片记录
+ * 对接后端：DELETE /api/store/servicecomparisonphotos/{id}
+ * @param id 照片记录ID
+ */
+export async function deleteComparisonPhoto(id: number): Promise<void> {
+  return request<void>(`/servicecomparisonphotos/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 批量删除对比照片记录
+ * 对接后端：POST /api/store/servicecomparisonphotos/batch
+ * @param ids 照片记录ID列表
+ */
+export async function batchDeleteComparisonPhotos(ids: number[]): Promise<void> {
+  return request<void>(`/servicecomparisonphotos/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ ids })
   })
 }
 

@@ -24,6 +24,12 @@ public class ProductSupplierDto
     public string? ProductName { get; set; }
 
     /// <summary>
+    /// 商品类型（1:实物商品 2:服务商品 3:耗材 4:样品 5:赠品）
+    /// 用于采购订单按采购类型过滤商品下拉：零售商品采购->实物商品(1)，耗材采购->耗材(3)
+    /// </summary>
+    public int? ProductType { get; set; }
+
+    /// <summary>
     /// 供应商ID
     /// </summary>
     public long SupplierId { get; set; }
@@ -102,6 +108,32 @@ public class SetDefaultSupplierDto
 
     /// <summary>
     /// 供货周期（天，可选）
+    /// </summary>
+    public int? LeadTimeDays { get; set; }
+}
+
+/// <summary>
+/// 更新品项-供应商关联字段入参 DTO（仅更新参考价与供货周期，不改变默认供应商状态）
+/// </summary>
+public class UpdateProductSupplierDto
+{
+    /// <summary>
+    /// 商品ID
+    /// </summary>
+    public long ProductId { get; set; }
+
+    /// <summary>
+    /// 供应商ID
+    /// </summary>
+    public long SupplierId { get; set; }
+
+    /// <summary>
+    /// 参考采购价
+    /// </summary>
+    public decimal? ReferencePrice { get; set; }
+
+    /// <summary>
+    /// 供货周期（天）
     /// </summary>
     public int? LeadTimeDays { get; set; }
 }

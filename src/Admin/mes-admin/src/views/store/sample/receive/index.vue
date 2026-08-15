@@ -48,7 +48,7 @@
       <div class="toolbar-left">
         <el-button type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
-          新增领用
+          新增领用/派发
         </el-button>
       </div>
       <div class="toolbar-right">
@@ -74,7 +74,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="sampleName" label="样品名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="sampleName" label="样品/赠品名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="quantity" label="领用数量" width="100" align="center" />
         <el-table-column label="领用用途" width="100" align="center">
           <template #default="{ row }">
@@ -105,7 +105,7 @@
     <!-- 新增弹窗 -->
     <el-dialog
       v-model="dialogVisible"
-      title="新增领用"
+      title="新增领用/派发"
       width="560px"
       :close-on-click-modal="false"
     >
@@ -199,6 +199,22 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="关联活动" prop="activityId">
+          <el-select
+            v-model="formData.activityId"
+            placeholder="选择活动（非必填）"
+            clearable
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in activityOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
@@ -222,6 +238,8 @@ import {
   createSampleReceive,
   getAllSamples
 } from '@/api/sample'
+import { getActivityOptions } from '@/api/activity'
+import type { ActivityOption } from '@/api/activity/types'
 import { getCustomers } from '@/api/customer'
 import { getInventoryBatchList } from '@/api/inventory'
 import { useSystemConfigStore } from '@/stores/systemConfig'
@@ -264,6 +282,18 @@ const loadSampleOptions = async () => {
     sampleOptions.value = await getAllSamples()
   } catch (error) {
     sampleOptions.value = []
+  }
+}
+
+// 关联活动下拉选项（仅返回进行中活动）
+const activityOptions = ref<ActivityOption[]>([])
+
+// 加载活动下拉选项
+const loadActivityOptions = async () => {
+  try {
+    activityOptions.value = await getActivityOptions()
+  } catch (error) {
+    activityOptions.value = []
   }
 }
 
@@ -340,6 +370,7 @@ const formData = reactive({
   customerId: null as number | null,
   quantity: 1,
   purpose: 1 as number,
+  activityId: null as number | null,
   remark: ''
 })
 
@@ -398,6 +429,7 @@ const resetFormData = () => {
   formData.customerId = null
   formData.quantity = 1
   formData.purpose = 1
+  formData.activityId = null
   formData.remark = ''
   batchOptions.value = []
   customerOptions.value = []
@@ -408,6 +440,7 @@ const resetFormData = () => {
 const handleAdd = () => {
   resetFormData()
   loadSampleOptions()
+  loadActivityOptions()
   dialogVisible.value = true
 }
 
@@ -424,6 +457,7 @@ const handleSubmit = async () => {
           customerId: formData.customerId,
           quantity: formData.quantity,
           receiveTime: new Date().toISOString(),
+          activityId: formData.activityId,
           remark: formData.remark || undefined
         })
         ElMessage.success('领用成功')

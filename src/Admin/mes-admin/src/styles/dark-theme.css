@@ -605,6 +605,83 @@ body::before {
   color: #4b5563;
 }
 
+/* 弹窗内表格 - 浅色风格（覆盖 SFC scoped 暗色表格样式，与白色弹窗背景协调）
+   注意：dark-theme.css 是普通 CSS 文件，:deep() 会被浏览器忽略，必须用普通选择器。
+   通过 .el-dialog__body 增加优先级至 (0,0,4,1)，高于 SFC scoped 的 (0,0,3,1)。 */
+.el-dialog .el-dialog__body .el-table {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: #1f2937 !important;
+  --el-table-border-color: #e5e7eb !important;
+  --el-table-header-bg-color: #f3f4f6 !important;
+  --el-table-header-text-color: #4b5563 !important;
+  --el-table-row-hover-bg-color: #f9fafb !important;
+  background-color: transparent !important;
+}
+
+.el-dialog .el-dialog__body .el-table th.el-table__cell {
+  background-color: #f3f4f6 !important;
+  color: #4b5563 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.el-dialog .el-dialog__body .el-table td.el-table__cell {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.el-dialog .el-dialog__body .el-table__row {
+  background-color: #ffffff !important;
+}
+
+.el-dialog .el-dialog__body .el-table__row:hover > td.el-table__cell {
+  background-color: #f9fafb !important;
+}
+
+/* 抽屉内表格 - 浅色风格（覆盖父组件 SFC scoped 暗色表格样式，与白色抽屉背景协调）
+   父组件 inventory/index.vue 的 :deep(.el-table) 编译为 [data-v-xxx] .el-table，优先级 (0,0,2,1)；
+   此处 .el-drawer .el-drawer__body .el-table 优先级 (0,0,4,1)，高于 scoped，可覆盖。 */
+.el-drawer .el-drawer__body .el-table {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: #1f2937 !important;
+  --el-table-border-color: #e5e7eb !important;
+  --el-table-header-bg-color: #f3f4f6 !important;
+  --el-table-header-text-color: #4b5563 !important;
+  --el-table-row-hover-bg-color: #f9fafb !important;
+  background-color: transparent !important;
+}
+
+.el-drawer .el-drawer__body .el-table th.el-table__cell {
+  background-color: #f3f4f6 !important;
+  color: #4b5563 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.el-drawer .el-drawer__body .el-table td.el-table__cell {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.el-drawer .el-drawer__body .el-table__row {
+  background-color: #ffffff !important;
+}
+
+.el-drawer .el-drawer__body .el-table__row:hover > td.el-table__cell {
+  background-color: #f9fafb !important;
+}
+
+/* 弹窗内金额文本与区域标题 - 浅色风格（覆盖 SFC scoped 暗色文字，与白色弹窗背景协调）
+   SFC scoped 的 .amount-text 编译为 .amount-text[data-v-xxx]，优先级 (0,0,2,0)；
+   此处 .el-dialog__body .amount-text 优先级 (0,0,2,1)，高于 scoped，可覆盖。 */
+.el-dialog__body .amount-text {
+  color: #1f2937 !important;
+}
+
+.el-dialog__body .detail-section-title {
+  color: #1f2937 !important;
+}
+
 /* 表单样式 - 浅色弹窗 */
 :deep(.el-form-item__label) {
   color: #4b5563 !important;
@@ -633,6 +710,15 @@ body::before {
 
 :deep(.el-input-number .el-input__wrapper:hover) {
   border-color: var(--border-secondary);
+}
+
+/* 表格内数字输入框：仅对含 el-input-number 的单元格关闭 .cell 的 overflow:hidden，
+   避免 el-input-number 内部元素被裁剪后在右侧形成小点残留。
+   注意：dark-theme.css 是普通 CSS 文件，不能用 :deep()，需用普通选择器。
+   :has() 参数为类选择器，特异性 (0,1,0)，合计 (0,3,0)，高于 Element Plus 默认 .el-table .cell 的 (0,2,0)，
+   加 !important 确保覆盖 SFC scoped 样式。 */
+.el-table .cell:has(.el-input-number) {
+  overflow: visible !important;
 }
 
 /* 级联选择器 - 科技风 */

@@ -12,11 +12,6 @@ public class PurchaseOrder : StoreBusinessEntityBase
     public string OrderNo { get; set; } = string.Empty;
 
     /// <summary>
-    /// 供应商ID
-    /// </summary>
-    public long SupplierId { get; set; }
-
-    /// <summary>
     /// 采购日期
     /// </summary>
     public DateTime OrderDate { get; set; }
@@ -33,7 +28,7 @@ public class PurchaseOrder : StoreBusinessEntityBase
     public decimal RefundedAmount { get; set; }
 
     /// <summary>
-    /// 状态（1:待审核 2:已审核 3:已入库 4:已取消）
+    /// 状态（1:已入库，采购单创建即入库，单据不可变）
     /// </summary>
     public int Status { get; set; } = 1;
 
@@ -48,14 +43,14 @@ public class PurchaseOrder : StoreBusinessEntityBase
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作员姓名（冗余存储，写入时取 ICurrentUser.RealName ?? UserName）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 备注
     /// </summary>
     public string? Remark { get; set; }
-
-    /// <summary>
-    /// 导航属性：供应商
-    /// </summary>
-    public Supplier? Supplier { get; set; }
 
     /// <summary>
     /// 导航属性：采购单明细列表（级联创建，入库时联动库存）

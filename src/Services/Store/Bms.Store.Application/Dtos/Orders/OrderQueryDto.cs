@@ -18,6 +18,16 @@ public class OrderQueryDto : PagedRequestDto
     public long? CustomerId { get; set; }
 
     /// <summary>
+    /// 客户姓名（模糊匹配，散客订单不匹配）
+    /// </summary>
+    public string? CustomerName { get; set; }
+
+    /// <summary>
+    /// 客户手机号（模糊匹配）
+    /// </summary>
+    public string? Phone { get; set; }
+
+    /// <summary>
     /// 订单类型（1:零售 2:服务 3:疗程卡核销 4:储值消费）
     /// </summary>
     public int? OrderType { get; set; }

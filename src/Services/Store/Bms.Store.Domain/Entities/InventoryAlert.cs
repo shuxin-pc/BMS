@@ -31,6 +31,11 @@ public class InventoryAlert : StoreBusinessEntityBase
     public DateTime? ExpirationDate { get; set; }
 
     /// <summary>
+    /// 批次ID（仅效期预警填写，低库存/积压预警为 null）
+    /// </summary>
+    public long? BatchId { get; set; }
+
+    /// <summary>
     /// 是否已处理
     /// </summary>
     public bool IsProcessed { get; set; }

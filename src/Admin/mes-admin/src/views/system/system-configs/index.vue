@@ -319,11 +319,11 @@ const formData = reactive({
 const { autoSort, calculateAutoSort } = useSortAutoFill(
   async (options) => {
     const effectiveTenantId = isSuperAdmin.value
-      ? (searchForm.tenantId || 1)
+      ? Number(searchForm.tenantId || 1)
       : undefined
     const res = await getSystemConfigs({
-      configGroup: options?.group,
-      tenantId: options?.tenantId ?? effectiveTenantId,
+      configGroup: options?.group ?? undefined,
+      tenantId: Number(options?.tenantId) || effectiveTenantId,
       pageIndex: 1,
       pageSize: 9999
     })
@@ -370,7 +370,7 @@ const loadData = async () => {
     // 超级管理员：使用选择的租户（非空则用选择的，否则默认平台租户）
     // 非超级管理员：不传 tenantId，后端使用当前登录用户的租户
     const effectiveTenantId = isSuperAdmin.value
-      ? (searchForm.tenantId || 1)
+      ? Number(searchForm.tenantId || 1)
       : undefined
     // 优先使用搜索框的分组筛选，如果没有则使用页签筛选
     const groupFilter = searchForm.configGroup || activeTab.value || undefined
@@ -397,7 +397,7 @@ const loadGroupCounts = async () => {
     const counts: Record<string, number> = {}
     // 超级管理员：使用选择的租户；非超级管理员：不传（后端使用当前用户租户）
     const effectiveTenantId = isSuperAdmin.value
-      ? (searchForm.tenantId || 1)
+      ? Number(searchForm.tenantId || 1)
       : undefined
 
     for (const group of groups) {

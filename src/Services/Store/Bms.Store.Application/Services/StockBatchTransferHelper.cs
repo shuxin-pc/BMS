@@ -17,6 +17,15 @@ public record BatchDeduction(
     decimal DeductQuantity);
 
 /// <summary>
+/// 调入门店收货批次信息（helper 返回值，供调用方写入库流水）
+/// </summary>
+public record ReceivedBatch(
+    string NewBatchNo,
+    decimal Quantity,
+    decimal UnitPrice,
+    DateTime? ExpirationDate);
+
+/// <summary>
 /// 库存批次调拨公共逻辑
 /// 抽取自 StockTransferAppService.ExecuteAsync，正品调拨与样品赠品调拨共用
 /// 职责边界：只处理批次级操作（扣减/合并/日志写入）；Inventory 汇总表扣减/新建、
@@ -96,36 +105,46 @@ public static class StockBatchTransferHelper
     }
 
     /// <summary>
-    /// 调入门店按扣减明细新建或累加批次，继承调出批次属性
-    /// 继承字段：BatchNo/UnitPrice/ProductionDate/ShelfLifeDays/ExpirationDate/PurchaseDate
+    /// 调入门店按扣减明细新建或累加批次
+    /// 批次号按 BatchNoGenerator 在调入门店重新生成（不沿用调出门店批次号），
+    /// 其余属性（UnitPrice/ProductionDate/ShelfLifeDays/ExpirationDate）继承调出批次；
+    /// PurchaseDate 用调拨入库日（与批次号日期前缀保持一致，符合采购入库惯例）。
     /// </summary>
-    public static async Task MergeReceiveBatchesAsync(
+    /// <param name="alreadyGeneratedCount">本次 ExecuteAsync 内已生成的批次数，跨 items 累加避免事务内 CountAsync 漏算未落库批次导致序号重复</param>
+    /// <returns>每个扣减批次对应的新批次号与流水所需字段，供调用方写入库流水</returns>
+    public static async Task<List<ReceivedBatch>> MergeReceiveBatchesAsync(
         StoreDbContext dbContext, long tenantId, long toStoreId,
         long productId, List<BatchDeduction> deductions, DateTime now,
-        string tenantCode)
+        string tenantCode, int alreadyGeneratedCount)
     {
-        foreach (var d in deductions)
+        var result = new List<ReceivedBatch>();
+        for (var i = 0; i < deductions.Count; i++)
         {
+            var d = deductions[i];
+            // 调入门店按当天重新生成批次号，alreadyGeneratedCount + i 避免事务内未落库批次导致序号重复
+            var newBatchNo = await BatchNoGenerator.GenerateAsync(
+                dbContext, tenantId, toStoreId, now, alreadyGeneratedCount + i);
+
             var toBatch = await dbContext.InventoryBatches
                 .FirstOrDefaultAsync(b => b.ProductId == productId
-                    && b.BatchNo == d.BatchNo
+                    && b.BatchNo == newBatchNo
                     && b.TenantId == tenantId
                     && b.StoreId == toStoreId
                     && b.Status == 1);
 
             if (toBatch == null)
             {
-                // 新建批次，继承调出批次属性
+                // 新建批次：批次号重新生成，其余属性继承调出批次；PurchaseDate 用入库日保持与批次号前缀一致
                 dbContext.InventoryBatches.Add(new InventoryBatch
                 {
                     ProductId = productId,
-                    BatchNo = d.BatchNo,
+                    BatchNo = newBatchNo,
                     Quantity = d.DeductQuantity,
                     UnitPrice = d.UnitPrice,
                     ProductionDate = d.ProductionDate,
                     ShelfLifeDays = d.ShelfLifeDays,
                     ExpirationDate = d.ExpirationDate,
-                    PurchaseDate = d.PurchaseDate,
+                    PurchaseDate = now,
                     Status = 1,
                     TenantId = tenantId,
                     TenantCode = tenantCode,
@@ -135,11 +154,14 @@ public static class StockBatchTransferHelper
             }
             else
             {
-                // 累加到现有同批次
+                // 防御性兜底：极端情况下批次号撞号（如手工创建同号批次），累加到现有批次
                 toBatch.Quantity += d.DeductQuantity;
                 toBatch.UpdatedTime = now;
             }
+
+            result.Add(new ReceivedBatch(newBatchNo, d.DeductQuantity, d.UnitPrice, d.ExpirationDate));
         }
+        return result;
     }
 
     /// <summary>
@@ -150,7 +172,8 @@ public static class StockBatchTransferHelper
         StoreDbContext dbContext, long tenantId, string tenantCode, long storeId,
         long productId, int sourceType, decimal quantity, string batchNo,
         DateTime? expirationDate, decimal unitPrice,
-        decimal beforeQty, decimal afterQty, long relatedId, string remark, DateTime now)
+        decimal beforeQty, decimal afterQty, long relatedId, string remark,
+        long? operatorId, string? operatorName, DateTime now)
     {
         dbContext.InventoryLogs.Add(new InventoryLog
         {
@@ -165,6 +188,8 @@ public static class StockBatchTransferHelper
             ExpirationDate = expirationDate,
             RelatedId = relatedId,
             Remark = remark,
+            OperatorId = operatorId,
+            OperatorName = operatorName,
             TenantId = tenantId,
             TenantCode = tenantCode,
             StoreId = storeId,

@@ -179,11 +179,9 @@
   import { getOrganizations, createOrganization, updateOrganization, deleteOrganization, getUserList, getTenants } from '@/api/system'
   import type { Organization, OrganizationCreate, OrganizationUpdate, User, Tenant } from '@/api/system/types'
   import { useUserStore } from '@/stores/user'
-  import { useSystemConfigStore } from '@/stores/systemConfig'
   import { useSortAutoFill } from '@/composables/useSortAutoFill'
 
   const userStore = useUserStore()
-  const systemConfigStore = useSystemConfigStore()
   const isSuperAdmin = computed(() => userStore.isSuperAdmin)
   const currentTenantId = computed(() => userStore.currentTenantId)
 
@@ -283,21 +281,6 @@
     loadUsers()
     loadTenants()
   })
-
-  // 获取当前行的实际层级（从根节点计算）
-  const getRowLevel = (row: Organization): number => {
-    const findLevel = (orgs: Organization[], target: Organization, currentLevel: number): number => {
-      for (const org of orgs) {
-        if (org.id === target.id) return currentLevel
-        if (org.children && org.children.length > 0) {
-          const found = findLevel(org.children, target, currentLevel + 1)
-          if (found >= 0) return found
-        }
-      }
-      return -1
-    }
-    return findLevel(tableData.value, row, 0)
-  }
 
   // 组织树选项（用于级联选择）- 使用表单专用组织列表
   const orgTreeOptions = computed(() => {
@@ -446,7 +429,7 @@
   }
 
   // 组织类型映射：数字 -> 字符串
-  const typeMapReverse: Record<number, string> = {
+  const typeMapReverse: Record<number, 'company' | 'department' | 'group'> = {
     1: 'company',
     2: 'department',
     3: 'group'
@@ -478,9 +461,9 @@
     if (!parentType && !row) {
       // 顶级组织默认类型为公司
       formData.type = 'company'
-    } else if (parentType === 1 || parentType === 'company') {
+    } else if (parentType === 1) {
       formData.type = 'department'
-    } else if (parentType === 2 || parentType === 'department') {
+    } else if (parentType === 2) {
       formData.type = 'group'
     } else {
       formData.type = 'department'
@@ -517,10 +500,29 @@
     dialogVisible.value = true
   }
 
+  // 递归查找指定 id 的组织节点（用字符串比较避免大数精度丢失）
+  const findNode = (nodes: Organization[], id: any): Organization | null => {
+    const targetId = String(id)
+    for (const node of nodes) {
+      if (String(node.id) === targetId) return node
+      if (node.children) {
+        const found = findNode(node.children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
   // 删除
   const handleDelete = async (row: Organization) => {
+    // 从原始数据中查找完整节点，避免搜索过滤导致 children 不完整
+    const fullNode = findNode(tableData.value, row.id)
+    if (fullNode?.children && fullNode.children.length > 0) {
+      ElMessage.warning(`组织"${row.name}"包含 ${fullNode.children.length} 个子组织，请先删除子组织后再删除`)
+      return
+    }
     try {
-      await ElMessageBox.confirm(`确定要删除组织 "${row.name}" 吗？`, '提示', {
+      await ElMessageBox.confirm(`确定要删除组织 "${row.name}" 吗？此操作不可恢复！`, '提示', {
         type: 'warning'
       })
       await deleteOrganization(row.id)
@@ -528,7 +530,7 @@
       loadData()
     } catch (error: any) {
       if (error !== 'cancel') {
-        ElMessage.error('删除失败')
+        ElMessage.error(error.message || '删除失败')
       }
     }
   }

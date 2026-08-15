@@ -11,12 +11,7 @@ public class StoredValueRuleCreateDto
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// 规则编码
-    /// </summary>
-    public string Code { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 充值金额
+    /// 充值金额（同租户内唯一）
     /// </summary>
     public decimal Amount { get; set; }
 
@@ -26,9 +21,14 @@ public class StoredValueRuleCreateDto
     public decimal GiftAmount { get; set; }
 
     /// <summary>
-    /// 赠送比例
+    /// 生效日期（含当天）
     /// </summary>
-    public decimal? GiftRate { get; set; }
+    public DateTime StartDate { get; set; }
+
+    /// <summary>
+    /// 失效日期（含当天，null 表示长期有效）
+    /// </summary>
+    public DateTime? EndDate { get; set; }
 
     /// <summary>
     /// 是否启用

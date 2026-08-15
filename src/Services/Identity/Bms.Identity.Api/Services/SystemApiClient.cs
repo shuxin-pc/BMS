@@ -80,6 +80,56 @@ public class SystemApiClient : ISystemApiClient
         }
     }
 
+    /// <summary>
+    /// 刷新令牌时获取用户最新状态
+    /// </summary>
+    public async Task<ValidateUserResponse> GetUserForRefreshAsync(long userId)
+    {
+        try
+        {
+            _logger.LogInformation("SystemApiClient.GetUserForRefreshAsync 被调用，用户ID：{UserId}", userId);
+
+            var request = new RefreshUserInfoRequest { UserId = userId };
+            var json = JsonSerializer.Serialize(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var requestUri = "api/internal/auth/refresh-user-info";
+
+            var response = await _httpClient.PostAsync(requestUri, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("出现错误：刷新令牌获取用户信息失败，状态码：{StatusCode}", response.StatusCode);
+                return new ValidateUserResponse
+                {
+                    IsValid = false,
+                    ErrorMessage = $"获取用户信息失败: {response.StatusCode}"
+                };
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<ValidateUserResponse>(responseJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
+            });
+
+            return result ?? new ValidateUserResponse
+            {
+                IsValid = false,
+                ErrorMessage = "响应解析失败"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "出现错误：刷新令牌获取用户信息时发生异常");
+            return new ValidateUserResponse
+            {
+                IsValid = false,
+                ErrorMessage = $"获取用户信息异常: {ex.Message}"
+            };
+        }
+    }
+
     public async Task RecordLoginAuditAsync(LoginAuditRequest request)
     {
         try

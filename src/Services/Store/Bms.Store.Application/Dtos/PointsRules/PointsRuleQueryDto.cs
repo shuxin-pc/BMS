@@ -7,6 +7,5 @@ namespace Bms.Store.Application.Dtos.PointsRules;
 /// </summary>
 public class PointsRuleQueryDto : PagedRequestDto
 {
-    public string? Name { get; set; }
     public int? Status { get; set; }
 }

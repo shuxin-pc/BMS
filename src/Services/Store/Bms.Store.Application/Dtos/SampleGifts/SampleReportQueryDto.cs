@@ -30,7 +30,7 @@ public class SampleReportQueryDto : PagedRequestDto
 
 /// <summary>
 /// 样品/赠品按活动维度统计报表查询参数（P-SG-04）
-/// 数据源：SampleGiftOut（赠品出库）
+/// R5：数据源从 SampleGiftOut 迁移到 InventoryLogs（SourceType 9=样品领用出库/10=赠品活动出库）
 /// </summary>
 public class SampleActivityReportQueryDto : PagedRequestDto
 {
@@ -45,12 +45,12 @@ public class SampleActivityReportQueryDto : PagedRequestDto
     public long? ProductId { get; set; }
 
     /// <summary>
-    /// 开始日期（按 OutTime 过滤）
+    /// 开始日期（按 InventoryLog.CreatedTime 过滤）
     /// </summary>
     public DateTime? StartDate { get; set; }
 
     /// <summary>
-    /// 结束日期（按 OutTime 过滤）
+    /// 结束日期（按 InventoryLog.CreatedTime 过滤）
     /// </summary>
     public DateTime? EndDate { get; set; }
 }

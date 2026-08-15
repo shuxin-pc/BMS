@@ -58,6 +58,11 @@ public class CurrentUser : ICurrentUser
         }
     }
 
+    /// <summary>
+    /// 当前门店编码（由 StoreContextMiddleware 查询 Stores 表并写入 HttpContext.Items）
+    /// </summary>
+    public string? StoreCode => _httpContextAccessor.HttpContext?.Items["StoreCode"] as string;
+
     public bool IsSuperAdmin => User?.FindAll(ClaimTypes.Role)
         .Select(c => c.Value)
         .Contains("super_admin") ?? false;

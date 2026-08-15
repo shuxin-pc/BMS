@@ -11,6 +11,11 @@ public class PurchaseOrderItem : StoreBusinessEntityBase
     public long PurchaseOrderId { get; set; }
 
     /// <summary>
+    /// 供应商ID（明细级，支持一个订单多供应商）
+    /// </summary>
+    public long SupplierId { get; set; }
+
+    /// <summary>
     /// 商品ID
     /// </summary>
     public long ProductId { get; set; }
@@ -61,6 +66,11 @@ public class PurchaseOrderItem : StoreBusinessEntityBase
     /// 导航属性：采购单
     /// </summary>
     public PurchaseOrder? PurchaseOrder { get; set; }
+
+    /// <summary>
+    /// 导航属性：供应商
+    /// </summary>
+    public Supplier? Supplier { get; set; }
 
     /// <summary>
     /// 导航属性：商品

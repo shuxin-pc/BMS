@@ -7,5 +7,4 @@ public class InventoryCreateDto
 {
     public long ProductId { get; set; }
     public decimal Quantity { get; set; }
-    public decimal AlertQuantity { get; set; }
 }

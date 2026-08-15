@@ -15,4 +15,9 @@ public class SampleGiftReceiveCreateDto
     public DateTime ReceiveTime { get; set; }
     public long? OperatorId { get; set; }
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 关联活动ID（可选，用于活动维度归因统计）
+    /// </summary>
+    public long? ActivityId { get; set; }
 }

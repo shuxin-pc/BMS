@@ -313,20 +313,6 @@ const openIconPicker = () => {
   iconPickerVisible.value = true
 }
 
-// 计算菜单层级深度
-const getMenuLevel = (menu: MenuType | null): number => {
-  if (!menu) return -1
-
-  const getDepth = (m: MenuType, currentLevel: number): number => {
-    if (!m.children || m.children.length === 0) {
-      return currentLevel
-    }
-    return Math.max(...m.children.map(child => getDepth(child, currentLevel + 1)))
-  }
-
-  return getDepth(menu, 0)
-}
-
 // 获取当前行的实际层级（从根节点计算）
 const getRowLevel = (row: MenuType): number => {
   // 通过查找 row 在树中的位置来计算层级
@@ -391,10 +377,29 @@ const handleEdit = (row: MenuType) => {
   dialogVisible.value = true
 }
 
+// 递归查找指定 id 的菜单节点（用字符串比较避免大数精度丢失）
+const findNode = (nodes: MenuType[], id: any): MenuType | null => {
+  const targetId = String(id)
+  for (const node of nodes) {
+    if (String(node.id) === targetId) return node
+    if (node.children) {
+      const found = findNode(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 // 删除
 const handleDelete = async (row: MenuType) => {
+  // 从原始数据中查找完整节点，避免搜索过滤导致 children 不完整
+  const fullNode = findNode(tableData.value, row.id)
+  if (fullNode?.children && fullNode.children.length > 0) {
+    ElMessage.warning(`菜单"${row.name}"包含 ${fullNode.children.length} 个子菜单，请先删除子菜单后再删除`)
+    return
+  }
   try {
-    await ElMessageBox.confirm(`确定要删除菜单 "${row.name}" 吗？`, '提示', {
+    await ElMessageBox.confirm(`确定要删除菜单 "${row.name}" 吗？此操作不可恢复！`, '提示', {
       type: 'warning'
     })
     await deleteMenu(row.id)
@@ -402,7 +407,7 @@ const handleDelete = async (row: MenuType) => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(error.message || '删除失败')
     }
   }
 }

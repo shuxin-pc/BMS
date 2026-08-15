@@ -23,4 +23,8 @@
     <ProjectReference Include="..\Bms.System.Domain\Bms.System.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="SeedData\TestSeedData\*.json" />
+  </ItemGroup>
+
 </Project>

@@ -10,6 +10,7 @@ import type {
   MessageReadStats,
   PagedResponse
 } from './types'
+import { handleUnauthorized } from '../shared/auth'
 
 const API_BASE = '/api/system/messages'
 const getToken = () => localStorage.getItem('token')
@@ -41,6 +42,10 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
       errorMessage = result.message
     }
     if (result.code != 200) {
+      // 401 未授权：token 失效或用户被禁用，跳转登录页
+      if (response.status === 401) {
+        handleUnauthorized(errorMessage)
+      }
       throw new Error(errorMessage || '请求失败')
     }
     return result.data

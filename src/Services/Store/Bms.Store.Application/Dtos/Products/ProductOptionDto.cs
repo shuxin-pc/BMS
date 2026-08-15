@@ -16,4 +16,10 @@ public class ProductOptionDto
 
     /// <summary>单位</summary>
     public string? Unit { get; set; }
+
+    /// <summary>
+    /// 商品类型（1:实物商品 2:服务商品 3:耗材 4:样品 5:赠品）
+    /// 用于前端按场景过滤（如出库需排除服务商品）
+    /// </summary>
+    public int Type { get; set; }
 }

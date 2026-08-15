@@ -79,4 +79,20 @@ public class StockTransfersController : ControllerBase
     [HttpPost("{id:long}/cancel")]
     public async Task<ApiResponseDto> Cancel(long id, [FromQuery] string? reason)
         => await _appService.CancelAsync(id, reason);
+
+    /// <summary>
+    /// 获取调出门店的库存商品选项（仅返回有库存的商品，排除样品/赠品）
+    /// 用于新增调拨时商品下拉选择，支持跨门店查询
+    /// </summary>
+    [HttpGet("from-store-products")]
+    public async Task<ApiResponseDto<List<StockTransferProductOptionDto>>> GetFromStoreProducts([FromQuery] long fromStoreId)
+        => await _appService.GetFromStoreProductsAsync(fromStoreId);
+
+    /// <summary>
+    /// 获取调出门店指定商品的在库批次列表（按过期日期升序，FEFO）
+    /// 用于手动指定批次模式下的批次下拉选择
+    /// </summary>
+    [HttpGet("from-store-products/{productId:long}/batches")]
+    public async Task<ApiResponseDto<List<StockTransferBatchOptionDto>>> GetFromStoreProductBatches(long productId, [FromQuery] long fromStoreId)
+        => await _appService.GetFromStoreProductBatchesAsync(fromStoreId, productId);
 }

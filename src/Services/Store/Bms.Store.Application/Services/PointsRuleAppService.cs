@@ -11,6 +11,7 @@ namespace Bms.Store.Application.Services;
 
 /// <summary>
 /// 积分规则应用服务实现
+/// 门店隔离：规则按门店隔离，每个门店维护自己的积分规则，不回退租户级
 /// </summary>
 public class PointsRuleAppService : IPointsRuleAppService
 {
@@ -32,19 +33,20 @@ public class PointsRuleAppService : IPointsRuleAppService
     }
 
     /// <summary>
-    /// 获取积分规则分页列表
+    /// 获取积分规则分页列表（按当前门店隔离）
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<PointsRuleDto>>> GetPagedListAsync(PointsRuleQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<PointsRuleDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<PointsRuleDto>>.Fail("登录状态异常，请重新登录", 401);
+        if (!_currentUser.StoreId.HasValue)
+            return ApiResponseDto<PagedResponseDto<PointsRuleDto>>.Fail("无法确定当前门店", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var queryable = _dbContext.PointsRules
-            .Where(p => !p.IsDeleted && p.TenantId == tenantId);
+            .Where(p => !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
 
-        if (!string.IsNullOrWhiteSpace(query.Name))
-            queryable = queryable.Where(p => p.Name.Contains(query.Name));
         if (query.Status.HasValue)
             queryable = queryable.Where(p => p.Status == query.Status.Value);
 
@@ -66,27 +68,31 @@ public class PointsRuleAppService : IPointsRuleAppService
     }
 
     /// <summary>
-    /// 根据ID获取积分规则详情
+    /// 根据ID获取积分规则详情（按当前门店隔离）
     /// </summary>
     public async Task<ApiResponseDto<PointsRuleDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PointsRuleDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PointsRuleDto?>.Fail("登录状态异常，请重新登录", 401);
+        if (!_currentUser.StoreId.HasValue)
+            return ApiResponseDto<PointsRuleDto?>.Fail("无法确定当前门店", 401);
 
         var entity = await _dbContext.PointsRules
-            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value && p.StoreId == _currentUser.StoreId.Value);
         if (entity == null)
             return ApiResponseDto<PointsRuleDto?>.Fail("积分规则不存在", 404);
         return ApiResponseDto<PointsRuleDto?>.Ok(entity.Adapt<PointsRuleDto>());
     }
 
     /// <summary>
-    /// 创建积分规则
+    /// 创建积分规则（归属当前门店）
     /// </summary>
     public async Task<ApiResponseDto<PointsRuleDto>> CreateAsync(PointsRuleCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PointsRuleDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PointsRuleDto>.Fail("登录状态异常，请重新登录", 401);
+        if (!_currentUser.StoreId.HasValue)
+            return ApiResponseDto<PointsRuleDto>.Fail("无法确定当前门店", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -96,6 +102,8 @@ public class PointsRuleAppService : IPointsRuleAppService
         var entity = dto.Adapt<PointsRuleEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = _currentUser.StoreId.Value;
+        entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.PointsRules.Add(entity);
@@ -104,30 +112,32 @@ public class PointsRuleAppService : IPointsRuleAppService
     }
 
     /// <summary>
-    /// 更新积分规则
+    /// 更新积分规则（按当前门店隔离）
     /// </summary>
     public async Task<ApiResponseDto<PointsRuleDto>> UpdateAsync(PointsRuleUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PointsRuleDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PointsRuleDto>.Fail("登录状态异常，请重新登录", 401);
+        if (!_currentUser.StoreId.HasValue)
+            return ApiResponseDto<PointsRuleDto>.Fail("无法确定当前门店", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<PointsRuleDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
         var entity = await _dbContext.PointsRules
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == dto.Id && !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<PointsRuleDto>.Fail("积分规则不存在", 404);
 
-        entity.Name = dto.Name;
         entity.PointsRate = dto.PointsRate;
         entity.DeductRate = dto.DeductRate;
         entity.MaxDeductAmount = dto.MaxDeductAmount;
         entity.PointsValidityDays = dto.PointsValidityDays;
         entity.BirthdayDouble = dto.BirthdayDouble;
-        entity.MinPointsThreshold = dto.MinPointsThreshold;
+        entity.MinAmountThreshold = dto.MinAmountThreshold;
         entity.Status = dto.Status;
         entity.Remark = dto.Remark;
         entity.UpdatedTime = DateTime.Now;
@@ -137,15 +147,17 @@ public class PointsRuleAppService : IPointsRuleAppService
     }
 
     /// <summary>
-    /// 删除积分规则（软删除）
+    /// 删除积分规则（软删除，按当前门店隔离）
     /// </summary>
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
+        if (!_currentUser.StoreId.HasValue)
+            return ApiResponseDto.Fail("无法确定当前门店", 401);
 
         var entity = await _dbContext.PointsRules
-            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value && p.StoreId == _currentUser.StoreId.Value);
         if (entity == null)
             return ApiResponseDto.Fail("积分规则不存在", 404);
 
@@ -156,17 +168,19 @@ public class PointsRuleAppService : IPointsRuleAppService
     }
 
     /// <summary>
-    /// 批量删除积分规则（软删除）
+    /// 批量删除积分规则（软删除，按当前门店隔离）
     /// </summary>
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
+        if (!_currentUser.StoreId.HasValue)
+            return ApiResponseDto.Fail("无法确定当前门店", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.PointsRules
-            .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value)
+            .Where(p => ids.Contains(p.Id) && !p.IsDeleted && p.TenantId == _currentUser.TenantId.Value && p.StoreId == _currentUser.StoreId.Value)
             .ToListAsync();
 
         foreach (var entity in entities)

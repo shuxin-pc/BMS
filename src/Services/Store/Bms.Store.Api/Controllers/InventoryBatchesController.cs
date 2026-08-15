@@ -74,13 +74,6 @@ public class InventoryBatchesController : ControllerBase
         => await _appService.GetExpiryListAsync(query);
 
     /// <summary>
-    /// 获取效期预警列表（即将过期或已过期的商品）
-    /// </summary>
-    [HttpGet("expiryAlerts")]
-    public async Task<ApiResponseDto<PagedResponseDto<ExpiryDto>>> GetExpiryAlerts([FromQuery] ExpiryQueryDto query)
-        => await _appService.GetExpiryAlertsAsync(query);
-
-    /// <summary>
     /// 按商品ID查询可用效期选项列表（用于 POS 效期选择）。
     /// 返回该商品所有在库且有余量的效期，按到期日期升序排列，近效期优先。
     /// </summary>

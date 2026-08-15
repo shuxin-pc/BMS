@@ -3,13 +3,13 @@
 import type {
   InventoryLog,
   InventoryLogQuery,
-  InboundRequest,
   OutboundRequest,
   OutboundResult,
   InventoryBatchOption,
   InventoryOpType,
   InboundSourceType,
   OutboundSourceType,
+  InventoryLogSourceType,
   PagedResponse
 } from './types'
 import { request } from '../shared/storeRequest'
@@ -18,13 +18,13 @@ import { request } from '../shared/storeRequest'
 export type {
   InventoryLog,
   InventoryLogQuery,
-  InboundRequest,
   OutboundRequest,
   OutboundResult,
   InventoryBatchOption,
   InventoryOpType,
   InboundSourceType,
   OutboundSourceType,
+  InventoryLogSourceType,
   PagedResponse
 }
 
@@ -38,27 +38,16 @@ export type {
  */
 export async function getInventoryLogList(query?: InventoryLogQuery): Promise<PagedResponse<InventoryLog>> {
   const params = new URLSearchParams()
+  if (query?.productId !== undefined) params.append('productId', String(query.productId))
   if (query?.productName) params.append('productName', query.productName)
   if (query?.type !== undefined) params.append('type', String(query.type))
   if (query?.sourceType !== undefined) params.append('sourceType', String(query.sourceType))
   if (query?.startDate) params.append('startDate', query.startDate)
   if (query?.endDate) params.append('endDate', query.endDate)
+  if (query?.batchNo) params.append('batchNo', query.batchNo)
   params.append('pageIndex', String(query?.pageIndex || 1))
   params.append('pageSize', String(query?.pageSize || 20))
   return request<PagedResponse<InventoryLog>>(`/inventorylogs?${params}`)
-}
-
-/**
- * 入库操作（事务内同步维护 InventoryLog + InventoryBatch + Inventory 三表）
- * 对接后端：POST /api/store/inventorylogs/inbound
- * @param data 入库请求
- * @returns 创建后的库存日志（含商品/供应商/操作人显示字段）
- */
-export async function createInbound(data: InboundRequest): Promise<InventoryLog> {
-  return request<InventoryLog>('/inventorylogs/inbound', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  })
 }
 
 /**
@@ -78,10 +67,10 @@ export async function createOutbound(data: OutboundRequest): Promise<OutboundRes
  * 获取商品轻量选项列表（用于下拉选择，不分页）
  * 对接后端：GET /api/store/product/products/options
  * 注意：ProductsController 路由前缀为 api/store/product/[controller]，与其他控制器不同
- * @returns 商品选项数组
+ * @returns 商品选项数组（含 Type 字段，用于按场景过滤）
  */
-export async function getProductOptions(): Promise<{ id: number; name: string; code: string; unit?: string }[]> {
-  return request<{ id: number; name: string; code: string; unit?: string }[]>('/product/products/options')
+export async function getProductOptions(): Promise<{ id: number; name: string; code: string; unit?: string; type: number }[]> {
+  return request<{ id: number; name: string; code: string; unit?: string; type: number }[]>('/product/products/options')
 }
 
 /**
@@ -140,9 +129,9 @@ export const inboundSourceTypeMap: Record<InboundSourceType, string> = {
  */
 export const outboundSourceTypeMap: Record<OutboundSourceType, string> = {
   3: '盘点盘亏',
-  6: '其他',
-  10: '样品领用',
-  11: '赠品活动'
+  9: '样品领用',
+  10: '赠品活动',
+  11: '其他'
 }
 
 /**
@@ -154,3 +143,43 @@ export const inventoryOpTypeMap: Record<InventoryOpType, string> = {
   3: '盘点',
   4: '调拨'
 }
+
+/**
+ * 库存流水来源类型标签映射（完整 0-13，用于流水 Drawer 列展示与筛选）
+ */
+export const inventoryLogSourceTypeMap: Record<InventoryLogSourceType, string> = {
+  0: '销售出库',
+  1: '采购入库',
+  2: '退货入库',
+  3: '盘点调整',
+  4: '调拨入库',
+  5: '调拨出库',
+  6: '采购退货出库',
+  7: '疗程卡核销出库',
+  8: '样品/赠品出库（历史）',
+  9: '样品领用出库',
+  10: '赠品活动出库',
+  11: '其他',
+  12: '样品赠品调拨出库',
+  13: '样品赠品调拨入库'
+}
+
+/**
+ * 库存流水来源类型下拉选项（用于 Drawer 内 SourceType 筛选）
+ */
+export const inventoryLogSourceTypeOptions: { label: string; value: InventoryLogSourceType }[] = [
+  { label: '销售出库', value: 0 },
+  { label: '采购入库', value: 1 },
+  { label: '退货入库', value: 2 },
+  { label: '盘点调整', value: 3 },
+  { label: '调拨入库', value: 4 },
+  { label: '调拨出库', value: 5 },
+  { label: '采购退货出库', value: 6 },
+  { label: '疗程卡核销出库', value: 7 },
+  { label: '样品/赠品出库（历史）', value: 8 },
+  { label: '样品领用出库', value: 9 },
+  { label: '赠品活动出库', value: 10 },
+  { label: '其他', value: 11 },
+  { label: '样品赠品调拨出库', value: 12 },
+  { label: '样品赠品调拨入库', value: 13 }
+]

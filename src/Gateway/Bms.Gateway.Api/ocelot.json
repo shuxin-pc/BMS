@@ -1,6 +1,30 @@
 {
   "Routes": [
     {
+      "DownstreamPathTemplate": "/connect/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5010
+        }
+      ],
+      "UpstreamPathTemplate": "/api/identity/connect/{everything}",
+      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/system/SystemConfigs/system",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5000
+        }
+      ],
+      "UpstreamPathTemplate": "/api/system/SystemConfigs/system",
+      "UpstreamHttpMethod": [ "Get" ]
+    },
+    {
       "DownstreamPathTemplate": "/hub/messages",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [
@@ -11,6 +35,10 @@
       ],
       "UpstreamPathTemplate": "/api/system/hub/messages",
       "UpstreamHttpMethod": [ "GET", "POST", "OPTIONS" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
       "WebSockets": true
     },
     {
@@ -24,6 +52,10 @@
       ],
       "UpstreamPathTemplate": "/api/system/hub/messages/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "OPTIONS" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
       "WebSockets": true
     },
     {
@@ -37,6 +69,10 @@
       ],
       "UpstreamPathTemplate": "/api/system/{everything}",
       "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
       "RateLimitOptions": {
         "ClientWhitelist": [],
         "EnableRateLimiting": false,
@@ -55,7 +91,11 @@
         }
       ],
       "UpstreamPathTemplate": "/api/identity/{everything}",
-      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ]
+      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      }
     },
     {
       "DownstreamPathTemplate": "/api/store/{everything}",
@@ -68,6 +108,10 @@
       ],
       "UpstreamPathTemplate": "/api/store/{everything}",
       "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
       "RateLimitOptions": {
         "ClientWhitelist": [],
         "EnableRateLimiting": false,
@@ -87,6 +131,10 @@
       ],
       "UpstreamPathTemplate": "/api/product/{everything}",
       "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
       "RateLimitOptions": {
         "ClientWhitelist": [],
         "EnableRateLimiting": false,
@@ -105,7 +153,11 @@
         }
       ],
       "UpstreamPathTemplate": "/api/customer/{everything}",
-      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ]
+      "UpstreamHttpMethod": [ "Get", "Post", "Put", "Delete" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      }
     }
   ],
   "GlobalConfiguration": {

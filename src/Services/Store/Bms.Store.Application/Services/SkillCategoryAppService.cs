@@ -37,7 +37,7 @@ public class SkillCategoryAppService : ISkillCategoryAppService
     public async Task<ApiResponseDto<PagedResponseDto<SkillCategoryDto>>> GetPagedListAsync(SkillCategoryQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<SkillCategoryDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<SkillCategoryDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.SkillCategories
@@ -49,8 +49,6 @@ public class SkillCategoryAppService : ISkillCategoryAppService
             queryable = queryable.Where(s => s.Code.Contains(query.Code));
         if (query.ParentId.HasValue)
             queryable = queryable.Where(s => s.ParentId == query.ParentId.Value);
-        if (query.Status.HasValue)
-            queryable = queryable.Where(s => s.Status == query.Status.Value);
 
         var total = await queryable.CountAsync();
         var items = await queryable
@@ -75,7 +73,7 @@ public class SkillCategoryAppService : ISkillCategoryAppService
     public async Task<ApiResponseDto<SkillCategoryDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SkillCategoryDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<SkillCategoryDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.SkillCategories
             .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted && s.TenantId == _currentUser.TenantId.Value);
@@ -90,7 +88,7 @@ public class SkillCategoryAppService : ISkillCategoryAppService
     public async Task<ApiResponseDto<SkillCategoryDto>> CreateAsync(SkillCategoryCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SkillCategoryDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<SkillCategoryDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -118,7 +116,7 @@ public class SkillCategoryAppService : ISkillCategoryAppService
     public async Task<ApiResponseDto<SkillCategoryDto>> UpdateAsync(SkillCategoryUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<SkillCategoryDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<SkillCategoryDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -141,8 +139,6 @@ public class SkillCategoryAppService : ISkillCategoryAppService
         entity.Name = dto.Name;
         entity.Code = dto.Code;
         entity.ParentId = dto.ParentId;
-        entity.Status = dto.Status;
-        entity.Remark = dto.Remark;
         entity.UpdatedTime = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
@@ -155,7 +151,7 @@ public class SkillCategoryAppService : ISkillCategoryAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.SkillCategories
             .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted && s.TenantId == _currentUser.TenantId.Value);
@@ -174,7 +170,7 @@ public class SkillCategoryAppService : ISkillCategoryAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

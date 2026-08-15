@@ -12,7 +12,7 @@ namespace Bms.System.Api.Controllers;
 [ApiController]
 [Route("api/internal/tenants")]
 [ApiExplorerSettings(IgnoreApi = true)]
-[AllowAnonymous]
+[Authorize] // 内部接口需认证（由 InternalServiceAuthMiddleware 设置身份）
 public class InternalTenantsController : ControllerBase
 {
     private readonly ITenantAppService _tenantService;

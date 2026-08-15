@@ -16,17 +16,20 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
 {
     private readonly StoreDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
+    private readonly IStoredValueGiftRuleService _giftRuleService;
     private readonly IValidator<StoredValueRuleCreateDto> _createValidator;
     private readonly IValidator<StoredValueRuleUpdateDto> _updateValidator;
 
     public StoredValueRuleAppService(
         StoreDbContext dbContext,
         ICurrentUser currentUser,
+        IStoredValueGiftRuleService giftRuleService,
         IValidator<StoredValueRuleCreateDto> createValidator,
         IValidator<StoredValueRuleUpdateDto> updateValidator)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
+        _giftRuleService = giftRuleService;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
     }
@@ -37,7 +40,7 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
     public async Task<ApiResponseDto<PagedResponseDto<StoredValueRuleDto>>> GetPagedListAsync(StoredValueRuleQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<StoredValueRuleDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<StoredValueRuleDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.StoredValueRules
@@ -71,7 +74,7 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
     public async Task<ApiResponseDto<StoredValueRuleDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<StoredValueRuleDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<StoredValueRuleDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.StoredValueRules
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value);
@@ -86,17 +89,18 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
     public async Task<ApiResponseDto<StoredValueRuleDto>> CreateAsync(StoredValueRuleCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<StoredValueRuleDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<StoredValueRuleDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<StoredValueRuleDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
-        var codeExists = await _dbContext.StoredValueRules
-            .AnyAsync(r => r.Code == dto.Code && r.TenantId == tenantId && !r.IsDeleted);
-        if (codeExists)
-            return ApiResponseDto<StoredValueRuleDto>.Fail($"编码 {dto.Code} 已存在", 400);
+        // 同额档位并存会让"整倍叠加"计算取到不确定的一条，因此充值金额在租户内必须唯一
+        var amountExists = await _dbContext.StoredValueRules
+            .AnyAsync(r => r.Amount == dto.Amount && r.TenantId == tenantId && !r.IsDeleted);
+        if (amountExists)
+            return ApiResponseDto<StoredValueRuleDto>.Fail($"充值金额 {dto.Amount:F2} 已存在对应规则", 400);
 
         var entity = dto.Adapt<StoredValueRule>();
         entity.TenantId = tenantId;
@@ -114,7 +118,7 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
     public async Task<ApiResponseDto<StoredValueRuleDto>> UpdateAsync(StoredValueRuleUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<StoredValueRuleDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<StoredValueRuleDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -126,19 +130,19 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
         if (entity == null)
             return ApiResponseDto<StoredValueRuleDto>.Fail("储值规则不存在", 404);
 
-        if (entity.Code != dto.Code)
+        if (entity.Amount != dto.Amount)
         {
-            var codeExists = await _dbContext.StoredValueRules
-                .AnyAsync(r => r.Code == dto.Code && r.TenantId == tenantId && !r.IsDeleted && r.Id != dto.Id);
-            if (codeExists)
-                return ApiResponseDto<StoredValueRuleDto>.Fail($"编码 {dto.Code} 已存在", 400);
+            var amountExists = await _dbContext.StoredValueRules
+                .AnyAsync(r => r.Amount == dto.Amount && r.TenantId == tenantId && !r.IsDeleted && r.Id != dto.Id);
+            if (amountExists)
+                return ApiResponseDto<StoredValueRuleDto>.Fail($"充值金额 {dto.Amount:F2} 已存在对应规则", 400);
         }
 
         entity.Name = dto.Name;
-        entity.Code = dto.Code;
         entity.Amount = dto.Amount;
         entity.GiftAmount = dto.GiftAmount;
-        entity.GiftRate = dto.GiftRate;
+        entity.StartDate = dto.StartDate;
+        entity.EndDate = dto.EndDate;
         entity.IsEnabled = dto.IsEnabled;
         entity.Sort = dto.Sort;
         entity.Remark = dto.Remark;
@@ -154,7 +158,7 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.StoredValueRules
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value);
@@ -173,7 +177,7 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -188,6 +192,25 @@ public class StoredValueRuleAppService : IStoredValueRuleAppService
         }
         await _dbContext.SaveChangesAsync();
         return ApiResponseDto.Success(null, $"成功删除 {entities.Count} 条数据");
+    }
+
+    /// <summary>
+    /// 试算充值赠送金额（与实际充值使用同一计算口径）
+    /// </summary>
+    public async Task<ApiResponseDto<StoredValueGiftPreviewDto>> PreviewGiftAmountAsync(decimal amount)
+    {
+        if (!_currentUser.TenantId.HasValue)
+            return ApiResponseDto<StoredValueGiftPreviewDto>.Fail("登录状态异常，请重新登录", 401);
+
+        if (amount <= 0)
+            return ApiResponseDto<StoredValueGiftPreviewDto>.Fail("充值金额必须大于0", 400);
+
+        var giftAmount = await _giftRuleService.CalculateGiftAmountAsync(_currentUser.TenantId.Value, amount, DateTime.Now);
+        return ApiResponseDto<StoredValueGiftPreviewDto>.Ok(new StoredValueGiftPreviewDto
+        {
+            Amount = amount,
+            GiftAmount = giftAmount
+        });
     }
 
     /// <summary>

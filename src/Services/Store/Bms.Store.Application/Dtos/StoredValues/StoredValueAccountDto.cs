@@ -13,6 +13,16 @@ public class StoredValueAccountDto
     public long CustomerId { get; set; }
 
     /// <summary>
+    /// 客户名称（关联客户档案，客户已删除时为空）
+    /// </summary>
+    public string? CustomerName { get; set; }
+
+    /// <summary>
+    /// 客户手机号（关联客户档案，客户已删除时为空）
+    /// </summary>
+    public string? Phone { get; set; }
+
+    /// <summary>
     /// 当前余额
     /// </summary>
     public decimal Balance { get; set; }

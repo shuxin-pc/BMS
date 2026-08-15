@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Bms.Store.Application.Abstractions;
 using Bms.Store.Application.Dtos;
 using Bms.Store.Application.Dtos.Stores;
 using Bms.Store.Application.Services;
+using Bms.BuildingBlocks.Abstractions.Security;
+using Bms.Store.Api.Filters;
 
 namespace Bms.Store.Api.Controllers;
 
@@ -12,6 +15,7 @@ namespace Bms.Store.Api.Controllers;
 [ApiController]
 [Route("api/store/[controller]")]
 [Authorize]
+[AllowWithoutStore] // 门店档案管理不依赖 X-Store-Id，可在未选门店时访问
 public class StoresController : ControllerBase
 {
     private readonly IStoreAppService _storeAppService;
@@ -84,5 +88,33 @@ public class StoresController : ControllerBase
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
     {
         return await _storeAppService.BatchDeleteAsync(request.Ids);
+    }
+
+    /// <summary>
+    /// 获取门店已分配的用户列表
+    /// </summary>
+    [HttpGet("{storeId:long}/users")]
+    public async Task<ApiResponseDto<List<TenantUserDto>>> GetAssignedUsers(long storeId)
+    {
+        return await _storeAppService.GetAssignedUsersAsync(storeId);
+    }
+
+    /// <summary>
+    /// 获取门店可分配用户列表（本租户有效用户 + 标记是否已分配）
+    /// </summary>
+    [HttpGet("{storeId:long}/available-users")]
+    public async Task<ApiResponseDto<List<AvailableUserDto>>> GetAvailableUsers(long storeId)
+    {
+        return await _storeAppService.GetAvailableUsersAsync(storeId);
+    }
+
+    /// <summary>
+    /// 全量替换门店的用户分配（需 store:store:assign-user 权限码）
+    /// </summary>
+    [Permission("store:store:assign-user")]
+    [HttpPost("{storeId:long}/users")]
+    public async Task<ApiResponseDto> AssignUsers(long storeId, [FromBody] AssignUsersRequest request)
+    {
+        return await _storeAppService.AssignUsersAsync(storeId, request.UserIds);
     }
 }

@@ -37,7 +37,7 @@ public class OrderItemAppService : IOrderItemAppService
     public async Task<ApiResponseDto<PagedResponseDto<OrderItemDto>>> GetPagedListAsync(OrderItemQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<OrderItemDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<OrderItemDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.OrderItems
@@ -69,7 +69,7 @@ public class OrderItemAppService : IOrderItemAppService
     public async Task<ApiResponseDto<OrderItemDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<OrderItemDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<OrderItemDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.OrderItems
             .Include(i => i.Batches)
@@ -85,7 +85,7 @@ public class OrderItemAppService : IOrderItemAppService
     public async Task<ApiResponseDto<OrderItemDto>> CreateAsync(OrderItemCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<OrderItemDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<OrderItemDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -108,7 +108,7 @@ public class OrderItemAppService : IOrderItemAppService
     public async Task<ApiResponseDto<OrderItemDto>> UpdateAsync(OrderItemUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<OrderItemDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<OrderItemDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -144,7 +144,7 @@ public class OrderItemAppService : IOrderItemAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.OrderItems
             .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _currentUser.TenantId.Value);
@@ -162,7 +162,7 @@ public class OrderItemAppService : IOrderItemAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

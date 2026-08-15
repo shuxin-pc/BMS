@@ -26,8 +26,9 @@ public class PurchaseReturnCreateDtoValidator : AbstractValidator<PurchaseReturn
 {
     public PurchaseReturnCreateDtoValidator()
     {
-        RuleFor(x => x.ReturnNo).NotEmpty().WithMessage("退货单号不能为空")
-            .MaximumLength(50).WithMessage("退货单号最多50个字符");
+        // 退货单号由后端在事务内自动生成（PR{yyyyMMdd}{序号}），创建时可不传；
+        // 编辑时由前端回填原值，长度上限保持 50
+        RuleFor(x => x.ReturnNo).MaximumLength(50).WithMessage("退货单号最多50个字符");
         RuleFor(x => x.SupplierId).GreaterThan(0).WithMessage("供应商ID必须大于0");
         // 关联采购订单ID可选，传入时必须大于 0
         RuleFor(x => x.PurchaseOrderId)

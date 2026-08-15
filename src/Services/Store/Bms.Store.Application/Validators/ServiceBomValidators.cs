@@ -26,7 +26,6 @@ public class ServiceBomUpdateDtoValidator : AbstractValidator<ServiceBomUpdateDt
 {
     public ServiceBomUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new ServiceBomCreateDtoValidator());
     }
 }

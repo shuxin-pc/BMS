@@ -35,6 +35,12 @@ public class CurrentUserPermissionContext
     public int MaxRoleLevel { get; set; }
 
     /// <summary>
+    /// 当前用户拥有的角色ID集合
+    /// 用于"查看/操作自己角色"豁免判断
+    /// </summary>
+    public List<long> RoleIds { get; set; } = new();
+
+    /// <summary>
     /// 当前用户的数据权限范围
     /// </summary>
     public DataPermissionScope DataScope { get; set; } = null!;

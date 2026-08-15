@@ -47,9 +47,6 @@
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <span class="toolbar-title">消费记录列表</span>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -173,13 +170,13 @@ const formatPrice = (price: number | undefined) => {
 
 /** 支付方式文本 */
 const paymentMethodText = (method: number) => {
-  const map: Record<number, string> = { 1: '现金', 2: '微信', 3: '支付宝', 4: '储值', 5: '组合' }
+  const map: Record<number, string> = { 1: '现金', 2: '支付宝', 3: '微信', 4: '银行卡', 5: '储值卡', 6: '积分抵扣', 7: '组合支付' }
   return map[method] || '未知'
 }
 
 /** 支付方式标签类型 */
 const paymentMethodTagType = (method: number) => {
-  const map: Record<number, string> = { 1: '', 2: 'success', 3: 'warning', 4: 'info', 5: 'danger' }
+  const map: Record<number, string> = { 1: '', 2: 'success', 3: 'warning', 4: 'info', 5: 'danger', 6: 'info', 7: 'danger' }
   return map[method] || ''
 }
 
@@ -248,22 +245,10 @@ onMounted(async () => {
 /* 操作栏 */
 .table-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   padding: 0 4px;
-}
-
-.toolbar-left {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .toolbar-right {

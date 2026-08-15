@@ -34,7 +34,7 @@ public class RoomAppService : IRoomAppService
     public async Task<ApiResponseDto<PagedResponseDto<RoomDto>>> GetPagedListAsync(RoomQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<RoomDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<RoomDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.Rooms
@@ -69,7 +69,7 @@ public class RoomAppService : IRoomAppService
     public async Task<ApiResponseDto<RoomDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<RoomDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<RoomDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var room = await _dbContext.Rooms
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value);
@@ -81,7 +81,7 @@ public class RoomAppService : IRoomAppService
     public async Task<ApiResponseDto<RoomDto>> CreateAsync(RoomCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<RoomDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<RoomDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -107,7 +107,7 @@ public class RoomAppService : IRoomAppService
     public async Task<ApiResponseDto<RoomDto>> UpdateAsync(RoomUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<RoomDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<RoomDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -142,7 +142,7 @@ public class RoomAppService : IRoomAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var room = await _dbContext.Rooms
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value);
@@ -158,7 +158,7 @@ public class RoomAppService : IRoomAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -188,13 +188,17 @@ public class RoomAppService : IRoomAppService
         long? excludeAppointmentId = null)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<List<RoomDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<List<RoomDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
 
         // 查询服务项目的 RequiredRoomType
-        var serviceProduct = await _dbContext.ServiceProducts
-            .FirstOrDefaultAsync(sp => sp.ProductId == serviceProductId && sp.TenantId == tenantId);
+        // ServiceProduct 关联字段从 ProductId 改为 MasterId（设计文档 3.4 节）
+        // 参数 serviceProductId 实际为门店商品档案 Product.Id，需通过 Product.MasterId 关联 ServiceProduct
+        var serviceProduct = await (from sp in _dbContext.ServiceProducts
+                                    join p in _dbContext.Products on sp.MasterId equals p.MasterId
+                                    where p.Id == serviceProductId && sp.TenantId == tenantId
+                                    select sp).FirstOrDefaultAsync();
         var requiredRoomType = serviceProduct?.RequiredRoomType;
 
         // 查询本租户启用房间（按 RequiredRoomType 过滤，null=不限制）

@@ -26,4 +26,20 @@ public class StockTransferQueryDto : PagedRequestDto
     /// 状态（1:待调出 2:已调出 3:已调入 4:已取消）
     /// </summary>
     public int? Status { get; set; }
+
+    /// <summary>
+    /// 调拨日期下界（含当日）
+    /// </summary>
+    public DateTime? StartDate { get; set; }
+
+    /// <summary>
+    /// 调拨日期上界（含当日）
+    /// </summary>
+    public DateTime? EndDate { get; set; }
+
+    /// <summary>
+    /// 商品类型筛选（1:实物商品 2:服务商品 3:耗材 4:样品 5:赠品）
+    /// 返回明细中含该类型商品的调拨单
+    /// </summary>
+    public int? ProductType { get; set; }
 }

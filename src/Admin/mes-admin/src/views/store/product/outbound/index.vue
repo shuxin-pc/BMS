@@ -61,6 +61,11 @@
       >
         <el-table-column prop="productName" label="商品名称" min-width="160" />
         <el-table-column prop="productCode" label="商品编码" width="120" />
+        <el-table-column prop="batchNo" label="批次号" width="140">
+          <template #default="{ row }">
+            {{ row.batchNo || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="出库数量" width="100" align="center">
           <template #default="{ row }">
             <span class="quantity-negative">{{ formatNumber(row.quantity) }}</span>
@@ -108,7 +113,7 @@
     <el-dialog
       v-model="dialogVisible"
       title="新增出库"
-      width="500px"
+      width="700px"
       :close-on-click-modal="false"
     >
       <el-form
@@ -139,12 +144,9 @@
             placeholder="请选择出库来源"
             style="width: 100%"
           >
-            <el-option
-              v-for="(label, value) in outboundSourceTypeMap"
-              :key="value"
-              :label="label"
-              :value="Number(value)"
-            />
+            <el-option label="样品领用" :value="9" />
+            <el-option label="赠品活动" :value="10" />
+            <el-option label="其他" :value="11" />
           </el-select>
         </el-form-item>
         <el-form-item label="当前库存">
@@ -177,7 +179,7 @@
         <template v-else>
           <el-form-item label="批次扣减">
             <el-table :data="batchOptions" border size="small" style="width: 100%">
-              <el-table-column prop="batchNo" label="批次号" width="120" />
+              <el-table-column prop="batchNo" label="批次号" min-width="120" />
               <el-table-column label="过期日期" width="120">
                 <template #default="{ row }">
                   {{ row.expirationDate ? row.expirationDate.split('T')[0] : '无效期' }}
@@ -253,7 +255,7 @@ const pagination = reactive({
 })
 
 // 下拉选项
-const productOptions = ref<{ id: number; name: string; code: string; unit: string }[]>([])
+const productOptions = ref<{ id: number; name: string; code: string; unit?: string; type: number }[]>([])
 
 // 加载数据
 const loadData = async () => {
@@ -279,7 +281,9 @@ const loadData = async () => {
 // 加载下拉选项
 const loadOptions = async () => {
   try {
-    productOptions.value = await getProductOptions()
+    const list = await getProductOptions()
+    // 过滤掉服务商品（Type=2），服务商品无实物库存不参与出库
+    productOptions.value = list.filter(p => p.type !== 2)
   } catch (error) {
     ElMessage.error('加载选项数据失败')
   }
@@ -311,8 +315,8 @@ const deductMode = ref<DeductMode>('fefo')
 // 出库来源
 const formData = reactive({
   productId: undefined as number | undefined,
-  sourceType: 6 as OutboundSourceType, // 默认"其他"
-  quantity: 0,
+  sourceType: undefined as OutboundSourceType | undefined,
+  quantity: 1,
   remark: '',
   batchItems: [] as { batchId: number; quantity: number }[]
 })
@@ -393,8 +397,8 @@ const handleProductChange = async (productId: number) => {
 // 重置表单
 const resetFormData = () => {
   formData.productId = undefined
-  formData.sourceType = 6
-  formData.quantity = 0
+  formData.sourceType = undefined
+  formData.quantity = 1
   formData.remark = ''
   formData.batchItems = []
   currentStock.value = '--'
@@ -433,7 +437,7 @@ const handleSubmit = async () => {
         if (deductMode.value === 'fefo') {
           await createOutbound({
             productId: formData.productId!,
-            sourceType: formData.sourceType,
+            sourceType: formData.sourceType!,
             quantity: formData.quantity,
             remark: formData.remark || undefined
           })
@@ -441,7 +445,7 @@ const handleSubmit = async () => {
           const validItems = formData.batchItems.filter(i => i.quantity > 0)
           await createOutbound({
             productId: formData.productId!,
-            sourceType: formData.sourceType,
+            sourceType: formData.sourceType!,
             batchItems: validItems,
             remark: formData.remark || undefined
           })

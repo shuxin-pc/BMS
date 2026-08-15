@@ -34,28 +34,122 @@ public class InventoryLogAppService : IInventoryLogAppService
 
     /// <summary>
     /// 获取库存流水分页列表
-    /// 查询时 Include Product 与 Supplier 导航属性，内存中填充显示字段
+    /// 查询时 Include Product 与 Supplier 导航属性，内存中填充显示字段。
+    /// 流水抽屉场景（ProductId 有值）：后端按该商品全量流水累加计算批次库存与商品总库存，
+    /// 筛选只影响显示行不影响累加基准，保证累加值可追溯验证；
+    /// 其他场景（ProductId 无值）：沿用 IQueryable 筛选 + 分页，4 个累加字段返回 null。
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<InventoryLogDto>>> GetPagedListAsync(InventoryLogQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PagedResponseDto<InventoryLogDto>>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PagedResponseDto<InventoryLogDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
         var queryable = _dbContext.InventoryLogs
-            .Include(l => l.Product)
+            .Include(l => l.Product).ThenInclude(p => p.Master!)
             .Include(l => l.Supplier)
             .Where(l => l.TenantId == tenantId && l.StoreId == storeId);
 
+        // 流水抽屉场景：按商品查全量流水，内存累加计算批次/商品总库存后再筛选分页
         if (query.ProductId.HasValue)
-            queryable = queryable.Where(l => l.ProductId == query.ProductId.Value);
+        {
+            var productId = query.ProductId.Value;
+            var allLogs = await queryable
+                .Where(l => l.ProductId == productId)
+                .OrderBy(l => l.CreatedTime).ThenBy(l => l.Id)
+                .ToListAsync();
+
+            // 累加计算：batchRunning 按 BatchNo 分组累加，totalRunning 按商品累加。
+            // BatchNo 为 null 的行不参与批次累加（BatchBefore/After 返回 null）。
+            var batchRunning = new Dictionary<string, decimal>();
+            decimal totalRunning = 0;
+            var enriched = new List<(InventoryLogEntity Log, decimal? BatchBefore, decimal? BatchAfter, decimal TotalBefore, decimal TotalAfter)>(allLogs.Count);
+            foreach (var log in allLogs)
+            {
+                decimal? batchBefore = null, batchAfter = null;
+                if (!string.IsNullOrEmpty(log.BatchNo))
+                {
+                    batchBefore = batchRunning.GetValueOrDefault(log.BatchNo, 0);
+                    batchAfter = batchBefore + log.Quantity;
+                    batchRunning[log.BatchNo] = batchAfter.Value;
+                }
+                var totalBefore = totalRunning;
+                var totalAfter = totalRunning + log.Quantity;
+                totalRunning = totalAfter;
+                enriched.Add((log, batchBefore, batchAfter, totalBefore, totalAfter));
+            }
+
+            // 应用筛选（累加基于全量流水，筛选只影响显示行）
+            IEnumerable<(InventoryLogEntity Log, decimal? BatchBefore, decimal? BatchAfter, decimal TotalBefore, decimal TotalAfter)> filtered = enriched;
+            if (query.Type.HasValue)
+                filtered = filtered.Where(x => x.Log.Type == query.Type.Value);
+            if (query.SourceType.HasValue)
+                filtered = filtered.Where(x => x.Log.SourceType == query.SourceType.Value);
+            if (!string.IsNullOrWhiteSpace(query.ProductName))
+                filtered = filtered.Where(x => x.Log.Product != null && x.Log.Product.Master != null && x.Log.Product.Master.Name.Contains(query.ProductName));
+            if (!string.IsNullOrWhiteSpace(query.BatchNo))
+                filtered = filtered.Where(x => x.Log.BatchNo != null && x.Log.BatchNo.Contains(query.BatchNo));
+            if (query.StartDate.HasValue)
+                filtered = filtered.Where(x => x.Log.CreatedTime >= query.StartDate.Value);
+            if (query.EndDate.HasValue)
+                // EndDate 含当日：过滤条件为 CreatedTime <= EndDate 当天 23:59:59
+                filtered = filtered.Where(x => x.Log.CreatedTime <= query.EndDate.Value.Date.AddDays(1).AddTicks(-1));
+
+            var filteredTotal = filtered.Count();
+            var pageItems = filtered
+                .OrderByDescending(x => x.Log.CreatedTime)
+                .Skip((query.PageIndex - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .ToList();
+
+            var dtoList = pageItems.Select(x => new InventoryLogDto
+            {
+                Id = x.Log.Id,
+                ProductId = x.Log.ProductId,
+                Type = x.Log.Type,
+                SourceType = x.Log.SourceType,
+                SupplierId = x.Log.SupplierId,
+                UnitPrice = x.Log.UnitPrice,
+                Quantity = x.Log.Quantity,
+                BeforeQuantity = x.Log.BeforeQuantity,
+                AfterQuantity = x.Log.AfterQuantity,
+                BatchNo = x.Log.BatchNo,
+                ExpirationDate = x.Log.ExpirationDate,
+                RelatedId = x.Log.RelatedId,
+                Remark = x.Log.Remark,
+                CreatedAt = x.Log.CreatedTime,
+                UpdatedAt = x.Log.UpdatedTime,
+                ProductName = x.Log.Product?.Master?.Name,
+                ProductCode = x.Log.Product?.Master?.Code,
+                SupplierName = x.Log.Supplier?.Name,
+                OperatorId = x.Log.OperatorId,
+                OperatorName = x.Log.OperatorName,
+                BatchBeforeQuantity = x.BatchBefore,
+                BatchAfterQuantity = x.BatchAfter,
+                TotalBeforeQuantity = x.TotalBefore,
+                TotalAfterQuantity = x.TotalAfter
+            }).ToList();
+
+            var result = new PagedResponseDto<InventoryLogDto>
+            {
+                List = dtoList,
+                Total = filteredTotal,
+                PageIndex = query.PageIndex,
+                PageSize = query.PageSize
+            };
+            return ApiResponseDto<PagedResponseDto<InventoryLogDto>>.Ok(result);
+        }
+
+        // 其他场景：沿用 IQueryable 筛选 + 分页逻辑
         if (query.Type.HasValue)
             queryable = queryable.Where(l => l.Type == query.Type.Value);
         if (query.SourceType.HasValue)
             queryable = queryable.Where(l => l.SourceType == query.SourceType.Value);
         if (!string.IsNullOrWhiteSpace(query.ProductName))
-            queryable = queryable.Where(l => l.Product != null && l.Product.Name.Contains(query.ProductName));
+            queryable = queryable.Where(l => l.Product != null && l.Product.Master != null && l.Product.Master.Name.Contains(query.ProductName));
+        if (!string.IsNullOrWhiteSpace(query.BatchNo))
+            queryable = queryable.Where(l => l.BatchNo != null && l.BatchNo.Contains(query.BatchNo));
         if (query.StartDate.HasValue)
             queryable = queryable.Where(l => l.CreatedTime >= query.StartDate.Value);
         if (query.EndDate.HasValue)
@@ -69,8 +163,8 @@ public class InventoryLogAppService : IInventoryLogAppService
             .Take(query.PageSize)
             .ToListAsync();
 
-        // 内存中投影到 DTO，填充显示字段（Adapt 会自动映射同名字段，手工补齐关联字段）
-        var dtoList = items.Select(l => new InventoryLogDto
+        // 内存中投影到 DTO，填充显示字段（4 个累加字段保持默认 null：无 productId 查询时不计算）
+        var dtoList2 = items.Select(l => new InventoryLogDto
         {
             Id = l.Id,
             ProductId = l.ProductId,
@@ -87,20 +181,21 @@ public class InventoryLogAppService : IInventoryLogAppService
             Remark = l.Remark,
             CreatedAt = l.CreatedTime,
             UpdatedAt = l.UpdatedTime,
-            ProductName = l.Product?.Name,
-            ProductCode = l.Product?.Code,
+            ProductName = l.Product?.Master?.Name,
+            ProductCode = l.Product?.Master?.Code,
             SupplierName = l.Supplier?.Name,
+            OperatorId = l.OperatorId,
             OperatorName = l.OperatorName
         }).ToList();
 
-        var result = new PagedResponseDto<InventoryLogDto>
+        var result2 = new PagedResponseDto<InventoryLogDto>
         {
-            List = dtoList,
+            List = dtoList2,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
         };
-        return ApiResponseDto<PagedResponseDto<InventoryLogDto>>.Ok(result);
+        return ApiResponseDto<PagedResponseDto<InventoryLogDto>>.Ok(result2);
     }
 
     /// <summary>
@@ -109,10 +204,10 @@ public class InventoryLogAppService : IInventoryLogAppService
     public async Task<ApiResponseDto<InventoryLogDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryLogDto?>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryLogDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.InventoryLogs
-            .Include(l => l.Product)
+            .Include(l => l.Product).ThenInclude(p => p.Master!)
             .Include(l => l.Supplier)
             .FirstOrDefaultAsync(l => l.Id == id && l.TenantId == _currentUser.TenantId.Value && l.StoreId == _currentUser.StoreId.Value);
         if (entity == null)
@@ -135,9 +230,10 @@ public class InventoryLogAppService : IInventoryLogAppService
             Remark = entity.Remark,
             CreatedAt = entity.CreatedTime,
             UpdatedAt = entity.UpdatedTime,
-            ProductName = entity.Product?.Name,
-            ProductCode = entity.Product?.Code,
+            ProductName = entity.Product?.Master?.Name,
+            ProductCode = entity.Product?.Master?.Code,
             SupplierName = entity.Supplier?.Name,
+            OperatorId = entity.OperatorId,
             OperatorName = entity.OperatorName
         };
         return ApiResponseDto<InventoryLogDto?>.Ok(dto);
@@ -156,7 +252,7 @@ public class InventoryLogAppService : IInventoryLogAppService
     public async Task<ApiResponseDto<InventoryLogDto>> CreateAsync(InventoryLogCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryLogDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryLogDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -190,7 +286,7 @@ public class InventoryLogAppService : IInventoryLogAppService
     public async Task<ApiResponseDto<InventoryLogDto>> UpdateAsync(InventoryLogUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryLogDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryLogDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -227,7 +323,7 @@ public class InventoryLogAppService : IInventoryLogAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.InventoryLogs
             .FirstOrDefaultAsync(l => l.Id == id && l.TenantId == _currentUser.TenantId.Value && l.StoreId == _currentUser.StoreId.Value);
@@ -245,7 +341,7 @@ public class InventoryLogAppService : IInventoryLogAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

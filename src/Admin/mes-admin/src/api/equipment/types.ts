@@ -24,6 +24,10 @@ export type MaintenanceType = 1 | 2 | 3
 export interface Equipment {
   /** 设备ID */
   id: number
+  /** 所属设备类型 ID */
+  equipmentTypeId: number
+  /** 所属设备类型名称（展示用） */
+  equipmentTypeName?: string
   /** 设备名称 */
   name: string
   /** 设备编码（资产编号） */
@@ -120,6 +124,8 @@ export interface MaintenanceQuery {
  * 创建设备请求
  */
 export interface EquipmentCreate {
+  /** 所属设备类型 ID（必填） */
+  equipmentTypeId: number
   name: string
   code: string
   model?: string

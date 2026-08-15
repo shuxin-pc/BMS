@@ -38,9 +38,14 @@ public class SupplierDto
     public string? BankAccount { get; set; }
 
     /// <summary>
-    /// 状态（0:禁用 1:启用）
+    /// 状态（1:合作中 2:已停止）
     /// </summary>
     public int Status { get; set; }
+
+    /// <summary>
+    /// 数据范围（1:门店通用 2:门店私用）
+    /// </summary>
+    public int Scope { get; set; }
 
     /// <summary>
     /// 备注

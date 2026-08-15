@@ -22,6 +22,11 @@ public class StockTransfer : StoreBusinessEntityBase
     public string? FromStoreCode { get; set; }
 
     /// <summary>
+    /// 调出门店名称（冗余存储，便于展示）
+    /// </summary>
+    public string? FromStoreName { get; set; }
+
+    /// <summary>
     /// 调入门店ID
     /// </summary>
     public long ToStoreId { get; set; }
@@ -30,6 +35,11 @@ public class StockTransfer : StoreBusinessEntityBase
     /// 调入门店编码
     /// </summary>
     public string? ToStoreCode { get; set; }
+
+    /// <summary>
+    /// 调入门店名称（冗余存储，便于展示）
+    /// </summary>
+    public string? ToStoreName { get; set; }
 
     /// <summary>
     /// 调拨日期
@@ -49,7 +59,17 @@ public class StockTransfer : StoreBusinessEntityBase
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作员姓名（冗余存储，便于展示）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 备注
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 调拨明细列表
+    /// </summary>
+    public List<StockTransferItem> Items { get; set; } = new();
 }

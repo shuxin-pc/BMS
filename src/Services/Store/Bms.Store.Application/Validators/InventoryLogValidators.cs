@@ -24,7 +24,6 @@ public class InventoryLogUpdateDtoValidator : AbstractValidator<InventoryLogUpda
 {
     public InventoryLogUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new InventoryLogCreateDtoValidator());
     }
 }

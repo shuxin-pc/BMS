@@ -33,11 +33,13 @@ public interface IUserPermissionChecker
 
     /// <summary>
     /// 校验能否把用户移动到指定组织（规则 3）
-    /// - super_admin：放行
+    /// - super_admin：放行（创建/编辑场景均允许 null，用于平台管理员等无组织用户）
     /// - tenant_admin：目标组织必须属于本租户
     /// - 普通用户：目标组织必须在 DataScope.OrganizationIds 内
+    /// 注意：isCreate=true 时 null 对非超管抛「创建用户时必须指定组织归属」；
+    /// isCreate=false 时 null 对非超管抛「无权清空用户的组织归属」（编辑场景原逻辑）
     /// </summary>
-    Task CheckCanMoveToOrganizationAsync(CurrentUserPermissionContext ctx, long? targetOrganizationId);
+    Task CheckCanMoveToOrganizationAsync(CurrentUserPermissionContext ctx, long? targetOrganizationId, bool isCreate = false);
 
     /// <summary>
     /// 校验能否修改目标用户租户归属（规则 4）

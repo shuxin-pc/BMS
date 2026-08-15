@@ -15,9 +15,15 @@
           <el-form-item label="状态">
             <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 130px">
               <el-option label="待调出" :value="1" />
-              <el-option label="已调出" :value="2" />
               <el-option label="已调入" :value="3" />
               <el-option label="已取消" :value="4" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="商品类型">
+            <el-select v-model="searchForm.productType" placeholder="全部类型" clearable style="width: 130px">
+              <el-option label="正品" :value="1" />
+              <el-option label="样品" :value="4" />
+              <el-option label="赠品" :value="5" />
             </el-select>
           </el-form-item>
           <el-form-item label="调出门店">
@@ -100,23 +106,16 @@
               详情
             </el-button>
             <el-button
-              v-if="row.status === 1"
-              link type="warning" size="small"
-              @click="handleUpdateStatus(row, 2)"
-            >
-              确认调出
-            </el-button>
-            <el-button
-              v-if="row.status === 2"
+              v-if="row.status === 1 && row.fromStoreId === userStore.currentStoreId"
               link type="success" size="small"
-              @click="handleUpdateStatus(row, 3)"
+              @click="handleExecute(row)"
             >
-              确认调入
+              执行调拨
             </el-button>
             <el-button
               v-if="row.status === 1"
               link type="danger" size="small"
-              @click="handleUpdateStatus(row, 4)"
+              @click="handleCancel(row)"
             >
               取消
             </el-button>
@@ -142,7 +141,7 @@
     <el-dialog
       v-model="dialogVisible"
       title="新增调拨"
-      width="800px"
+      width="900px"
       :close-on-click-modal="false"
     >
       <el-form
@@ -154,7 +153,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="调出门店" prop="fromStoreId">
-              <el-select v-model="formData.fromStoreId" placeholder="请选择调出门店" filterable style="width: 100%">
+              <el-select v-model="formData.fromStoreId" placeholder="请选择调出门店" filterable disabled style="width: 100%">
                 <el-option v-for="store in storeOptions" :key="store.id" :label="store.name" :value="store.id" />
               </el-select>
             </el-form-item>
@@ -185,15 +184,21 @@
         </el-form-item>
 
         <!-- 商品明细动态表格 -->
+        <el-form-item label="扣减方式">
+          <el-radio-group v-model="deductMode" @change="handleDeductModeChange">
+            <el-radio value="fefo">FEFO 自动</el-radio>
+            <el-radio value="manual">手动指定批次</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="商品明细" prop="items">
           <div class="items-container">
-            <el-button type="primary" plain size="small" @click="handleAddItem">
+            <el-button type="primary" plain size="small" :disabled="!formData.fromStoreId" @click="handleAddItem">
               <el-icon><Plus /></el-icon>
               添加商品
             </el-button>
             <el-table :data="formData.items" border style="width: 100%; margin-top: 10px">
               <el-table-column label="序号" type="index" width="60" align="center" />
-              <el-table-column label="商品" min-width="200">
+              <el-table-column label="商品" min-width="220">
                 <template #default="{ row }">
                   <el-select
                     v-model="row.productId"
@@ -204,9 +209,9 @@
                     @change="(val: number) => handleItemProductChange(row, val)"
                   >
                     <el-option
-                      v-for="item in productOptions"
+                      v-for="item in (productOptionsByFromStore[formData.fromStoreId || ''] || [])"
                       :key="item.id"
-                      :label="`${item.name}（${item.code}）`"
+                      :label="`${item.name}（${item.code}）${productTypeMap[item.type]} 库存:${item.stock}`"
                       :value="item.id"
                     />
                   </el-select>
@@ -224,9 +229,25 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="批次号" width="140">
+              <el-table-column label="批次号" width="180">
                 <template #default="{ row }">
-                  <el-input v-model="row.batchNo" placeholder="批次号" size="small" />
+                  <span v-if="deductMode === 'fefo'" class="batch-auto-text">自动分配</span>
+                  <el-select
+                    v-else
+                    v-model="row.batchNo"
+                    placeholder="请选择批次"
+                    filterable
+                    size="small"
+                    style="width: 100%"
+                    :disabled="!row.productId"
+                  >
+                    <el-option
+                      v-for="batch in (batchOptionsByProduct[`${formData.fromStoreId}_${row.productId}`] || [])"
+                      :key="batch.id"
+                      :label="`${batch.batchNo}（可用${batch.quantity}）`"
+                      :value="batch.batchNo"
+                    />
+                  </el-select>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="80" align="center">
@@ -255,7 +276,7 @@
     <el-dialog
       v-model="detailDialogVisible"
       title="调拨单详情"
-      width="700px"
+      width="900px"
     >
       <el-descriptions :column="2" border>
         <el-descriptions-item label="调拨单号">{{ detailData.transferNo }}</el-descriptions-item>
@@ -276,6 +297,11 @@
         <el-table-column label="序号" type="index" width="60" align="center" />
         <el-table-column prop="productName" label="商品名称" min-width="160" />
         <el-table-column prop="productCode" label="商品编码" width="120" />
+        <el-table-column label="商品类型" width="100" align="center">
+          <template #default="{ row }">
+            {{ productTypeMap[row.type] || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="数量" width="100" align="center">
           <template #default="{ row }">
             {{ formatNumber(row.quantity) }} {{ row.unit || '' }}
@@ -300,23 +326,29 @@ import {
   getStockTransferList,
   getStockTransferDetail,
   createStockTransfer,
-  updateTransferStatus,
+  executeStockTransfer,
+  cancelStockTransfer,
   getStoreOptions,
-  getProductOptions,
+  getFromStoreProducts,
+  getFromStoreProductBatches,
   transferStatusMap,
-  transferStatusTagType
+  transferStatusTagType,
+  productTypeMap
 } from '@/api/stock-transfer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { StockTransfer, StockTransferItem, TransferStatus } from '@/api/stock-transfer/types'
+import { useUserStore } from '@/stores/user'
+import type { StockTransfer, StockTransferItem, TransferStatus, StockTransferProductOption, StockTransferBatchOption } from '@/api/stock-transfer/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
 
 // 搜索表单
 const searchForm = reactive({
   transferNo: '',
   status: undefined as TransferStatus | undefined,
-  fromStoreId: undefined as number | undefined,
-  toStoreId: undefined as number | undefined
+  productType: undefined as number | undefined,
+  fromStoreId: undefined as string | undefined,
+  toStoreId: undefined as string | undefined
 })
 
 // 表格数据
@@ -331,8 +363,14 @@ const pagination = reactive({
 })
 
 // 下拉选项
-const storeOptions = ref<{ id: number; code: string; name: string }[]>([])
-const productOptions = ref<{ id: number; name: string; code: string; unit: string }[]>([])
+const storeOptions = ref<{ id: string; code: string; name: string }[]>([])
+// 调出门店商品选项缓存（key = fromStoreId），调出门店变更时重新加载
+const productOptionsByFromStore = ref<Record<string, StockTransferProductOption[]>>({})
+// 商品批次选项缓存（key = `${fromStoreId}_${productId}`），手动模式下使用
+const batchOptionsByProduct = ref<Record<string, StockTransferBatchOption[]>>({})
+// 扣减方式：FEFO 自动（按过期日期升序扣减） / 手动指定批次
+type DeductMode = 'fefo' | 'manual'
+const deductMode = ref<DeductMode>('fefo')
 
 // 加载数据
 const loadData = async () => {
@@ -341,6 +379,7 @@ const loadData = async () => {
     const res = await getStockTransferList({
       transferNo: searchForm.transferNo || undefined,
       status: searchForm.status,
+      productType: searchForm.productType,
       fromStoreId: searchForm.fromStoreId,
       toStoreId: searchForm.toStoreId,
       pageIndex: pagination.pageIndex,
@@ -355,15 +394,10 @@ const loadData = async () => {
   }
 }
 
-// 加载下拉选项
+// 加载下拉选项（商品选项改为按调出门店动态加载，见 loadFromStoreProducts）
 const loadOptions = async () => {
   try {
-    const [stores, products] = await Promise.all([
-      getStoreOptions(),
-      getProductOptions()
-    ])
-    storeOptions.value = stores
-    productOptions.value = products
+    storeOptions.value = await getStoreOptions()
   } catch (error) {
     ElMessage.error('加载选项数据失败')
   }
@@ -379,6 +413,7 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.transferNo = ''
   searchForm.status = undefined
+  searchForm.productType = undefined
   searchForm.fromStoreId = undefined
   searchForm.toStoreId = undefined
   handleSearch()
@@ -396,8 +431,8 @@ interface FormItem {
 }
 
 const formData = reactive({
-  fromStoreId: undefined as number | undefined,
-  toStoreId: undefined as number | undefined,
+  fromStoreId: undefined as string | undefined,
+  toStoreId: undefined as string | undefined,
   transferDate: new Date().toISOString().slice(0, 10),
   remark: '',
   items: [] as FormItem[]
@@ -425,7 +460,7 @@ const formRules: FormRules = {
   ]
 }
 
-// 添加商品明细
+// 添加商品明细（调出门店未选时按钮禁用，由模板控制）
 const handleAddItem = () => {
   formData.items.push({
     productId: undefined,
@@ -439,9 +474,44 @@ const handleRemoveItem = (index: number) => {
   formData.items.splice(index, 1)
 }
 
-// 商品选择变化时无需额外操作（名称编码在提交时从选项列表中查找）
-const handleItemProductChange = (_row: FormItem, _val: number) => {
-  // 商品的名称和编码在创建时由 API 端自动填充
+// 加载调出门店的库存商品列表（带缓存，避免重复请求）
+const loadFromStoreProducts = async (fromStoreId: string) => {
+  if (productOptionsByFromStore.value[fromStoreId]) return
+  try {
+    productOptionsByFromStore.value[fromStoreId] = await getFromStoreProducts(fromStoreId)
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载调出门店商品列表失败')
+  }
+}
+
+// 加载调出门店指定商品的在库批次列表（带缓存，手动模式下使用）
+const loadProductBatches = async (fromStoreId: string, productId: number) => {
+  const key = `${fromStoreId}_${productId}`
+  if (batchOptionsByProduct.value[key]) return
+  try {
+    batchOptionsByProduct.value[key] = await getFromStoreProductBatches(fromStoreId, productId)
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载商品批次列表失败')
+  }
+}
+
+// 商品选择变化：清空已选批次；手动模式时加载该商品批次列表
+const handleItemProductChange = (row: FormItem, _val: number) => {
+  row.batchNo = ''
+  if (deductMode.value === 'manual' && formData.fromStoreId && row.productId) {
+    loadProductBatches(formData.fromStoreId, row.productId)
+  }
+}
+
+// 切换扣减方式：切到手动模式时，对已选商品补加载批次列表（FEFO 模式下选商品时未加载）
+const handleDeductModeChange = (val: DeductMode) => {
+  if (val === 'manual' && formData.fromStoreId) {
+    for (const item of formData.items) {
+      if (item.productId) {
+        loadProductBatches(formData.fromStoreId, item.productId)
+      }
+    }
+  }
 }
 
 // 重置表单
@@ -451,11 +521,19 @@ const resetFormData = () => {
   formData.transferDate = new Date().toISOString().slice(0, 10)
   formData.remark = ''
   formData.items = []
+  deductMode.value = 'fefo'
+  productOptionsByFromStore.value = {}
+  batchOptionsByProduct.value = {}
 }
 
 // 新增
 const handleAdd = () => {
   resetFormData()
+  // 调出门店固定为门店切换器当前选中门店，不可更改
+  formData.fromStoreId = userStore.currentStoreId || undefined
+  if (formData.fromStoreId) {
+    loadFromStoreProducts(formData.fromStoreId)
+  }
   dialogVisible.value = true
 }
 
@@ -478,6 +556,50 @@ const handleSubmit = async () => {
           ElMessage.error('调拨数量必须大于0')
           return
         }
+        // 手动模式校验批次必选
+        if (deductMode.value === 'manual' && !item.batchNo) {
+          ElMessage.error('手动模式下请为每条明细选择批次')
+          return
+        }
+      }
+
+      // 校验库存上限：手动模式按批次聚合，FEFO 模式按商品聚合
+      // 避免同一批次/商品被多条明细引用时累计数量超过可用库存
+      if (deductMode.value === 'manual') {
+        // 同一商品同一批次号的总数量不得超过该批次可用库存
+        const batchUsageMap = new Map<string, { batchNo: string; used: number; stock: number }>()
+        for (const item of formData.items) {
+          const key = `${formData.fromStoreId}_${item.productId}`
+          const batch = (batchOptionsByProduct.value[key] || []).find(b => b.batchNo === item.batchNo)
+          if (!batch) continue
+          const aggKey = `${item.productId}_${item.batchNo}`
+          const agg = batchUsageMap.get(aggKey) || { batchNo: item.batchNo, used: 0, stock: batch.quantity }
+          agg.used += item.quantity
+          batchUsageMap.set(aggKey, agg)
+        }
+        for (const agg of batchUsageMap.values()) {
+          if (agg.used > agg.stock) {
+            ElMessage.error(`批次 ${agg.batchNo} 库存不足（可用 ${agg.stock}，已录入 ${agg.used}）`)
+            return
+          }
+        }
+      } else {
+        // FEFO 模式：后端按过期日期跨批次扣减，按商品聚合校验总库存
+        const productUsageMap = new Map<number, { used: number; stock: number; name: string }>()
+        const products = productOptionsByFromStore.value[formData.fromStoreId || ''] || []
+        for (const item of formData.items) {
+          const product = products.find(p => p.id === item.productId)
+          if (!product) continue
+          const agg = productUsageMap.get(item.productId!) || { used: 0, stock: product.stock, name: product.name }
+          agg.used += item.quantity
+          productUsageMap.set(item.productId!, agg)
+        }
+        for (const agg of productUsageMap.values()) {
+          if (agg.used > agg.stock) {
+            ElMessage.error(`商品 ${agg.name} 库存不足（可用 ${agg.stock}，已录入 ${agg.used}）`)
+            return
+          }
+        }
       }
       submitLoading.value = true
       try {
@@ -489,7 +611,8 @@ const handleSubmit = async () => {
           items: formData.items.map(item => ({
             productId: item.productId!,
             quantity: item.quantity,
-            batchNo: item.batchNo || undefined
+            // FEFO 模式 batchNo 留空提交（后端按过期日期升序扣减），手动模式填入选中批次号
+            batchNo: deductMode.value === 'manual' ? item.batchNo : undefined
           }))
         })
         ElMessage.success('创建调拨单成功')
@@ -507,7 +630,7 @@ const handleSubmit = async () => {
 // 详情弹窗
 const detailDialogVisible = ref(false)
 const detailData = reactive({
-  id: 0,
+  id: '',
   transferNo: '',
   fromStoreName: '',
   toStoreName: '',
@@ -537,20 +660,34 @@ const handleViewDetail = async (row: StockTransfer) => {
   }
 }
 
-// 更新调拨单状态
-const handleUpdateStatus = async (row: StockTransfer, status: TransferStatus) => {
-  const statusLabel = transferStatusMap[status]
-  const confirmMessage = status === 4
-    ? `确定要取消调拨单 "${row.transferNo}" 吗？`
-    : `确定要将调拨单 "${row.transferNo}" 更新为"${statusLabel}"吗？`
+// 执行调拨（调出门店扣减库存 + 调入门店增加库存，状态转为已调入）
+const handleExecute = async (row: StockTransfer) => {
   try {
-    await ElMessageBox.confirm(confirmMessage, '确认操作', {
-      type: status === 4 ? 'warning' : 'info',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消'
-    })
-    await updateTransferStatus(row.id, status)
-    ElMessage.success('操作成功')
+    await ElMessageBox.confirm(
+      `确定要执行调拨单 "${row.transferNo}" 吗？执行后将扣减调出门店库存并增加调入门店库存。`,
+      '确认操作',
+      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
+    )
+    await executeStockTransfer(row.id)
+    ElMessage.success('调拨执行成功')
+    loadData()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '操作失败')
+    }
+  }
+}
+
+// 取消调拨单（仅待调出状态可取消）
+const handleCancel = async (row: StockTransfer) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要取消调拨单 "${row.transferNo}" 吗？`,
+      '确认操作',
+      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '返回' }
+    )
+    await cancelStockTransfer(row.id)
+    ElMessage.success('取消成功')
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -627,6 +764,34 @@ onMounted(async () => {
   background-color: var(--bg-hover) !important;
 }
 
+/* 弹窗内表格 - 浅色浮层风格
+   项目规范：弹窗为白底浅色浮层，弹窗内表格需跟随浅色，
+   避免页面深色表格样式覆盖到弹窗，导致深色单元格+白色弹窗+白色输入框冲突 */
+:deep(.el-dialog .el-table) {
+  --el-table-bg-color: transparent !important;
+  --el-table-text-color: #4b5563 !important;
+  --el-table-border-color: #e5e7eb !important;
+  --el-table-header-bg-color: #f9fafb !important;
+  --el-table-header-text-color: #1f2937 !important;
+  --el-table-row-hover-bg-color: #f3f4f6 !important;
+}
+
+:deep(.el-dialog .el-table th.el-table__cell) {
+  background-color: #f9fafb !important;
+  color: #1f2937 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+:deep(.el-dialog .el-table td.el-table__cell) {
+  background-color: transparent !important;
+  color: #4b5563 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+:deep(.el-dialog .el-table__row:hover > td.el-table__cell) {
+  background-color: #f3f4f6 !important;
+}
+
 /* 搜索区域 */
 .search-form {
   padding: 20px 24px 0;
@@ -679,10 +844,16 @@ onMounted(async () => {
   font-size: 14px;
 }
 
-/* 详情明细标题 */
+/* FEFO 模式批次占位文本 */
+.batch-auto-text {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* 详情明细标题（弹窗为白底浮层，使用深色与弹窗表头保持一致） */
 .detail-items-title {
   font-weight: 600;
   margin: 20px 0 10px;
-  color: var(--text-primary);
+  color: #1f2937;
 }
 </style>

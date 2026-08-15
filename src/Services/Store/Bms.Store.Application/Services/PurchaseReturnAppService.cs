@@ -22,19 +22,22 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     private readonly IInventoryAppService _inventoryAppService;
     private readonly IValidator<PurchaseReturnCreateDto> _createValidator;
     private readonly IValidator<PurchaseReturnUpdateDto> _updateValidator;
+    private readonly IInventoryAlertAppService _alertAppService;
 
     public PurchaseReturnAppService(
         StoreDbContext dbContext,
         ICurrentUser currentUser,
         IInventoryAppService inventoryAppService,
         IValidator<PurchaseReturnCreateDto> createValidator,
-        IValidator<PurchaseReturnUpdateDto> updateValidator)
+        IValidator<PurchaseReturnUpdateDto> updateValidator,
+        IInventoryAlertAppService alertAppService)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _inventoryAppService = inventoryAppService;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
+        _alertAppService = alertAppService;
     }
 
     /// <summary>
@@ -43,12 +46,13 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     public async Task<ApiResponseDto<PagedResponseDto<PurchaseReturnDto>>> GetPagedListAsync(PurchaseReturnQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<PurchaseReturnDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<PurchaseReturnDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.PurchaseReturns
             .Include(p => p.Items)
-            .Where(p => p.TenantId == tenantId);
+            .Where(p => p.TenantId == tenantId && p.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.ReturnNo))
             queryable = queryable.Where(p => p.ReturnNo.Contains(query.ReturnNo));
@@ -78,11 +82,11 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     public async Task<ApiResponseDto<PurchaseReturnDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PurchaseReturnDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PurchaseReturnDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.PurchaseReturns
             .Include(p => p.Items)
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value && p.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<PurchaseReturnDto?>.Fail("采购退货不存在", 404);
         return ApiResponseDto<PurchaseReturnDto?>.Ok(entity.Adapt<PurchaseReturnDto>());
@@ -97,7 +101,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     public async Task<ApiResponseDto<PurchaseReturnDto>> CreateAsync(PurchaseReturnCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PurchaseReturnDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PurchaseReturnDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -106,20 +110,17 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
         var tenantId = _currentUser.TenantId.Value;
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
         var storeId = _currentUser.StoreId.Value;
-        var returnNoExists = await _dbContext.PurchaseReturns
-            .AnyAsync(p => p.ReturnNo == dto.ReturnNo && p.TenantId == tenantId);
-        if (returnNoExists)
-            return ApiResponseDto<PurchaseReturnDto>.Fail($"退货单号 {dto.ReturnNo} 已存在", 400);
 
         // 关联采购订单校验：若传入 PurchaseOrderId，必须存在且供应商匹配
         if (dto.PurchaseOrderId.HasValue)
         {
             var purchaseOrder = await _dbContext.PurchaseOrders
-                .FirstOrDefaultAsync(p => p.Id == dto.PurchaseOrderId.Value && p.TenantId == tenantId);
+                .Include(p => p.OrderItems)
+                .FirstOrDefaultAsync(p => p.Id == dto.PurchaseOrderId.Value && p.TenantId == tenantId && p.StoreId == storeId);
             if (purchaseOrder == null)
                 return ApiResponseDto<PurchaseReturnDto>.Fail("关联的采购订单不存在", 404);
-            if (purchaseOrder.SupplierId != dto.SupplierId)
-                return ApiResponseDto<PurchaseReturnDto>.Fail("退货供应商与采购订单供应商不一致", 400);
+            if (!purchaseOrder.OrderItems.Any(i => i.SupplierId == dto.SupplierId))
+                return ApiResponseDto<PurchaseReturnDto>.Fail("退货供应商与采购订单明细供应商不一致", 400);
         }
 
         var now = DateTime.Now;
@@ -132,6 +133,8 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
         entity.CreatedTime = now;
         entity.TotalQuantity = dto.Items.Sum(i => i.Quantity);
         entity.TotalRefundAmount = dto.Items.Sum(i => i.RefundAmount);
+        // 操作人从当前登录用户取值，不依赖前端传入，避免遗漏记录
+        entity.OperatorId = _currentUser.UserId;
 
         // 设置明细审计字段
         foreach (var item in entity.Items)
@@ -145,6 +148,14 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
+            // 事务级顾问锁：按 (租户, 门店, 退货日期) 串行化并发请求
+            // ReturnNo 采用"查max+1"生成模式，并发下需串行化避免重复
+            var lockKey = PurchaseReturnNoGenerator.BuildLockKey(tenantId, storeId, dto.ReturnTime);
+            await _dbContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0})", lockKey);
+
+            // 在锁保护下生成退货单号（PR{yyyyMMdd}{序号}）
+            entity.ReturnNo = await PurchaseReturnNoGenerator.GenerateAsync(_dbContext, tenantId, storeId, dto.ReturnTime);
+
             _dbContext.PurchaseReturns.Add(entity);
             await _dbContext.SaveChangesAsync();
 
@@ -157,7 +168,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
                     item.BatchNo,
                     sourceType: InventoryLogSourceTypes.PurchaseReturnOutbound,
                     refId: entity.Id,
-                    remark: $"采购退货出库-{entity.ReturnNo}");
+                    remark: entity.ReturnNo);
 
                 if (!deductResult.IsSuccess)
                     throw new InvalidOperationException(deductResult.Message ?? "库存扣减失败");
@@ -170,7 +181,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
             if (dto.PurchaseOrderId.HasValue)
             {
                 var purchaseOrder = await _dbContext.PurchaseOrders
-                    .FirstOrDefaultAsync(p => p.Id == dto.PurchaseOrderId.Value && p.TenantId == tenantId);
+                    .FirstOrDefaultAsync(p => p.Id == dto.PurchaseOrderId.Value && p.TenantId == tenantId && p.StoreId == storeId);
                 if (purchaseOrder != null)
                 {
                     purchaseOrder.RefundedAmount += entity.TotalRefundAmount;
@@ -180,6 +191,20 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
 
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            // 即时检测预警（失败不影响退货结果，定时任务兜底）
+            foreach (var item in entity.Items)
+            {
+                try
+                {
+                    await _alertAppService.CheckInventoryAlertsAsync(tenantId, storeId, item.ProductId);
+                }
+                catch
+                {
+                    // 预警检测失败不影响主流程
+                }
+            }
+
             return ApiResponseDto<PurchaseReturnDto>.Ok(entity.Adapt<PurchaseReturnDto>(), "创建成功");
         }
         catch (InvalidOperationException ex)
@@ -202,7 +227,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     public async Task<ApiResponseDto<PurchaseReturnDto>> UpdateAsync(PurchaseReturnUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PurchaseReturnDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PurchaseReturnDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -212,7 +237,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
         var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.PurchaseReturns
             .Include(p => p.Items)
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId && p.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<PurchaseReturnDto>.Fail("采购退货不存在", 404);
 
@@ -220,7 +245,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
         if (entity.ReturnNo != dto.ReturnNo)
         {
             var returnNoExists = await _dbContext.PurchaseReturns
-                .AnyAsync(p => p.ReturnNo == dto.ReturnNo && p.TenantId == tenantId && p.Id != dto.Id);
+                .AnyAsync(p => p.ReturnNo == dto.ReturnNo && p.TenantId == tenantId && p.StoreId == storeId && p.Id != dto.Id);
             if (returnNoExists)
                 return ApiResponseDto<PurchaseReturnDto>.Fail($"退货单号 {dto.ReturnNo} 已存在", 400);
         }
@@ -254,7 +279,7 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
         entity.PurchaseOrderId = dto.PurchaseOrderId;
         entity.ReturnTime = dto.ReturnTime;
         entity.VoucherImageUrl = dto.VoucherImageUrl;
-        entity.OperatorId = dto.OperatorId;
+        // 操作人记录的是"创建退货单的人"，更新时不可被改写
         entity.Remark = dto.Remark;
         entity.TotalQuantity = dto.Items.Sum(i => i.Quantity);
         entity.TotalRefundAmount = dto.Items.Sum(i => i.RefundAmount);
@@ -272,10 +297,10 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.PurchaseReturns
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value && p.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto.Fail("采购退货不存在", 404);
 
@@ -290,12 +315,12 @@ public class PurchaseReturnAppService : IPurchaseReturnAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.PurchaseReturns
-            .Where(p => ids.Contains(p.Id) && p.TenantId == _currentUser.TenantId.Value)
+            .Where(p => ids.Contains(p.Id) && p.TenantId == _currentUser.TenantId.Value && p.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         _dbContext.PurchaseReturns.RemoveRange(entities);

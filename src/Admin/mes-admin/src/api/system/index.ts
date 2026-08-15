@@ -13,6 +13,7 @@ import type {
   RoleMenuGrouped,
   CurrentUser
 } from './types'
+import { handleUnauthorized } from '../shared/auth'
 
 // 导出类型供外部使用
 export type {
@@ -66,6 +67,10 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     }
     // 兼容 code 为字符串或数字的情况
     if (result.code != 200) {
+      // 401 未授权：token 失效或用户被禁用，跳转登录页
+      if (response.status === 401) {
+        handleUnauthorized(errorMessage)
+      }
       // 403 时附带后端返回的路径和所需权限，便于定位是哪个接口、缺什么权限
       const extra: string[] = []
       const anyResult = result as any
@@ -374,6 +379,20 @@ export async function getOrganizations(query?: { name?: string; status?: number;
   if (query?.status !== undefined) params.append('status', String(query.status))
   if (query?.tenantId !== undefined) params.append('tenantId', String(query.tenantId))
   return request<Organization[]>(`${API_BASE}/organizations/tree?${params}`)
+}
+
+/**
+ * 获取组织列表（下拉数据专用，无需组织架构页面权限）
+ * 用于用户管理、角色管理、站内信等页面的组织下拉选择
+ * @param query 查询参数（组织名称、状态、租户ID）
+ * @returns 组织树形列表
+ */
+export async function getOrganizationOptions(query?: { name?: string; status?: number; tenantId?: number | string }): Promise<Organization[]> {
+  const params = new URLSearchParams()
+  if (query?.name) params.append('name', query.name)
+  if (query?.status !== undefined) params.append('status', String(query.status))
+  if (query?.tenantId !== undefined) params.append('tenantId', String(query.tenantId))
+  return request<Organization[]>(`${API_BASE}/organizations/options?${params}`)
 }
 
 /**

@@ -35,12 +35,6 @@
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <el-button type="primary" disabled>
-          <el-icon><Download /></el-icon>
-          导出
-        </el-button>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -55,12 +49,20 @@
         :data="tableData"
         style="width: 100%"
       >
-        <el-table-column prop="productName" label="商品名称" min-width="140" />
-        <el-table-column prop="productCode" label="商品编码" width="110" />
-        <el-table-column prop="batchNo" label="批次号" width="120" />
-        <el-table-column prop="purchaseDate" label="采购日期" width="110" />
-        <el-table-column prop="expirationDate" label="过期日期" width="110" />
-        <el-table-column label="剩余天数" width="100" align="center">
+        <el-table-column prop="productName" label="商品名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="productCode" label="商品编码" width="130" />
+        <el-table-column prop="batchNo" label="批次号" width="140" />
+        <el-table-column label="采购日期" width="120">
+          <template #default="{ row }">
+            {{ row.purchaseDate ? row.purchaseDate.split('T')[0] : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="过期日期" width="120">
+          <template #default="{ row }">
+            {{ row.expirationDate ? row.expirationDate.split('T')[0] : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="剩余天数" width="110" align="center">
           <template #default="{ row }">
             <span :class="getRemainingDaysClass(row.remainingDays)">
               {{ row.remainingDays > 0 ? row.remainingDays : '已过期' + Math.abs(row.remainingDays) + '天' }}
@@ -95,7 +97,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, Download } from '@element-plus/icons-vue'
+import { Search, Refresh } from '@element-plus/icons-vue'
 import { getExpiryList } from '@/api/inventory'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { ExpiryInfo, ExpiryStatus } from '@/api/inventory/types'
@@ -243,15 +245,10 @@ onMounted(async () => {
 /* 操作栏 */
 .table-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   padding: 0 4px;
-}
-
-.toolbar-left {
-  display: flex;
-  gap: 12px;
 }
 
 .toolbar-right {

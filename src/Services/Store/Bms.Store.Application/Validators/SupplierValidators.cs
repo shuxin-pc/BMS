@@ -19,7 +19,7 @@ public class SupplierCreateDtoValidator : AbstractValidator<SupplierCreateDto>
             .MaximumLength(50).WithMessage("供应商编码最多50个字符");
 
         RuleFor(x => x.Status)
-            .InclusiveBetween(0, 1).WithMessage("状态只能为0(禁用)或1(启用)");
+            .InclusiveBetween(1, 2).WithMessage("状态只能为1(合作中)或2(已停止)");
     }
 }
 

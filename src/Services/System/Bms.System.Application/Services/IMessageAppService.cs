@@ -83,4 +83,9 @@ public interface IMessageAppService
     /// 内部服务触发消息发送（自动触发）
     /// </summary>
     Task<ApiResponseDto<bool>> NotifyAsync(InternalMessageNotifyDto dto);
+
+    /// <summary>
+    /// 批量检查指定业务类型下哪些业务键已存在（未撤回）的消息记录，用于去重判断
+    /// </summary>
+    Task<ApiResponseDto<BizKeyCheckResultDto>> CheckBizExistsAsync(BizKeyCheckDto dto);
 }

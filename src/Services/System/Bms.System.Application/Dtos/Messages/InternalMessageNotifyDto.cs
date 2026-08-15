@@ -39,4 +39,20 @@ public class InternalMessageNotifyDto
     /// 跳转链接
     /// </summary>
     public string? TargetUrl { get; set; }
+
+    /// <summary>
+    /// 目标租户ID。后台服务无 HTTP 上下文，需显式指定消息归属租户。
+    /// 未提供时由 NotifyAsync 使用当前请求租户（适用于 Web 请求内调用）。
+    /// </summary>
+    public long? TenantId { get; set; }
+
+    /// <summary>
+    /// 业务类型标识（如 "BirthdayReminder"），用于按业务场景去重。
+    /// </summary>
+    public string? BizType { get; set; }
+
+    /// <summary>
+    /// 业务唯一键（如 "{customerId}:{year}"），与 BizType 配合用于去重判断。
+    /// </summary>
+    public string? BizKey { get; set; }
 }

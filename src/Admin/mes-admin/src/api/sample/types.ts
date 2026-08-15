@@ -27,14 +27,6 @@ export type SampleStatus = 1 | 2
 export type ReceivePurpose = number
 
 /**
- * 库存状态
- * - 1: 充足
- * - 2: 偏低
- * - 3: 不足
- */
-export type InventoryStatus = number
-
-/**
  * 通用分页响应
  */
 export interface PagedResponse<T> {
@@ -72,6 +64,8 @@ export interface Sample {
   price: number
   /** 成本价 */
   costPrice?: number
+  /** 上次采购价（采购入库时自动更新，分店独立采购） */
+  lastPurchasePrice?: number
   /** 低库存预警阈值 */
   lowStockThreshold?: number
   /** 效期预警天数 */
@@ -82,8 +76,8 @@ export interface Sample {
   imageUrl?: string
   /** 商品状态：1-上架，2-下架 */
   status: SampleStatus
-  /** 商品描述 */
-  description?: string
+  /** 分店级备注 */
+  remark?: string
   /** 创建时间 */
   createdAt: string
   /** 更新时间 */
@@ -109,33 +103,6 @@ export interface SampleQuery {
 }
 
 /**
- * 创建样品请求（与后端 ProductCreateDto 对齐，type 必须为 4 或 5）
- */
-export interface SampleCreate {
-  name: string
-  code: string
-  categoryId: number
-  type: SampleType
-  spec?: string
-  unit?: string
-  price: number
-  costPrice?: number
-  lowStockThreshold?: number
-  expiryAlertDays?: number
-  overstockThreshold?: number
-  imageUrl?: string
-  status: SampleStatus
-  description?: string
-}
-
-/**
- * 更新样品请求（继承 Create + id）
- */
-export interface SampleUpdate extends SampleCreate {
-  id: number
-}
-
-/**
  * 样品领用记录（与后端 SampleGiftReceiveDto 对齐）
  */
 export interface SampleReceive {
@@ -155,6 +122,10 @@ export interface SampleReceive {
   operatorId?: number
   /** 备注 */
   remark?: string
+  /** 关联活动ID（可选） */
+  activityId?: number | null
+  /** 关联活动名称（显示字段，由后端填充） */
+  activityName?: string | null
   /** 创建时间 */
   createdAt: string
   /** 更新时间 */
@@ -193,119 +164,8 @@ export interface SampleReceiveCreate {
   operatorId?: number
   /** 备注 */
   remark?: string
-}
-
-/**
- * 赠品出库记录（与后端 SampleGiftOutDto 对齐）
- */
-export interface SampleOutbound {
-  /** 出库记录ID */
-  id: number
-  /** 商品ID（type=4样品/type=5赠品） */
-  productId: number
-  /** 出库批次ID */
-  inventoryBatchId: number
-  /** 出库数量 */
-  quantity: number
-  /** 出库时间 */
-  outTime: string
-  /** 关联活动ID */
-  activityId?: number
-  /**
-   * 关联订单ID
-   * 注意：独立赠品出库入口传入的 orderId 会被后端强制设为 null（P-SG-03 修复）。
-   * OrderId 仅由订单创建流程（OrderAppService.DeductSampleGiftOutAsync）在事务内写入。
-   * 此字段保留是为了向前兼容，前端创建/更新时不需要传。
-   */
-  orderId?: number
-  /** 操作员ID */
-  operatorId?: number
-  /** 备注 */
-  remark?: string
-  /** 创建时间 */
-  createdAt: string
-  /** 更新时间 */
-  updatedAt?: string
-}
-
-/**
- * 出库记录查询参数（与后端 SampleGiftOutQueryDto 对齐）
- */
-export interface SampleOutboundQuery {
-  /** 商品ID */
-  productId?: number
-  /** 页码 */
-  pageIndex?: number
-  /** 每页条数 */
-  pageSize?: number
-}
-
-/**
- * 创建出库记录请求（与后端 SampleGiftOutCreateDto 对齐）
- */
-export interface SampleOutboundCreate {
-  /** 商品ID（type=4样品/type=5赠品） */
-  productId: number
-  /** 出库批次ID */
-  inventoryBatchId: number
-  /** 出库数量 */
-  quantity: number
-  /** 出库时间 */
-  outTime: string
-  /** 关联活动ID */
-  activityId?: number
-  /**
-   * 关联订单ID
-   * 注意：独立赠品出库入口传入的 orderId 会被后端强制设为 null（P-SG-03 修复）。
-   * OrderId 仅由订单创建流程（OrderAppService.DeductSampleGiftOutAsync）在事务内写入。
-   * 此字段保留是为了向前兼容，前端创建/更新时不需要传。
-   */
-  orderId?: number
-  /** 操作员ID */
-  operatorId?: number
-  /** 备注 */
-  remark?: string
-}
-
-/**
- * 库存查询结果
- * 字段与后端 SampleInventoryDto 对齐
- */
-export interface SampleInventory {
-  /** 档案ID */
-  id: number
-  /** 名称 */
-  name: string
-  /** 编码 */
-  code: string
-  /** 类型：4-样品，5-赠品 */
-  type: SampleType
-  /** 单位 */
-  unit?: string
-  /** 当前库存 */
-  currentStock: number
-  /** 预警阈值（未配置时为 null，表示不参与低库存预警） */
-  alertQuantity: number | null
-  /** 库存状态：1-充足，2-偏低，3-不足 */
-  inventoryStatus: InventoryStatus
-  /** 上次入库时间 */
-  lastInboundTime?: string
-}
-
-/**
- * 库存查询参数
- */
-export interface SampleInventoryQuery {
-  /** 名称（模糊匹配） */
-  name?: string
-  /** 类型筛选 */
-  type?: SampleType
-  /** 库存状态筛选 */
-  inventoryStatus?: InventoryStatus
-  /** 页码 */
-  pageIndex?: number
-  /** 每页条数 */
-  pageSize?: number
+  /** 关联活动ID（可选，用于活动维度归因统计） */
+  activityId?: number | null
 }
 
 /**

@@ -5,6 +5,11 @@ namespace Bms.Store.Application.Dtos.Equipments;
 /// </summary>
 public class EquipmentCreateDto
 {
+    /// <summary>
+    /// 所属设备类型 ID（必填，需为当前租户下已存在的类型）
+    /// </summary>
+    public long EquipmentTypeId { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string? Model { get; set; }

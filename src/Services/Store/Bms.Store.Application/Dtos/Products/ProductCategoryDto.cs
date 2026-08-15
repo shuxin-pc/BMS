@@ -7,8 +7,9 @@ public class ProductCategoryDto
 {
     public long Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Code { get; set; }
     public long ParentId { get; set; }
-    public int Sort { get; set; }
+    public DateTime CreatedAt { get; set; }
     public List<ProductCategoryDto>? Children { get; set; }
 }
 
@@ -18,8 +19,8 @@ public class ProductCategoryDto
 public class ProductCategoryCreateDto
 {
     public string Name { get; set; } = string.Empty;
+    public string? Code { get; set; }
     public long ParentId { get; set; }
-    public int Sort { get; set; }
 }
 
 /// <summary>
@@ -29,6 +30,6 @@ public class ProductCategoryUpdateDto
 {
     public long Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Code { get; set; }
     public long ParentId { get; set; }
-    public int Sort { get; set; }
 }

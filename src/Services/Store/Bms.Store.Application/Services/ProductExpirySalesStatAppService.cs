@@ -33,7 +33,7 @@ public class ProductExpirySalesStatAppService : IProductExpirySalesStatAppServic
     public async Task<ApiResponseDto<PagedResponseDto<ProductExpirySalesStatDto>>> GetReportAsync(ProductExpirySalesQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<ProductExpirySalesStatDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<ProductExpirySalesStatDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = query.StoreId ?? _currentUser.StoreId;
@@ -44,29 +44,31 @@ public class ProductExpirySalesStatAppService : IProductExpirySalesStatAppServic
         var endDate = query.EndDate ?? today;
 
         // 查询 OrderItemBatch 关联数据
+        // Name/Code/Type/CategoryId 已移至 ProductMaster，通过 Master 关联（设计文档 3.2 节）
         var rawData = await (
             from oib in _dbContext.OrderItemBatches
             join o in _dbContext.Orders on oib.OrderId equals o.Id
             join p in _dbContext.Products on oib.ProductId equals p.Id
+            join m in _dbContext.ProductMasters on p.MasterId equals m.Id
             join oi in _dbContext.OrderItems on oib.OrderItemId equals oi.Id
-            join c in _dbContext.ProductCategories on p.CategoryId equals c.Id into cats
+            join c in _dbContext.ProductCategories on m.CategoryId equals c.Id into cats
             from c in cats.DefaultIfEmpty()
             where o.TenantId == tenantId
                 && o.Status != 3 // 排除已退款
                 && o.Status != 4 // 排除已取消
                 && oib.ExpirationDate.HasValue
                 && (storeId == null || o.StoreId == storeId)
-                && (query.ProductType == null || p.Type == query.ProductType.Value)
-                && (query.CategoryId == null || p.CategoryId == query.CategoryId.Value)
+                && (query.ProductType == null || m.Type == query.ProductType.Value)
+                && (query.CategoryId == null || m.CategoryId == query.CategoryId.Value)
                 && o.OrderTime >= startDate
                 && o.OrderTime < endDate.AddDays(1)
             select new
             {
                 oib.ProductId,
-                ProductName = p.Name,
-                ProductCode = p.Code,
-                ProductType = p.Type,
-                CategoryId = (long?)p.CategoryId,
+                ProductName = m.Name,
+                ProductCode = m.Code,
+                ProductType = m.Type,
+                CategoryId = (long?)m.CategoryId,
                 CategoryName = c != null ? c.Name : null,
                 ExpirationDate = oib.ExpirationDate.Value,
                 OrderId = oib.OrderId,

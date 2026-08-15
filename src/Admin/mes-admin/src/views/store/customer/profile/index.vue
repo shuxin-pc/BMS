@@ -36,6 +36,16 @@
               <el-option label="女" :value="2" />
             </el-select>
           </el-form-item>
+          <el-form-item label="标签">
+            <el-select v-model="searchForm.tagId" placeholder="全部" clearable style="width: 140px">
+              <el-option
+                v-for="tag in allTags"
+                :key="tag.id"
+                :label="tag.name"
+                :value="tag.id"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleSearch">
               <el-icon><Search /></el-icon>
@@ -82,7 +92,7 @@
         style="width: 100%"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column label="客户姓名" min-width="120">
+        <el-table-column label="客户姓名" min-width="110">
           <template #default="{ row }">
             <div class="customer-name">
               <div class="customer-avatar" :class="row.gender === 2 ? 'female' : 'male'">
@@ -92,18 +102,13 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="phone" label="手机号" width="140" />
-        <el-table-column prop="gender" label="性别" width="80">
+        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column prop="gender" label="性别" width="70">
           <template #default="{ row }">
             {{ genderText(row.gender) }}
           </template>
         </el-table-column>
-        <el-table-column prop="birthday" label="生日" width="120">
-          <template #default="{ row }">
-            {{ formatDate(row.birthday) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="levelName" label="等级" width="100">
+        <el-table-column prop="levelName" label="等级" width="90">
           <template #default="{ row }">
             <el-tag v-if="row.levelName" type="warning" size="small" effect="dark">
               {{ row.levelName }}
@@ -111,46 +116,60 @@
             <span v-else class="text-tertiary">普通客户</span>
           </template>
         </el-table-column>
-        <el-table-column prop="totalPoints" label="积分" width="100" align="right">
+        <el-table-column label="标签" min-width="150">
+          <template #default="{ row }">
+            <template v-if="row.tags && row.tags.length > 0">
+              <el-tag
+                v-for="tag in row.tags"
+                :key="tag.id"
+                :type="(tag.color as any) || 'primary'"
+                size="small"
+                effect="light"
+                style="margin-right: 4px; margin-bottom: 2px;"
+              >
+                {{ tag.name }}
+              </el-tag>
+            </template>
+            <span v-else class="text-tertiary">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="totalPoints" label="积分" width="90" align="right">
           <template #default="{ row }">
             <span class="points-text">{{ row.totalPoints }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="balance" label="余额" width="120" align="right">
+        <el-table-column prop="balance" label="余额" width="110" align="right">
           <template #default="{ row }">
             <span class="balance-text">¥{{ formatPrice(row.balance) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="totalConsume" label="累计消费" width="120" align="right">
+        <el-table-column prop="totalConsume" label="累计消费" width="110" align="right">
           <template #default="{ row }">
             ¥{{ formatPrice(row.totalConsume) }}
           </template>
         </el-table-column>
-        <el-table-column prop="lastConsumeTime" label="最后消费" width="170">
+        <el-table-column prop="lastConsumeTime" label="最后消费" width="150">
           <template #default="{ row }">
             {{ formatDateTime(row.lastConsumeTime) }}
           </template>
         </el-table-column>
-        <el-table-column prop="authorizationStatus" label="授权状态" width="100">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-tag v-if="row.authorizationStatus === 1" type="success" size="small">已授权</el-tag>
-            <el-tag v-else-if="row.authorizationStatus === 2" type="danger" size="small">已撤回</el-tag>
-            <el-tag v-else type="info" size="small">未授权</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
+            <el-button link type="info" size="small" @click="handleViewDetail(row)">
+              <el-icon><View /></el-icon>
+              详情
+            </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="success" size="small" @click="handleViewStat(row)">
-              <el-icon><DataAnalysis /></el-icon>
-              统计
-            </el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
               删除
+            </el-button>
+            <el-button link type="danger" size="small" @click="handlePermanentDelete(row)">
+              <el-icon><WarnTriangleFilled /></el-icon>
+              永久删除
             </el-button>
           </template>
         </el-table-column>
@@ -201,7 +220,6 @@
               <el-radio-group v-model="formData.gender">
                 <el-radio :value="1">男</el-radio>
                 <el-radio :value="2">女</el-radio>
-                <el-radio :value="0">未知</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
@@ -223,15 +241,48 @@
             <el-option
               v-for="level in customerLevels"
               :key="level.id"
-              :label="`${level.name}（${level.discountRate}折）`"
+              :label="formatLevelLabel(level)"
               :value="level.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="客户标签" prop="selectedTags">
+          <el-select
+            v-model="formData.selectedTags"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择已有标签或输入新标签"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="tag in allTags"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
             />
           </el-select>
         </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="授权状态" prop="authorizationStatus">
-              <el-select v-model="formData.authorizationStatus" placeholder="请选择授权状态" style="width: 100%">
+            <el-form-item prop="authorizationStatus">
+              <template #label>
+                <span>授权状态</span>
+                <el-tooltip placement="top" effect="light">
+                  <template #content>
+                    <div style="max-width: 300px; line-height: 1.7; color: #303133;">
+                      <div style="font-weight: 600; margin-bottom: 4px;">客户个人信息授权（依据《个人信息保护法》）</div>
+                      <div>· 未授权：尚未取得客户签字授权</div>
+                      <div>· 已授权：客户已在会员卡申请表/服务协议/消费单据中签字确认</div>
+                      <div>· 已撤回：客户已撤回授权</div>
+                      <div style="margin-top: 6px; font-size: 12px; color: #606266;">由门店人员根据线下签署文件勾选确认</div>
+                    </div>
+                  </template>
+                  <el-icon class="auth-tip-icon"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </template>
+              <el-select v-model="formData.authorizationStatus" placeholder="请选择授权状态" style="width: 100%" @change="handleAuthorizationStatusChange">
                 <el-option label="未授权" :value="0" />
                 <el-option label="已授权" :value="1" />
                 <el-option label="已撤回" :value="2" />
@@ -245,7 +296,7 @@
                 type="datetime"
                 placeholder="请选择授权时间"
                 format="YYYY-MM-DD HH:mm"
-                value-format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DDTHH:mm:ss"
                 style="width: 100%"
               />
             </el-form-item>
@@ -266,66 +317,339 @@
       </template>
     </el-dialog>
 
-    <!-- 消费统计弹窗 -->
-    <el-dialog v-model="statVisible" title="客户消费统计" width="560px">
-      <div v-loading="statLoading">
-        <el-descriptions :column="2" border v-if="statData">
-          <el-descriptions-item label="消费频次">{{ statData.orderCount }} 次</el-descriptions-item>
-          <el-descriptions-item label="累计消费">¥{{ formatPrice(statData.totalConsumption) }}</el-descriptions-item>
-          <el-descriptions-item label="客单价">¥{{ formatPrice(statData.averageOrderValue) }}</el-descriptions-item>
-          <el-descriptions-item label="最近消费">{{ statData.lastConsumeTime ? formatDate(statData.lastConsumeTime) : '无' }}</el-descriptions-item>
-        </el-descriptions>
+    <!-- 客户详情弹窗 -->
+    <el-dialog v-model="detailVisible" title="客户详情" width="640px">
+      <el-descriptions v-if="detailData" :column="2" border class="detail-desc">
+        <el-descriptions-item label="客户姓名">
+          {{ detailData.name }}
+        </el-descriptions-item>
+        <el-descriptions-item label="手机号">
+          {{ detailData.phone }}
+        </el-descriptions-item>
+        <el-descriptions-item label="性别">
+          {{ genderText(detailData.gender) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="生日">
+          {{ formatDate(detailData.birthday) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="客户等级">
+          <el-tag v-if="detailData.levelName" type="warning" size="small" effect="dark">
+            {{ detailData.levelName }}
+          </el-tag>
+          <span v-else class="text-tertiary">普通客户</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="授权状态">
+          <el-tag :type="authorizationStatusType(detailData.authorizationStatus)" size="small">
+            {{ authorizationStatusText(detailData.authorizationStatus) }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="标签" :span="2">
+          <template v-if="detailData.tags && detailData.tags.length > 0">
+            <el-tag
+              v-for="tag in detailData.tags"
+              :key="tag.id"
+              :type="(tag.color as any) || 'primary'"
+              size="small"
+              effect="light"
+              style="margin-right: 4px;"
+            >
+              {{ tag.name }}
+            </el-tag>
+          </template>
+          <span v-else class="text-tertiary">-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="积分">
+          <span class="points-text">{{ detailData.totalPoints }}</span>
+          <el-button link type="primary" size="small" class="detail-inline-btn" @click="handleOpenPointsAdjust">
+            手动调整
+          </el-button>
+        </el-descriptions-item>
+        <el-descriptions-item label="余额">
+          <span class="balance-text">¥{{ formatPrice(detailData.balance) }}</span>
+          <el-button link type="primary" size="small" class="detail-inline-btn" @click="rechargeVisible = true">
+            充值
+          </el-button>
+        </el-descriptions-item>
+        <el-descriptions-item label="累计消费">
+          ¥{{ formatPrice(detailData.totalConsume) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="最后消费">
+          {{ formatDateTime(detailData.lastConsumeTime) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="授权时间">
+          {{ formatDateTime(detailData.authorizationTime) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="创建时间">
+          {{ formatDateTime(detailData.createdAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="地址" :span="2">
+          {{ detailData.address || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">
+          {{ detailData.remark || '-' }}
+        </el-descriptions-item>
+      </el-descriptions>
 
-        <div v-if="statData && statData.preferences.length > 0" class="stat-preferences">
-          <div class="stat-section-title">消费偏好</div>
-          <div v-for="item in statData.preferences" :key="item.productType" class="pref-item">
-            <div class="pref-header">
-              <span class="pref-name">{{ item.productTypeName }}</span>
-              <span class="pref-amount">¥{{ formatPrice(item.amount) }}（{{ (item.percentage * 100).toFixed(1) }}%）</span>
-            </div>
-            <el-progress
-              :percentage="Math.round(item.percentage * 100)"
-              :show-text="false"
-              :stroke-width="8"
-              :color="getPrefColor(item.productType)"
-            />
+      <!-- 消费统计（近6个月） -->
+      <div v-if="detailData" class="detail-stat-section">
+        <div class="detail-stat-title">消费统计（近6个月）</div>
+        <el-descriptions
+          v-loading="statLoading"
+          :column="2"
+          border
+          class="stat-desc"
+          v-if="statData"
+        >
+          <el-descriptions-item>
+            <template #label>
+              <span>消费频次</span>
+              <el-tooltip placement="top" effect="light">
+                <template #content>
+                  <div style="max-width: 300px; line-height: 1.7; color: #303133;">
+                    <div>近 6 个月内已完成订单数（不含退款/取消）</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #606266;">跨门店统计：包含本连锁其他门店的消费</div>
+                  </div>
+                </template>
+                <el-icon class="stat-tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </template>
+            {{ statData.orderCount }} 次
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              <span>累计消费</span>
+              <el-tooltip placement="top" effect="light">
+                <template #content>
+                  <div style="max-width: 300px; line-height: 1.7; color: #303133;">
+                    <div>近 6 个月内已完成订单的实付金额合计</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #606266;">跨门店统计：包含本连锁其他门店的消费</div>
+                  </div>
+                </template>
+                <el-icon class="stat-tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </template>
+            ¥{{ formatPrice(statData.totalConsumption) }}
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              <span>客单价</span>
+              <el-tooltip placement="top" effect="light">
+                <template #content>
+                  <div style="max-width: 300px; line-height: 1.7; color: #303133;">
+                    <div>累计消费 ÷ 消费频次</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #606266;">无订单时显示 0</div>
+                  </div>
+                </template>
+                <el-icon class="stat-tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </template>
+            ¥{{ formatPrice(statData.averageOrderValue) }}
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              <span>最近消费</span>
+              <el-tooltip placement="top" effect="light">
+                <template #content>
+                  <div style="max-width: 300px; line-height: 1.7; color: #303133;">
+                    <div>近 6 个月内最近一次已完成订单的时间</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #606266;">超过 6 个月的不统计</div>
+                  </div>
+                </template>
+                <el-icon class="stat-tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </template>
+            {{ statData.lastConsumeTime ? formatDate(statData.lastConsumeTime) : '无' }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-empty v-else-if="!statLoading" description="暂无消费统计数据" />
+
+        <!-- 消费偏好 -->
+        <div v-if="statData" class="stat-preferences">
+          <div class="stat-section-title">
+            <span>消费偏好</span>
+            <el-tooltip placement="top" effect="light">
+              <template #content>
+                <div style="max-width: 300px; line-height: 1.7; color: #303133;">
+                  <div>按订单类型分组的金额占比：</div>
+                  <div>· 零售单 -> 实物商品</div>
+                  <div>· 服务单 -> 服务项目</div>
+                  <div>· 疗程卡核销 -> 疗程卡</div>
+                  <div style="margin-top: 4px; font-size: 12px; color: #606266;">仅统计近 6 个月已完成订单</div>
+                </div>
+              </template>
+              <el-icon class="stat-tip-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
           </div>
+          <template v-if="statData.preferences.length > 0">
+            <div v-for="item in statData.preferences" :key="item.productType" class="pref-item">
+              <div class="pref-header">
+                <span class="pref-name">{{ item.productTypeName }}</span>
+                <span class="pref-amount">¥{{ formatPrice(item.amount) }}（{{ (item.percentage * 100).toFixed(1) }}%）</span>
+              </div>
+              <el-progress
+                :percentage="Math.round(item.percentage * 100)"
+                :show-text="false"
+                :stroke-width="8"
+                :color="getPrefColor(item.productType)"
+              />
+            </div>
+          </template>
+          <p v-else class="stat-empty-text">暂无消费偏好数据</p>
         </div>
-        <el-empty v-else-if="statData" description="暂无消费偏好数据" />
       </div>
+    </el-dialog>
+
+    <!-- 手动调整积分弹窗 -->
+    <el-dialog
+      v-model="pointsAdjustVisible"
+      title="手动调整积分"
+      width="480px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <el-form
+        ref="pointsAdjustFormRef"
+        :model="pointsAdjustForm"
+        :rules="pointsAdjustRules"
+        label-width="100px"
+      >
+        <el-form-item label="客户">
+          <span>{{ detailData?.name }}（{{ detailData?.phone }}）</span>
+        </el-form-item>
+        <el-form-item label="当前积分">
+          <span class="points-text">{{ detailData?.totalPoints }}</span>
+        </el-form-item>
+        <el-form-item label="变动积分" prop="points">
+          <el-input-number
+            v-model="pointsAdjustForm.points"
+            :step="1"
+            controls-position="right"
+            style="width: 200px"
+          />
+          <div class="form-tip">正数增加，负数扣减（扣减后积分不能为负）</div>
+        </el-form-item>
+        <el-form-item label="调整后积分">
+          <span class="points-text">{{ (detailData?.totalPoints ?? 0) + pointsAdjustForm.points }}</span>
+        </el-form-item>
+        <el-form-item label="原因备注" prop="remark">
+          <el-input
+            v-model="pointsAdjustForm.remark"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入调整原因"
+          />
+        </el-form-item>
+      </el-form>
       <template #footer>
-        <el-button @click="statVisible = false">关闭</el-button>
+        <el-button @click="pointsAdjustVisible = false">取消</el-button>
+        <el-button type="primary" :loading="pointsAdjustLoading" @click="handleSubmitPointsAdjust">
+          确定
+        </el-button>
       </template>
     </el-dialog>
+
+    <!-- 永久删除确认弹窗 -->
+    <el-dialog
+      v-model="permanentDeleteVisible"
+      title="永久删除客户档案"
+      width="500px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <el-alert type="error" :closable="false" show-icon style="margin-bottom: 16px;">
+        <template #title>
+          此操作将<strong>物理删除</strong>客户及所有关联个人信息（美容档案、体型数据、服务对比照片、消费偏好、积分流水、消费记录、疗程卡销售、储值账户等），订单数据将脱敏保留。<strong>此操作不可恢复！</strong>
+        </template>
+      </el-alert>
+
+      <el-form
+        ref="permanentDeleteFormRef"
+        :model="permanentDeleteForm"
+        :rules="permanentDeleteRules"
+        label-width="110px"
+      >
+        <el-form-item label="客户">
+          <span>{{ permanentDeleteTarget?.name }}（{{ permanentDeleteTarget?.phone }}）</span>
+        </el-form-item>
+        <el-form-item label="确认码" prop="confirmCode">
+          <el-input
+            v-model="permanentDeleteForm.confirmCode"
+            placeholder="请输入客户手机号后4位"
+            maxlength="4"
+            style="width: 200px"
+          />
+          <div class="form-tip">为防止误操作，需输入客户手机号后4位确认</div>
+        </el-form-item>
+        <el-form-item label="删除原因" prop="reason">
+          <el-input
+            v-model="permanentDeleteForm.reason"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入删除原因（将写入审计日志，永久保留）"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="permanentDeleteVisible = false">取消</el-button>
+        <el-button type="danger" :loading="permanentDeleteLoading" @click="handleSubmitPermanentDelete">
+          确认永久删除
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 储值充值弹窗（与储值账户页共用同一组件） -->
+    <RechargeDialog
+      v-if="detailData"
+      v-model="rechargeVisible"
+      :customer-id="detailData.id"
+      :customer-name="detailData.name"
+      :current-balance="detailData.balance"
+      @success="handleRechargeSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus, Delete, Edit, DataAnalysis } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Edit, QuestionFilled, View, WarnTriangleFilled } from '@element-plus/icons-vue'
 import {
   getCustomers,
+  getCustomer,
   createCustomer,
   updateCustomer,
   deleteCustomer,
   deleteCustomers,
+  permanentlyDeleteCustomer,
   getCustomerLevels,
-  getCustomerConsumptionStat
+  getAllCustomerTags,
+  getCustomerConsumptionStat,
+  createPointsLog
 } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { Customer, CustomerLevel, AuthorizationStatus, CustomerConsumptionStat } from '@/api/customer/types'
+import type { Customer, CustomerLevel, CustomerTag, AuthorizationStatus, CustomerConsumptionStat, CustomerPermanentDeleteDto } from '@/api/customer/types'
+import RechargeDialog from '@/views/store/storedvalue/components/RechargeDialog.vue'
 
 const systemConfigStore = useSystemConfigStore()
 
+const route = useRoute()
+
 // 客户等级列表
 const customerLevels = ref<CustomerLevel[]>([])
+
+// 全量客户标签列表（供弹窗下拉选择）
+const allTags = ref<CustomerTag[]>([])
 
 // 搜索表单
 const searchForm = reactive({
   name: '',
   phone: '',
   levelId: undefined as number | undefined,
+  tagId: undefined as number | undefined,
   gender: undefined as number | undefined
 })
 
@@ -351,9 +675,11 @@ const formData = reactive({
   id: 0,
   name: '',
   phone: '',
-  gender: 0 as number,
+  gender: undefined as number | undefined,
   birthday: '',
   levelId: undefined as number | undefined,
+  // 选中的标签：string 类型统一存储已有标签 ID（后端 long 序列化为 string）和新建标签名称
+  selectedTags: [] as string[],
   authorizationStatus: 0 as AuthorizationStatus,
   authorizationTime: '',
   address: '',
@@ -368,9 +694,6 @@ const formRules: FormRules = {
   phone: [
     { required: true, message: '手机号不能为空', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
-  ],
-  gender: [
-    { required: true, message: '请选择性别', trigger: 'change' }
   ]
 }
 
@@ -383,6 +706,30 @@ const loadCustomerLevels = async () => {
   }
 }
 
+/** 格式化客户等级下拉选项标签：折扣率 >= 1 时不附加折扣说明，与客户等级列表显示保持一致 */
+const formatLevelLabel = (level: CustomerLevel) => {
+  if (level.discountRate >= 1) return level.name
+  return `${level.name}（${(level.discountRate * 10).toFixed(1)}折）`
+}
+
+// 授权状态变更：选择已授权时若授权时间为空则默认填充当前时间
+const handleAuthorizationStatusChange = (value: AuthorizationStatus) => {
+  if (value === 1 && !formData.authorizationTime) {
+    const now = new Date()
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    formData.authorizationTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  }
+}
+
+// 加载全量客户标签列表
+const loadAllTags = async () => {
+  try {
+    allTags.value = await getAllCustomerTags()
+  } catch (error) {
+    allTags.value = []
+  }
+}
+
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
@@ -391,6 +738,7 @@ const loadData = async () => {
       name: searchForm.name || undefined,
       phone: searchForm.phone || undefined,
       levelId: searchForm.levelId,
+      tagId: searchForm.tagId,
       gender: searchForm.gender,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
@@ -415,6 +763,7 @@ const handleReset = () => {
   searchForm.name = ''
   searchForm.phone = ''
   searchForm.levelId = undefined
+  searchForm.tagId = undefined
   searchForm.gender = undefined
   handleSearch()
 }
@@ -424,9 +773,10 @@ const resetFormData = () => {
   formData.id = 0
   formData.name = ''
   formData.phone = ''
-  formData.gender = 0
+  formData.gender = undefined
   formData.birthday = ''
   formData.levelId = undefined
+  formData.selectedTags = []
   formData.authorizationStatus = 0
   formData.authorizationTime = ''
   formData.address = ''
@@ -449,6 +799,7 @@ const handleEdit = (row: Customer) => {
   formData.gender = row.gender
   formData.birthday = row.birthday || ''
   formData.levelId = row.levelId
+  formData.selectedTags = row.tags ? row.tags.map(t => t.id) : []
   formData.authorizationStatus = row.authorizationStatus ?? 0
   formData.authorizationTime = row.authorizationTime || ''
   formData.address = row.address || ''
@@ -474,13 +825,76 @@ const handleDelete = async (row: Customer) => {
   }
 }
 
+// ==================== 永久删除（物理删除） ====================
+const permanentDeleteVisible = ref(false)
+const permanentDeleteLoading = ref(false)
+const permanentDeleteFormRef = ref<FormInstance>()
+const permanentDeleteTarget = ref<Customer | null>(null)
+const permanentDeleteForm = reactive<CustomerPermanentDeleteDto>({
+  confirmCode: '',
+  reason: ''
+})
+const permanentDeleteRules: FormRules = {
+  confirmCode: [
+    { required: true, message: '请输入客户手机号后4位', trigger: 'blur' },
+    { len: 4, message: '确认码必须为4位', trigger: 'blur' }
+  ],
+  reason: [{ required: true, message: '请输入删除原因', trigger: 'blur' }]
+}
+
+// 打开永久删除弹窗
+const handlePermanentDelete = (row: Customer) => {
+  permanentDeleteTarget.value = row
+  permanentDeleteForm.confirmCode = ''
+  permanentDeleteForm.reason = ''
+  permanentDeleteVisible.value = true
+}
+
+// 提交永久删除
+const handleSubmitPermanentDelete = async () => {
+  if (!permanentDeleteFormRef.value || !permanentDeleteTarget.value) return
+  await permanentDeleteFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    // 前端二次确认：校验确认码是否匹配客户手机号后4位，避免无效请求到后端
+    const phoneLast4 = permanentDeleteTarget.value!.phone.slice(-4)
+    if (permanentDeleteForm.confirmCode !== phoneLast4) {
+      ElMessage.error('确认码不匹配，请输入客户手机号后4位')
+      return
+    }
+    permanentDeleteLoading.value = true
+    try {
+      await permanentlyDeleteCustomer(permanentDeleteTarget.value!.id, {
+        confirmCode: permanentDeleteForm.confirmCode,
+        reason: permanentDeleteForm.reason
+      })
+      ElMessage.success('客户档案已永久删除')
+      permanentDeleteVisible.value = false
+      loadData()
+    } catch (error: any) {
+      ElMessage.error(error.message || '永久删除失败')
+    } finally {
+      permanentDeleteLoading.value = false
+    }
+  })
+}
+
 // ==================== 消费统计 ====================
-const statVisible = ref(false)
 const statLoading = ref(false)
 const statData = ref<CustomerConsumptionStat | null>(null)
 
-const handleViewStat = async (row: Customer) => {
-  statVisible.value = true
+const getPrefColor = (productType: number) => {
+  const colors: Record<number, string> = { 1: '#409eff', 2: '#67c23a', 4: '#e6a23c' }
+  return colors[productType] || '#909399'
+}
+
+// ==================== 客户详情 ====================
+const detailVisible = ref(false)
+const detailData = ref<Customer | null>(null)
+
+// 打开详情弹窗并加载消费统计
+const handleViewDetail = async (row: Customer) => {
+  detailData.value = row
+  detailVisible.value = true
   statLoading.value = true
   statData.value = null
   try {
@@ -492,9 +906,103 @@ const handleViewStat = async (row: Customer) => {
   }
 }
 
-const getPrefColor = (productType: number) => {
-  const colors: Record<number, string> = { 1: '#409eff', 2: '#67c23a', 4: '#e6a23c' }
-  return colors[productType] || '#909399'
+/** 通过客户ID打开详情弹窗（站内信跳转等场景） */
+const openCustomerDetailById = async (customerId: number) => {
+  try {
+    const customer = await getCustomer(customerId)
+    await handleViewDetail(customer)
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载客户详情失败')
+  }
+}
+
+// ==================== 储值充值 ====================
+const rechargeVisible = ref(false)
+
+/**
+ * 充值成功后就地更新详情弹窗余额并刷新列表
+ * 余额为实收 + 赠送之和，与后端入账口径一致
+ */
+const handleRechargeSuccess = (payload: { amount: number; giftAmount: number }) => {
+  if (detailData.value) {
+    detailData.value.balance += payload.amount + payload.giftAmount
+  }
+  loadData()
+}
+
+// ==================== 手动调整积分 ====================
+const pointsAdjustVisible = ref(false)
+const pointsAdjustLoading = ref(false)
+const pointsAdjustFormRef = ref<FormInstance>()
+const pointsAdjustForm = reactive({
+  points: 0,
+  remark: ''
+})
+const pointsAdjustRules: FormRules = {
+  points: [
+    { required: true, message: '变动积分不能为空', trigger: 'blur' },
+    {
+      validator: (_rule: any, value: number, callback: any) => {
+        if (value === 0) return callback(new Error('变动积分不能为0'))
+        if (detailData.value && detailData.value.totalPoints + value < 0)
+          return callback(new Error('扣减后积分不能为负'))
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  remark: [
+    { required: true, message: '调整原因不能为空', trigger: 'blur' }
+  ]
+}
+
+// 打开手动调整弹窗
+const handleOpenPointsAdjust = () => {
+  pointsAdjustForm.points = 0
+  pointsAdjustForm.remark = ''
+  pointsAdjustVisible.value = true
+}
+
+// 提交手动调整
+const handleSubmitPointsAdjust = async () => {
+  if (!pointsAdjustFormRef.value || !detailData.value) return
+  await pointsAdjustFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    pointsAdjustLoading.value = true
+    try {
+      const currentPoints = detailData.value!.totalPoints
+      await createPointsLog({
+        customerId: detailData.value!.id,
+        type: 8,
+        points: pointsAdjustForm.points,
+        beforePoints: currentPoints,
+        afterPoints: currentPoints + pointsAdjustForm.points,
+        remark: pointsAdjustForm.remark
+      })
+      ElMessage.success('积分调整成功')
+      pointsAdjustVisible.value = false
+      // 更新详情弹窗中的积分显示
+      detailData.value!.totalPoints += pointsAdjustForm.points
+      // 刷新表格数据
+      loadData()
+    } catch (error: any) {
+      ElMessage.error(error.message || '积分调整失败')
+    } finally {
+      pointsAdjustLoading.value = false
+    }
+  })
+}
+
+// 授权状态文本
+const authorizationStatusText = (status: AuthorizationStatus) => {
+  const map: Record<AuthorizationStatus, string> = { 0: '未授权', 1: '已授权', 2: '已撤回' }
+  return map[status] || '未授权'
+}
+
+// 授权状态标签类型
+const authorizationStatusType = (status: AuthorizationStatus) => {
+  const map: Record<AuthorizationStatus, string> = { 0: 'info', 1: 'success', 2: 'danger' }
+  return map[status] || 'info'
 }
 
 // 批量删除
@@ -524,12 +1032,20 @@ const handleSubmit = async () => {
     if (valid) {
       submitLoading.value = true
       try {
+        // 分离选中标签：通过 allTags 集合区分已有标签 ID 和新建标签名
+        // 后端 long 序列化为 string，不能用 typeof 区分（ID 和标签名都是 string）
+        // String(t.id) 统一转为 string，避免 CustomerTag.id 声明为 number 的类型不一致
+        const existingTagIds = new Set(allTags.value.map(t => String(t.id)))
+        const tagIds = formData.selectedTags.filter(t => existingTagIds.has(t))
+        const newTagNames = formData.selectedTags.filter(t => !existingTagIds.has(t))
         const payload = {
           name: formData.name,
           phone: formData.phone,
-          gender: formData.gender,
+          gender: formData.gender ?? 0,
           birthday: formData.birthday || undefined,
           levelId: formData.levelId || undefined,
+          tagIds: tagIds.length > 0 ? tagIds : undefined,
+          newTagNames: newTagNames.length > 0 ? newTagNames : undefined,
           authorizationStatus: formData.authorizationStatus,
           authorizationTime: formData.authorizationTime || undefined,
           address: formData.address || undefined,
@@ -600,7 +1116,14 @@ onMounted(async () => {
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
   loadCustomerLevels()
-  loadData()
+  loadAllTags()
+  await loadData()
+
+  // 支持通过 URL 参数 customerId 直接打开客户详情弹窗（站内信跳转场景）
+  const customerIdParam = route.query.customerId
+  if (customerIdParam) {
+    await openCustomerDetailById(Number(customerIdParam))
+  }
 })
 </script>
 
@@ -655,6 +1178,10 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.search-form-inline :deep(.el-form-item) {
+  margin-right: 0;
 }
 
 /* 操作栏 */
@@ -734,7 +1261,31 @@ onMounted(async () => {
   border-top: 1px solid var(--border-primary);
 }
 
-/* 消费统计弹窗 */
+/* 详情弹窗 - 消费统计区块 */
+.detail-stat-section {
+  margin-top: 20px;
+}
+
+.detail-stat-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.stat-desc :deep(.el-descriptions__label) {
+  width: 100px;
+}
+
+.stat-desc :deep(.el-descriptions__label .stat-tip-icon) {
+  margin-left: 4px;
+  vertical-align: middle;
+  position: relative;
+  top: -8px;
+}
+
 .stat-preferences {
   margin-top: 20px;
 }
@@ -742,8 +1293,16 @@ onMounted(async () => {
 .stat-section-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #1f2937;
   margin-bottom: 12px;
+}
+
+.stat-empty-text {
+  color: #9ca3af;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px 0;
+  margin: 0;
 }
 
 .pref-item {
@@ -758,10 +1317,40 @@ onMounted(async () => {
 }
 
 .pref-name {
-  color: var(--text-primary);
+  color: #1f2937;
 }
 
 .pref-amount {
   color: var(--text-tertiary);
+}
+
+.auth-tip-icon {
+  margin-left: 4px;
+  color: var(--text-tertiary);
+  cursor: help;
+  vertical-align: middle;
+}
+
+.stat-tip-icon {
+  margin-left: 4px;
+  color: var(--text-tertiary);
+  cursor: help;
+  vertical-align: middle;
+}
+
+/* 客户详情弹窗 */
+.detail-desc :deep(.el-descriptions__label) {
+  width: 100px;
+}
+
+.detail-inline-btn {
+  margin-left: 8px;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin-top: 4px;
 }
 </style>

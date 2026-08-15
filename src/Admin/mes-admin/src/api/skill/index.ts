@@ -80,7 +80,7 @@ export async function getSkillCategoryTree(query?: SkillCategoryQuery): Promise<
   // 拉取足够大的分页以覆盖全部分类（技能分类数量有限）
   const qs = buildQuery({
     name: query?.name,
-    status: query?.status,
+    code: query?.code,
     pageIndex: 1,
     pageSize: 1000
   })
@@ -106,9 +106,7 @@ export async function createSkillCategory(data: SkillCategoryCreate): Promise<vo
     body: JSON.stringify({
       name: data.name,
       code: data.code,
-      parentId: toBackendParentId(data.parentId),
-      status: data.status,
-      remark: data.remark
+      parentId: toBackendParentId(data.parentId)
     })
   })
 }
@@ -121,11 +119,10 @@ export async function updateSkillCategory(data: SkillCategoryUpdate): Promise<vo
   await request<SkillCategory>(`/skillCategories/${data.id}`, {
     method: 'PUT',
     body: JSON.stringify({
+      id: data.id,
       name: data.name,
       code: data.code,
-      parentId: toBackendParentId(data.parentId),
-      status: data.status,
-      remark: data.remark
+      parentId: toBackendParentId(data.parentId)
     })
   })
 }
@@ -136,24 +133,4 @@ export async function updateSkillCategory(data: SkillCategoryUpdate): Promise<vo
  */
 export async function deleteSkillCategory(id: number): Promise<void> {
   await request(`/skillCategories/${id}`, { method: 'DELETE' })
-}
-
-/**
- * 切换分类状态
- * @param id 分类ID
- * @param status 目标状态
- */
-export async function toggleSkillCategoryStatus(id: number, status: 0 | 1): Promise<void> {
-  // 后端无独立切换状态接口，通过查询后 PUT 实现
-  const item = await request<SkillCategory>(`/skillCategories/${id}`)
-  await request<SkillCategory>(`/skillCategories/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      name: item.name,
-      code: item.code,
-      parentId: item.parentId,
-      status: status,
-      remark: item.remark
-    })
-  })
 }

@@ -12,8 +12,7 @@ namespace Bms.Store.Application.Services;
 
 /// <summary>
 /// 客户等级应用服务实现
-/// 系统仅允许普通会员(Level=1)和会员(Level=2)两个等级
-/// 依据：G5.2 客户等级仅支持普通/会员两级
+/// 等级数量与等级值由门店自由管理，同租户内 Level、Code 唯一
 /// </summary>
 public class CustomerLevelAppService : ICustomerLevelAppService
 {
@@ -41,7 +40,7 @@ public class CustomerLevelAppService : ICustomerLevelAppService
     public async Task<ApiResponseDto<PagedResponseDto<CustomerLevelDto>>> GetPagedListAsync(CustomerLevelQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<CustomerLevelDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<CustomerLevelDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         await EnsureDefaultLevelsAsync(tenantId);
@@ -77,7 +76,7 @@ public class CustomerLevelAppService : ICustomerLevelAppService
     public async Task<ApiResponseDto<CustomerLevelDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerLevelDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerLevelDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CustomerLevels
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
@@ -88,12 +87,12 @@ public class CustomerLevelAppService : ICustomerLevelAppService
 
     /// <summary>
     /// 创建客户等级
-    /// 校验：Level 合法、租户等级数量不超过 2、同一 Level 不重复
+    /// 校验：同租户内 Level、Code 不重复
     /// </summary>
     public async Task<ApiResponseDto<CustomerLevelDto>> CreateAsync(CustomerLevelCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerLevelDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerLevelDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -101,21 +100,11 @@ public class CustomerLevelAppService : ICustomerLevelAppService
 
         var tenantId = _currentUser.TenantId.Value;
 
-        // 防御性校验：Level 合法性（Validator 已校验，应用层再次校验避免绕过）
-        if (!CustomerLevelTypes.IsValid(dto.Level))
-            return ApiResponseDto<CustomerLevelDto>.Fail("客户等级只能为 1(普通会员) 或 2(会员)", 400);
-
-        // 校验当前租户等级数量不超过 2
-        var existingCount = await _dbContext.CustomerLevels
-            .CountAsync(c => !c.IsDeleted && c.TenantId == tenantId);
-        if (existingCount >= 2)
-            return ApiResponseDto<CustomerLevelDto>.Fail("系统仅支持普通会员和会员两个等级，不可再创建", 400);
-
-        // 校验同一 Level 不重复
+        // 校验同一 Level 不重复（唯一索引兜底，应用层提前校验给出友好提示）
         var levelExists = await _dbContext.CustomerLevels
             .AnyAsync(c => !c.IsDeleted && c.TenantId == tenantId && c.Level == dto.Level);
         if (levelExists)
-            return ApiResponseDto<CustomerLevelDto>.Fail($"等级 {dto.Level} 已存在", 400);
+            return ApiResponseDto<CustomerLevelDto>.Fail($"等级值 {dto.Level} 已存在", 400);
 
         var codeExists = await _dbContext.CustomerLevels
             .AnyAsync(c => c.Code == dto.Code && c.TenantId == tenantId && !c.IsDeleted);
@@ -134,12 +123,12 @@ public class CustomerLevelAppService : ICustomerLevelAppService
 
     /// <summary>
     /// 更新客户等级
-    /// 禁止修改 Level 字段（一旦创建不可变更）
+    /// 允许修改 Level，校验同租户内 Level、Code 不重复（排除自身）
     /// </summary>
     public async Task<ApiResponseDto<CustomerLevelDto>> UpdateAsync(CustomerLevelUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerLevelDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerLevelDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -151,9 +140,14 @@ public class CustomerLevelAppService : ICustomerLevelAppService
         if (entity == null)
             return ApiResponseDto<CustomerLevelDto>.Fail("客户等级不存在", 404);
 
-        // 禁止修改 Level 字段：一旦创建不可变更
+        // Level 变更时校验同租户内不重复
         if (entity.Level != dto.Level)
-            return ApiResponseDto<CustomerLevelDto>.Fail("等级值创建后不可修改", 400);
+        {
+            var levelExists = await _dbContext.CustomerLevels
+                .AnyAsync(c => c.Level == dto.Level && c.TenantId == tenantId && !c.IsDeleted && c.Id != dto.Id);
+            if (levelExists)
+                return ApiResponseDto<CustomerLevelDto>.Fail($"等级值 {dto.Level} 已存在", 400);
+        }
 
         if (entity.Code != dto.Code)
         {
@@ -165,8 +159,8 @@ public class CustomerLevelAppService : ICustomerLevelAppService
 
         entity.Name = dto.Name;
         entity.Code = dto.Code;
+        entity.Level = dto.Level;
         entity.DiscountRate = dto.DiscountRate;
-        entity.Sort = dto.Sort;
         entity.Remark = dto.Remark;
         entity.UpdatedTime = DateTime.Now;
 
@@ -176,21 +170,17 @@ public class CustomerLevelAppService : ICustomerLevelAppService
 
     /// <summary>
     /// 删除客户等级（软删除）
-    /// 校验：默认等级（Level=1）不可删除，有关联客户的等级不可删除
+    /// 校验：有关联客户的等级不可删除
     /// </summary>
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CustomerLevels
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
         if (entity == null)
             return ApiResponseDto.Fail("客户等级不存在", 404);
-
-        // 默认等级（Level=1）不可删除
-        if (entity.Level == CustomerLevelTypes.Normal)
-            return ApiResponseDto.Fail("默认等级（普通会员）不可删除", 400);
 
         // 有关联客户的等级不可删除
         var hasCustomers = await _dbContext.Customers
@@ -206,12 +196,12 @@ public class CustomerLevelAppService : ICustomerLevelAppService
 
     /// <summary>
     /// 批量删除客户等级（软删除）
-    /// 校验：默认等级不可删除，有关联客户的等级不可删除
+    /// 校验：有关联客户的等级不可删除
     /// </summary>
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -219,11 +209,6 @@ public class CustomerLevelAppService : ICustomerLevelAppService
         var entities = await _dbContext.CustomerLevels
             .Where(c => ids.Contains(c.Id) && !c.IsDeleted && c.TenantId == tenantId)
             .ToListAsync();
-
-        // 校验默认等级不可删除
-        var hasDefault = entities.Any(e => e.Level == CustomerLevelTypes.Normal);
-        if (hasDefault)
-            return ApiResponseDto.Fail("默认等级（普通会员）不可删除", 400);
 
         // 校验关联客户
         var levelIds = entities.Select(e => e.Id).ToList();
@@ -265,7 +250,6 @@ public class CustomerLevelAppService : ICustomerLevelAppService
             Code = "NORMAL",
             Level = CustomerLevelTypes.Normal,
             DiscountRate = 1.0m,
-            Sort = 1,
             TenantId = tenantId,
             TenantCode = tenantCode,
             CreatedTime = now
@@ -278,7 +262,6 @@ public class CustomerLevelAppService : ICustomerLevelAppService
             Code = "MEMBER",
             Level = CustomerLevelTypes.Member,
             DiscountRate = 0.9m,
-            Sort = 2,
             TenantId = tenantId,
             TenantCode = tenantCode,
             CreatedTime = now

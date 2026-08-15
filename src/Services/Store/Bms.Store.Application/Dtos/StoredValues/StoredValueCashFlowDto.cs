@@ -37,17 +37,17 @@ public class StoredValueCashFlowDto
     public decimal TotalRefund { get; set; }
 
     /// <summary>
-    /// 沉淀资金（期末储值余额，所有账户 Balance 求和）
+    /// 沉淀资金（结束日期当天的储值余额，按流水累加还原时点值）
     /// </summary>
     public decimal TotalBalance { get; set; }
 
     /// <summary>
-    /// 期末实收余额
+    /// 沉淀资金中的实收余额
     /// </summary>
     public decimal TotalRealBalance { get; set; }
 
     /// <summary>
-    /// 期末赠送余额
+    /// 沉淀资金中的赠送余额
     /// </summary>
     public decimal TotalGiftBalance { get; set; }
 }

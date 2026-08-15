@@ -34,35 +34,91 @@ public class InventoryAppService : IInventoryAppService
 
     /// <summary>
     /// 获取库存分页列表（按当前门店隔离）
+    /// 以档案为主表左连接库存汇总表，档案存在即可见，无库存记录时数量为 0
+    /// 联表 ProductMaster/ProductCategory 输出展示字段，并支持按类型、分类、商品名称、库存状态筛选
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<InventoryDto>>> GetPagedListAsync(InventoryQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PagedResponseDto<InventoryDto>>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PagedResponseDto<InventoryDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
-        // 正品库存查询：排除样品(4)/赠品(5)，避免与 SampleGiftAppService 管理范围重叠
-        var queryable = from i in _dbContext.Inventories
-                        join p in _dbContext.Products on i.ProductId equals p.Id
-                        where i.TenantId == tenantId && i.StoreId == storeId
-                            && p.Type != 4 && p.Type != 5
-                            && !p.IsDeleted
-                        select i;
+        // 以 Product 档案为主表，左连接 Inventory 汇总表，确保档案存在即可见
+        // Name/Code/Type/CategoryId 已移至 ProductMaster，通过 Master 关联（设计文档 3.2 节）
+        var queryable = from p in _dbContext.Products
+                        join m in _dbContext.ProductMasters on p.MasterId equals m.Id
+                        join c in _dbContext.ProductCategories on m.CategoryId equals c.Id into cgrp
+                        from c in cgrp.DefaultIfEmpty()
+                        join i in _dbContext.Inventories
+                            on new { ProductId = p.Id, TenantId = tenantId, StoreId = storeId }
+                            equals new { ProductId = i.ProductId, TenantId = i.TenantId, StoreId = i.StoreId }
+                            into inventories
+                        from i in inventories.DefaultIfEmpty()
+                        where !p.IsDeleted && p.TenantId == tenantId && p.StoreId == storeId && m.Type != 2 // 排除服务项目（无实物库存）
+                        select new { p, m, i, CategoryName = (c != null ? c.Name : null) };
 
         if (query.ProductId.HasValue)
-            queryable = queryable.Where(i => i.ProductId == query.ProductId.Value);
+            queryable = queryable.Where(x => x.p.Id == query.ProductId.Value);
+        if (query.ProductType.HasValue)
+            queryable = queryable.Where(x => x.m.Type == query.ProductType.Value);
+        if (!string.IsNullOrWhiteSpace(query.ProductName))
+            queryable = queryable.Where(x => x.m.Name.Contains(query.ProductName));
+        if (query.CategoryId.HasValue)
+        {
+            // 选中父级分类时包含其所有子孙分类下的商品：
+            // 先加载当前租户全部分类到内存（分类数据量小），BFS 收集子树 ID 集合，再用 Contains 筛选
+            // 分类已改租户级，不再按 StoreId 过滤（设计文档 3.3 节）
+            var targetId = query.CategoryId.Value;
+            var allCategories = await _dbContext.ProductCategories
+                .Where(c => c.TenantId == tenantId && !c.IsDeleted)
+                .Select(c => new { c.Id, c.ParentId })
+                .ToListAsync();
+            var categoryIds = new HashSet<long> { targetId };
+            var queue = new Queue<long>();
+            queue.Enqueue(targetId);
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                foreach (var child in allCategories.Where(c => c.ParentId == current))
+                {
+                    if (categoryIds.Add(child.Id))
+                        queue.Enqueue(child.Id);
+                }
+            }
+            queryable = queryable.Where(x => categoryIds.Contains(x.m.CategoryId));
+        }
 
         var total = await queryable.CountAsync();
-        var items = await queryable
-            .OrderByDescending(i => i.CreatedTime)
+        var rawItems = await queryable
+            .OrderByDescending(x => x.p.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync();
 
+        // 库存状态需结合阈值在内存中计算，InventoryStatus 筛选在映射后过滤
+        var dtoList = rawItems.Select(x => new InventoryDto
+        {
+            Id = x.p.Id,
+            ProductId = x.p.Id,
+            Quantity = x.i?.Quantity ?? 0,
+            AlertQuantity = x.p.LowStockThreshold,
+            OverstockThreshold = x.p.OverstockThreshold,
+            InventoryStatus = CalculateInventoryStatus(x.i?.Quantity ?? 0, x.p.LowStockThreshold, x.p.OverstockThreshold),
+            CreatedAt = x.p.CreatedTime,
+            UpdatedAt = x.i?.UpdatedTime ?? x.p.UpdatedTime ?? x.p.CreatedTime,
+            ProductName = x.m.Name,
+            ProductCode = x.m.Code,
+            ProductType = x.m.Type,
+            CategoryName = x.CategoryName
+        }).ToList();
+
+        if (query.InventoryStatus.HasValue)
+            dtoList = dtoList.Where(d => d.InventoryStatus == query.InventoryStatus.Value).ToList();
+
         var result = new PagedResponseDto<InventoryDto>
         {
-            List = items.Adapt<List<InventoryDto>>(),
+            List = dtoList,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -71,18 +127,48 @@ public class InventoryAppService : IInventoryAppService
     }
 
     /// <summary>
-    /// 根据ID获取库存详情
+    /// 根据档案ID获取库存详情
+    /// 以档案为主表左连接库存汇总表，档案存在即可见
     /// </summary>
     public async Task<ApiResponseDto<InventoryDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryDto?>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryDto?>.Fail("登录状态异常，请重新登录", 401);
 
-        var entity = await _dbContext.Inventories
-            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _currentUser.TenantId.Value && i.StoreId == _currentUser.StoreId.Value);
-        if (entity == null)
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
+        var row = await (from p in _dbContext.Products
+                         join m in _dbContext.ProductMasters on p.MasterId equals m.Id
+                         join c in _dbContext.ProductCategories on m.CategoryId equals c.Id into cgrp
+                         from c in cgrp.DefaultIfEmpty()
+                         join i in _dbContext.Inventories
+                             on new { ProductId = p.Id, TenantId = tenantId, StoreId = storeId }
+                             equals new { ProductId = i.ProductId, TenantId = i.TenantId, StoreId = i.StoreId }
+                             into inventories
+                         from i in inventories.DefaultIfEmpty()
+                         where p.Id == id && p.TenantId == tenantId && p.StoreId == storeId && !p.IsDeleted
+                         select new { p, m, i, CategoryName = (c != null ? c.Name : null) })
+                         .FirstOrDefaultAsync();
+
+        if (row == null)
             return ApiResponseDto<InventoryDto?>.Fail("库存不存在", 404);
-        return ApiResponseDto<InventoryDto?>.Ok(entity.Adapt<InventoryDto>());
+
+        var dto = new InventoryDto
+        {
+            Id = row.p.Id,
+            ProductId = row.p.Id,
+            Quantity = row.i?.Quantity ?? 0,
+            AlertQuantity = row.p.LowStockThreshold,
+            OverstockThreshold = row.p.OverstockThreshold,
+            InventoryStatus = CalculateInventoryStatus(row.i?.Quantity ?? 0, row.p.LowStockThreshold, row.p.OverstockThreshold),
+            CreatedAt = row.p.CreatedTime,
+            UpdatedAt = row.i?.UpdatedTime ?? row.p.UpdatedTime ?? row.p.CreatedTime,
+            ProductName = row.m.Name,
+            ProductCode = row.m.Code,
+            ProductType = row.m.Type,
+            CategoryName = row.CategoryName
+        };
+        return ApiResponseDto<InventoryDto?>.Ok(dto);
     }
 
     /// <summary>
@@ -91,7 +177,7 @@ public class InventoryAppService : IInventoryAppService
     public async Task<ApiResponseDto<InventoryDto>> CreateAsync(InventoryCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -117,7 +203,7 @@ public class InventoryAppService : IInventoryAppService
     public async Task<ApiResponseDto<InventoryDto>> UpdateAsync(InventoryUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -132,7 +218,6 @@ public class InventoryAppService : IInventoryAppService
 
         entity.ProductId = dto.ProductId;
         entity.Quantity = dto.Quantity;
-        entity.AlertQuantity = dto.AlertQuantity;
         entity.UpdatedTime = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
@@ -145,7 +230,7 @@ public class InventoryAppService : IInventoryAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Inventories
             .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _currentUser.TenantId.Value && i.StoreId == _currentUser.StoreId.Value);
@@ -163,7 +248,7 @@ public class InventoryAppService : IInventoryAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -194,7 +279,7 @@ public class InventoryAppService : IInventoryAppService
         string? remark = null)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (quantity <= 0)
             return ApiResponseDto.Fail("扣减数量必须大于 0", 400);
         if (!InventoryLogSourceTypes.IsValid(sourceType))
@@ -289,6 +374,8 @@ public class InventoryAppService : IInventoryAppService
             ExpirationDate = firstExpiration,
             RelatedId = refId,
             Remark = remark,
+            OperatorId = _currentUser.UserId,
+            OperatorName = _currentUser.RealName ?? _currentUser.UserName,
             TenantId = tenantId,
             TenantCode = tenantCode,
             StoreId = storeId,
@@ -310,7 +397,6 @@ public class InventoryAppService : IInventoryAppService
             {
                 ProductId = productId,
                 Quantity = -quantity,
-                AlertQuantity = 0,
                 TenantId = tenantId,
                 TenantCode = tenantCode,
                 StoreId = storeId,
@@ -320,5 +406,23 @@ public class InventoryAppService : IInventoryAppService
         }
 
         return ApiResponseDto.Success(null, "扣减成功");
+    }
+
+    // ========== 辅助方法 ==========
+
+    /// <summary>
+    /// 计算库存状态：1=充足，2=偏低，3=不足，4=积压
+    /// 优先级：不足 > 偏低 > 积压 > 充足（阈值配置异常导致同时满足时，紧急状态优先）
+    /// 阈值未配置（null）时不参与对应状态判定，与 InventoryAlertAppService 预警扫描行为一致
+    /// </summary>
+    private static int CalculateInventoryStatus(decimal quantity, decimal? lowStockThreshold, decimal? overstockThreshold)
+    {
+        if (quantity <= 0)
+            return 3; // 不足
+        if (lowStockThreshold.HasValue && quantity <= lowStockThreshold.Value)
+            return 2; // 偏低
+        if (overstockThreshold.HasValue && quantity >= overstockThreshold.Value)
+            return 4; // 积压
+        return 1; // 充足
     }
 }

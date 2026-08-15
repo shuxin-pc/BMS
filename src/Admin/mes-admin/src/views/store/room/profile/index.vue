@@ -192,8 +192,7 @@ import {
   getRoomList,
   createRoom,
   updateRoom,
-  deleteRoom,
-  toggleRoomStatus
+  deleteRoom
 } from '@/api/room'
 import type { Room, RoomType, RoomStatus } from '@/api/room/types'
 
@@ -340,7 +339,15 @@ const handleToggleStatus = async (row: Room) => {
         cancelButtonText: '取消'
       }
     )
-    await toggleRoomStatus(row.id, targetStatus)
+    await updateRoom({
+      id: row.id,
+      name: row.name,
+      code: row.code,
+      roomType: row.roomType,
+      status: targetStatus,
+      location: row.location,
+      remark: row.remark
+    })
     ElMessage.success(`${actionText}成功`)
     loadData()
   } catch (error: any) {

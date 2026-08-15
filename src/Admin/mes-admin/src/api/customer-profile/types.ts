@@ -197,6 +197,30 @@ export interface ServiceReactionCreate {
 export type PhotoType = 1 | 2
 
 /**
+ * 服务对比照片明细
+ * 对齐后端 ServiceComparisonPhotoItemDto
+ */
+export interface ServiceComparisonPhotoItem {
+  /** 明细ID */
+  id: number
+  /** 可展示 URL（预签名 URL 或外部图片直链） */
+  photoUrl: string
+  /** 展示排序号 */
+  sortOrder: number
+}
+
+/**
+ * 服务对比照片明细（提交用）
+ * 编辑时已有照片只回传 id 即可保留，无需重新上传
+ */
+export interface ComparisonPhotoItemSave {
+  /** 明细ID：有值表示保留已有照片，为空表示新增照片 */
+  id?: number
+  /** 照片来源：上传接口返回的 objectKey 或外部图片直链（新增照片时必填） */
+  objectKey?: string
+}
+
+/**
  * 服务对比照片
  * 对齐后端 Bms.Store.Domain.Entities.ServiceComparisonPhoto
  */
@@ -223,8 +247,8 @@ export interface ServiceComparisonPhoto {
   photoDate: string
   /** 照片类型：1-服务前，2-服务后 */
   photoType: PhotoType
-  /** 照片URL */
-  photoUrl: string
+  /** 照片明细（按 sortOrder 升序，可有多张） */
+  items: ServiceComparisonPhotoItem[]
   /** 备注 */
   remark?: string
   /** 创建时间 */
@@ -265,10 +289,18 @@ export interface ComparisonPhotoCreate {
   photoDate: string
   /** 照片类型：1-服务前，2-服务后 */
   photoType: PhotoType
-  /** 照片URL（支持手输 URL 或 base64 DataURL） */
-  photoUrl: string
+  /** 照片明细（至少一张，按数组顺序决定展示排序） */
+  items: ComparisonPhotoItemSave[]
   /** 备注 */
   remark?: string
+}
+
+/**
+ * 更新对比照片请求
+ */
+export interface ComparisonPhotoUpdate extends ComparisonPhotoCreate {
+  /** 照片ID */
+  id: number
 }
 
 /**

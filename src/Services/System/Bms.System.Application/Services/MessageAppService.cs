@@ -519,8 +519,8 @@ public class MessageAppService : IMessageAppService
     public async Task<ApiResponseDto<bool>> NotifyAsync(InternalMessageNotifyDto dto)
     {
         // 内部服务调用时，InternalServiceAuthMiddleware 设置了 super_admin + tenant_id=1
-        // 但实际目标租户由请求上下文决定，这里使用当前租户
-        var tenantId = _currentUser.TenantId ?? 1;
+        // 后台服务无 HTTP 上下文，需通过 dto.TenantId 显式指定目标租户
+        var tenantId = dto.TenantId ?? _currentUser.TenantId ?? 1;
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
         var tenantCode = tenant?.Code ?? string.Empty;
         var targetType = (MessageTargetType)dto.TargetType;
@@ -544,6 +544,8 @@ public class MessageAppService : IMessageAppService
             IsRecalled = false,
             TenantId = tenantId,
             TenantCode = tenantCode,
+            BizType = dto.BizType,
+            BizKey = dto.BizKey,
             CreatedTime = DateTime.Now
         };
 
@@ -575,6 +577,31 @@ public class MessageAppService : IMessageAppService
         }
 
         return ApiResponseDto<bool>.Success(true);
+    }
+
+    /// <summary>
+    /// 批量检查指定业务类型下哪些业务键已存在未撤回的消息记录
+    /// </summary>
+    public async Task<ApiResponseDto<BizKeyCheckResultDto>> CheckBizExistsAsync(BizKeyCheckDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.BizType) || dto.BizKeys.Count == 0)
+        {
+            return ApiResponseDto<BizKeyCheckResultDto>.Success(new BizKeyCheckResultDto());
+        }
+
+        var existingKeys = await _context.Set<Message>()
+            .Where(m => m.BizType == dto.BizType
+                        && !m.IsRecalled
+                        && dto.BizKeys.Contains(m.BizKey ?? string.Empty))
+            .Select(m => m.BizKey ?? string.Empty)
+            .Where(k => k != string.Empty)
+            .Distinct()
+            .ToListAsync();
+
+        return ApiResponseDto<BizKeyCheckResultDto>.Success(new BizKeyCheckResultDto
+        {
+            ExistingBizKeys = existingKeys
+        });
     }
 
     // ========================================================

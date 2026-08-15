@@ -94,7 +94,7 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleAssignMenus(row)">
-              <el-icon><Menu /></el-icon>
+              <el-icon><MenuIcon /></el-icon>
               分配菜单
             </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
@@ -217,11 +217,12 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TreeInstance } from 'element-plus'
-import { Search, Refresh, Plus, Delete, Edit, Menu, Picture } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Edit, Menu as MenuIcon, Picture } from '@element-plus/icons-vue'
 import {
-  getSubsystems, createSubsystem, updateSubsystem, deleteSubsystem,
+  createSubsystem, updateSubsystem, deleteSubsystem,
   getSubsystemMenus, assignSubsystemMenus, getMenus,
-  type Subsystem, type SubsystemCreate, type SubsystemUpdate
+  type Subsystem, type SubsystemCreate, type SubsystemUpdate,
+  type Menu
 } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 import IconPicker from '@/components/IconPicker/index.vue'
@@ -235,18 +236,7 @@ const { autoSort, calculateAutoSort } = useSortAutoFill(
   () => null // 子系统无层级，parentId 始终为 null
 )
 
-// 菜单类型定义
-type Menu = {
-  id: number
-  parentId?: number
-  name: string
-  code: string
-  type: number
-  sort?: number
-  status?: number
-  icon?: string
-  children?: Menu[]
-}
+// 菜单类型使用 api/system/types 中定义的 Menu 类型
 
 // 搜索表单
 const searchForm = reactive({
@@ -390,7 +380,7 @@ const buildTree = (list: Menu[]): Menu[] => {
     if (item.parentId === 0 || !item.parentId) {
       result.push(map[item.id])
     } else if (map[item.parentId]) {
-      map[item.parentId].children.push(map[item.id])
+      map[item.parentId!].children!.push(map[item.id])
     }
   })
   return result
@@ -514,8 +504,8 @@ const handleMenuSubmit = async () => {
   // 只保存叶子节点（没有子节点的菜单），不保存半选的父节点
   // 同时去重避免重复键错误
   const leafNodeIds = [...new Set(checkedNodes
-    .filter((n: Menu) => !n.children || n.children.length === 0)
-    .map((n: Menu) => n.id))]
+    .filter((n: any) => !n.children || n.children.length === 0)
+    .map((n: any) => n.id))]
 
   menuSubmitLoading.value = true
   try {

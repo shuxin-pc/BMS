@@ -15,7 +15,6 @@ public class CustomerPreferenceUpdateDtoValidator : AbstractValidator<CustomerPr
 {
     public CustomerPreferenceUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new CustomerPreferenceCreateDtoValidator());
     }
 }

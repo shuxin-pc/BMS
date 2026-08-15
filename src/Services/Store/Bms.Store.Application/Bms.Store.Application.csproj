@@ -14,8 +14,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\BuildingBlocks\Bms.BuildingBlocks.Core\Bms.BuildingBlocks.Core.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\Bms.BuildingBlocks.Storage\Bms.BuildingBlocks.Storage.csproj" />
     <ProjectReference Include="..\Bms.Store.Domain\Bms.Store.Domain.csproj" />
     <ProjectReference Include="..\Bms.Store.Infrastructure\Bms.Store.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="SeedData\TestSeedData\*.json" />
   </ItemGroup>
 
 </Project>

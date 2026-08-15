@@ -82,7 +82,7 @@
         <el-table-column label="赠送比例" width="100" align="center">
           <template #default="{ row }">
             <el-tag type="success" size="small" effect="plain">
-              {{ (row.giftRate * 100).toFixed(1) }}%
+              {{ formatBonusRate(row.amount, row.giftAmount) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -93,11 +93,15 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="startDate" label="生效时间" width="120" />
-        <el-table-column prop="endDate" label="失效时间" width="120">
+        <el-table-column label="生效时间" width="120">
           <template #default="{ row }">
-            <span v-if="row.endDate">{{ row.endDate }}</span>
-            <span v-else class="text-muted">长期</span>
+            <span>{{ formatDate(row.startDate) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="失效时间" width="120">
+          <template #default="{ row }">
+            <span v-if="row.endDate">{{ formatDate(row.endDate) }}</span>
+            <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
@@ -273,13 +277,12 @@ const formRef = ref<FormInstance>()
 const formData = reactive({
   id: 0,
   name: '',
-  code: '',
   amount: 500,
   giftAmount: 50,
   isEnabled: true,
   sort: 0,
-  startDate: '',  // TODO: 后端不支持此字段，仅前端使用
-  endDate: '',    // TODO: 后端不支持此字段，仅前端使用
+  startDate: '',
+  endDate: '',
   remark: ''
 })
 
@@ -312,7 +315,6 @@ const formRules: FormRules = {
 const resetFormData = () => {
   formData.id = 0
   formData.name = ''
-  formData.code = ''
   formData.amount = 500
   formData.giftAmount = 50
   formData.isEnabled = true
@@ -334,13 +336,12 @@ const handleEdit = (row: RechargeRule) => {
   isEdit.value = true
   formData.id = row.id
   formData.name = row.name
-  formData.code = row.code
   formData.amount = row.amount
   formData.giftAmount = row.giftAmount
   formData.isEnabled = row.isEnabled
   formData.sort = row.sort
-  formData.startDate = row.startDate || ''  // TODO: 后端不返回此字段
-  formData.endDate = row.endDate || ''
+  formData.startDate = formatDate(row.startDate)
+  formData.endDate = formatDate(row.endDate)
   formData.remark = row.remark || ''
   dialogVisible.value = true
 }
@@ -393,11 +394,13 @@ const handleSubmit = async () => {
       try {
         const payload = {
           name: formData.name,
-          code: formData.code,
           amount: formData.amount,
           giftAmount: formData.giftAmount,
           isEnabled: formData.isEnabled,
           sort: formData.sort,
+          startDate: formData.startDate,
+          // 留空表示长期有效
+          endDate: formData.endDate || undefined,
           remark: formData.remark || undefined
         }
         if (isEdit.value) {
@@ -427,6 +430,18 @@ const handleSelectionChange = (rows: RechargeRule[]) => {
 const formatPrice = (price: number | undefined) => {
   if (price === null || price === undefined) return '0.00'
   return price.toFixed(2)
+}
+
+/** 截取后端返回的日期时间为 YYYY-MM-DD，供展示与日期选择器回填使用 */
+const formatDate = (value: string | undefined) => {
+  if (!value) return ''
+  return value.substring(0, 10)
+}
+
+/** 赠送比例由充值金额与赠送金额实时换算（后端不存储比例字段） */
+const formatBonusRate = (amount: number | undefined, giftAmount: number | undefined) => {
+  if (!amount || amount <= 0) return '0%'
+  return (((giftAmount || 0) / amount) * 100).toFixed(1) + '%'
 }
 
 onMounted(async () => {

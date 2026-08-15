@@ -172,7 +172,7 @@
                   <span>个人中心</span>
                   <span class="dropdown-arrow">›</span>
                 </el-dropdown-item>
-                <el-dropdown-item command="setting">
+                <el-dropdown-item command="setting" v-if="userStore.hasPermission('system:config:view')">
                   <el-icon><Setting /></el-icon>
                   <span>系统设置</span>
                   <span class="dropdown-arrow">›</span>
@@ -193,7 +193,8 @@
       <div class="content-container">
         <router-view v-slot="{ Component }">
           <transition name="fade-transform" mode="out-in">
-            <component :is="Component" :key="$route.fullPath" />
+            <!-- key 拼入 currentStoreId：门店切换时 key 变化，强制当前页组件重新挂载以刷新数据 -->
+            <component :is="Component" :key="$route.fullPath + (currentStoreId ? `_${currentStoreId}` : '')" />
           </transition>
         </router-view>
       </div>
@@ -377,6 +378,7 @@ const toggleCollapse = () => {
 /**
  * 处理子系统点击切换
  * 切换子系统后更新左侧菜单，并跳转到该子系统的首页
+ * 新子系统无授权菜单时跳转无权限页
  */
 const handleSubsystemClick = async (subsystemId: number | string) => {
   const id = String(subsystemId)
@@ -392,6 +394,9 @@ const handleSubsystemClick = async (subsystemId: number | string) => {
   const firstPath = userStore.firstAuthorizedLeafPath
   if (firstPath && firstPath !== route.path) {
     router.push(firstPath)
+  } else if (!firstPath) {
+    // 新子系统无授权菜单，跳转无权限页
+    router.push('/no-permission')
   }
 }
 
@@ -432,9 +437,11 @@ const handleCommand = (command: string) => {
       }
 
       // 清除本地状态并跳转
-      userStore.logout()
+      await userStore.logout()
       ElMessage.success('退出成功')
       router.push('/login')
+    }).catch(() => {
+      // 用户点击取消或关闭对话框，无需处理
     })
   } else if (command === 'profile') {
     router.push('/system/profile')

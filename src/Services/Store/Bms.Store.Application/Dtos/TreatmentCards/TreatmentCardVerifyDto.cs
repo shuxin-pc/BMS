@@ -48,6 +48,11 @@ public class TreatmentCardVerifyDto
     public long? OperatorId { get; set; }
 
     /// <summary>
+    /// 操作员姓名（核销时的姓名快照）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 备注
     /// </summary>
     public string? Remark { get; set; }

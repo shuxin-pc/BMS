@@ -37,7 +37,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     public async Task<ApiResponseDto<PagedResponseDto<CourseCardItemDto>>> GetPagedListAsync(CourseCardItemQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<CourseCardItemDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<CourseCardItemDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.CourseCardItems
@@ -69,7 +69,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     public async Task<ApiResponseDto<CourseCardItemDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CourseCardItemDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CourseCardItemDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CourseCardItems
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
@@ -84,7 +84,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     public async Task<ApiResponseDto<CourseCardItemDto>> CreateAsync(CourseCardItemCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CourseCardItemDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CourseCardItemDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -107,7 +107,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     public async Task<ApiResponseDto<CourseCardItemDto>> UpdateAsync(CourseCardItemUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CourseCardItemDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CourseCardItemDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -134,7 +134,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.CourseCardItems
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
@@ -153,7 +153,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

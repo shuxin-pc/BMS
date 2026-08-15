@@ -24,7 +24,6 @@ public class ProductSalesStatUpdateDtoValidator : AbstractValidator<ProductSales
 {
     public ProductSalesStatUpdateDtoValidator()
     {
-        RuleFor(x => x.Id).GreaterThan(0).WithMessage("ID无效");
         Include(new ProductSalesStatCreateDtoValidator());
     }
 }

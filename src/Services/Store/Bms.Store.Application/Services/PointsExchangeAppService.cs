@@ -55,11 +55,12 @@ public class PointsExchangeAppService : IPointsExchangeAppService
     public async Task<ApiResponseDto<PagedResponseDto<PointsExchangeDto>>> GetPagedListAsync(PointsExchangeQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<PointsExchangeDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<PointsExchangeDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.PointsExchanges
-            .Where(e => e.TenantId ==tenantId);
+            .Where(e => e.TenantId == tenantId && e.StoreId == storeId);
 
         if (query.CustomerId.HasValue)
             queryable = queryable.Where(e => e.CustomerId == query.CustomerId.Value);
@@ -89,10 +90,10 @@ public class PointsExchangeAppService : IPointsExchangeAppService
     public async Task<ApiResponseDto<PointsExchangeDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PointsExchangeDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PointsExchangeDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.PointsExchanges
-            .FirstOrDefaultAsync(e => e.Id == id && e.TenantId ==_currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(e => e.Id == id && e.TenantId == _currentUser.TenantId.Value && e.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<PointsExchangeDto?>.Fail("积分兑换记录不存在", 404);
         return ApiResponseDto<PointsExchangeDto?>.Ok(ToDto(entity));
@@ -109,7 +110,7 @@ public class PointsExchangeAppService : IPointsExchangeAppService
     public async Task<ApiResponseDto<PointsExchangeDto>> CreateAsync(PointsExchangeCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PointsExchangeDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PointsExchangeDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -118,7 +119,7 @@ public class PointsExchangeAppService : IPointsExchangeAppService
         var tenantId = _currentUser.TenantId.Value;
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
         var storeId = _currentUser.StoreId ?? 0L;
-        var storeCode = string.Empty;
+        var storeCode = _currentUser.StoreCode ?? string.Empty;
         var now = DateTime.Now;
 
         // 查询客户当前积分，校验积分是否充足
@@ -175,27 +176,9 @@ public class PointsExchangeAppService : IPointsExchangeAppService
                     return ApiResponseDto<PointsExchangeDto>.Fail($"不支持的兑换类型：{dto.ExchangeType}", 400);
             }
 
-            // 扣减客户积分，记录积分流水（Type=2 兑换消耗）
-            var beforePoints = customer.TotalPoints;
+            // 扣减客户积分（积分流水由各自业务流程写入，兑换消耗类型已移除）
             customer.TotalPoints -= dto.PointsCost;
             customer.UpdatedTime = now;
-
-            _dbContext.CustomerPointsLogs.Add(new CustomerPointsLog
-            {
-                CustomerId = customer.Id,
-                Type = CustomerPointsLogType.Exchange, // 兑换消耗
-                Points = -dto.PointsCost,
-                BeforePoints = beforePoints,
-                AfterPoints = customer.TotalPoints,
-                OrderId = orderId,
-                OperatorId = _currentUser.UserId,
-                Remark = $"积分兑换-{exchangeTargetName} x{dto.Quantity}",
-                TenantId = tenantId,
-                TenantCode = tenantCode,
-                StoreId = storeId,
-                StoreCode = storeCode,
-                CreatedTime = now
-            });
 
             // 创建兑换记录
             var entity = dto.Adapt<PointsExchange>();
@@ -233,10 +216,11 @@ public class PointsExchangeAppService : IPointsExchangeAppService
 
         var productId = dto.TargetId.Value;
         var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId);
+            .Include(p => p.Master)
+            .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
             return ExchangeResult.Fail("商品不存在");
-        if (product.Type != 1)
+        if (product.Master.Type != 1)
             return ExchangeResult.Fail("目标商品不是零售商品");
 
         // 扣减库存（FIFO，调用 IInventoryAppService.DeductByBatchAsync）
@@ -265,7 +249,7 @@ public class PointsExchangeAppService : IPointsExchangeAppService
             OrderTime = now,
             CompleteTime = now,
             OperatorId = _currentUser.UserId,
-            Remark = $"积分兑换-{product.Name} x{dto.Quantity}",
+            Remark = $"积分兑换-{product.Master.Name} x{dto.Quantity}",
             TenantId = tenantId,
             TenantCode = tenantCode,
             StoreId = storeId,
@@ -276,8 +260,8 @@ public class PointsExchangeAppService : IPointsExchangeAppService
                 new()
                 {
                     ProductId = product.Id,
-                    ProductName = product.Name,
-                    ProductCode = product.Code,
+                    ProductName = product.Master.Name,
+                    ProductCode = product.Master.Code,
                     Quantity = dto.Quantity,
                     Price = product.Price,
                     DiscountRate = 0m,
@@ -293,7 +277,7 @@ public class PointsExchangeAppService : IPointsExchangeAppService
         _dbContext.Orders.Add(order);
         await _dbContext.SaveChangesAsync();
 
-        return ExchangeResult.Ok(order.Id, product.Name);
+        return ExchangeResult.Ok(order.Id, product.Master.Name);
     }
 
     /// <summary>
@@ -308,10 +292,11 @@ public class PointsExchangeAppService : IPointsExchangeAppService
 
         var productId = dto.TargetId.Value;
         var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId);
+            .Include(p => p.Master)
+            .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId && p.StoreId == storeId);
         if (product == null)
             return ExchangeResult.Fail("服务项目不存在");
-        if (product.Type != 2)
+        if (product.Master.Type != 2)
             return ExchangeResult.Fail("目标商品不是服务项目");
 
         // 创建兑换订单（OrderType=2 服务, PayMethod=6 积分抵扣, Status=2 已完成, PaidAmount=0）
@@ -328,7 +313,7 @@ public class PointsExchangeAppService : IPointsExchangeAppService
             OrderTime = now,
             CompleteTime = now,
             OperatorId = _currentUser.UserId,
-            Remark = $"积分兑换服务-{product.Name} x{dto.Quantity}",
+            Remark = $"积分兑换服务-{product.Master.Name} x{dto.Quantity}",
             TenantId = tenantId,
             TenantCode = tenantCode,
             StoreId = storeId,
@@ -339,8 +324,8 @@ public class PointsExchangeAppService : IPointsExchangeAppService
                 new()
                 {
                     ProductId = product.Id,
-                    ProductName = product.Name,
-                    ProductCode = product.Code,
+                    ProductName = product.Master.Name,
+                    ProductCode = product.Master.Code,
                     Quantity = dto.Quantity,
                     Price = product.Price,
                     DiscountRate = 0m,
@@ -356,7 +341,7 @@ public class PointsExchangeAppService : IPointsExchangeAppService
         _dbContext.Orders.Add(order);
         await _dbContext.SaveChangesAsync();
 
-        return ExchangeResult.Ok(order.Id, product.Name);
+        return ExchangeResult.Ok(order.Id, product.Master.Name);
     }
 
     /// <summary>
@@ -389,15 +374,16 @@ public class PointsExchangeAppService : IPointsExchangeAppService
     public async Task<ApiResponseDto<PointsExchangeDto>> UpdateAsync(PointsExchangeUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PointsExchangeDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PointsExchangeDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<PointsExchangeDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.PointsExchanges
-            .FirstOrDefaultAsync(e => e.Id == dto.Id && e.TenantId ==tenantId);
+            .FirstOrDefaultAsync(e => e.Id == dto.Id && e.TenantId == tenantId && e.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<PointsExchangeDto>.Fail("积分兑换记录不存在", 404);
 
@@ -422,10 +408,10 @@ public class PointsExchangeAppService : IPointsExchangeAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.PointsExchanges
-            .FirstOrDefaultAsync(e => e.Id == id && e.TenantId ==_currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(e => e.Id == id && e.TenantId == _currentUser.TenantId.Value && e.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto.Fail("积分兑换记录不存在", 404);
 
@@ -440,12 +426,12 @@ public class PointsExchangeAppService : IPointsExchangeAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.PointsExchanges
-            .Where(e => ids.Contains(e.Id) && e.TenantId ==_currentUser.TenantId.Value)
+            .Where(e => ids.Contains(e.Id) && e.TenantId == _currentUser.TenantId.Value && e.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         _dbContext.PointsExchanges.RemoveRange(entities);

@@ -60,6 +60,39 @@ public class OrganizationRepository : IOrganizationRepository
     }
 
     /// <summary>
+    /// 获取指定组织的所有子孙组织 ID（递归，包含多级子孙）。
+    /// 修复 M1：用于组织移动时的环路检查。
+    /// 实现策略：一次查询所有组织的 Id/ParentId，内存 BFS 递归构建子孙集合，避免逐级查 DB。
+    /// </summary>
+    public async Task<List<long>> GetAllChildIdsAsync(long id)
+    {
+        var allOrgs = await _context.Organizations
+            .Where(o => !o.IsDeleted)
+            .Select(o => new { o.Id, o.ParentId })
+            .ToListAsync();
+
+        var descendantIds = new List<long>();
+        var queue = new Queue<long>();
+        queue.Enqueue(id);
+
+        while (queue.Count > 0)
+        {
+            var currentId = queue.Dequeue();
+            var childIds = allOrgs
+                .Where(o => o.ParentId == currentId)
+                .Select(o => o.Id);
+
+            foreach (var childId in childIds)
+            {
+                descendantIds.Add(childId);
+                queue.Enqueue(childId);
+            }
+        }
+
+        return descendantIds;
+    }
+
+    /// <summary>
     /// 获取指定租户下的所有组织（用于 All 数据权限填充组织列表）
     /// </summary>
     public async Task<List<Organization>> GetByTenantIdAsync(long tenantId)

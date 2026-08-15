@@ -3,7 +3,6 @@ using Bms.System.Application.Dtos.Users;
 using Bms.System.Application.Dtos.Roles;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Application.Dtos.Organizations;
-using Bms.System.Application.Dtos.Permissions;
 using Bms.System.Application.Dtos.DataPermissions;
 using Bms.System.Application.Dtos.Tenants;
 using Bms.System.Application.Dtos.AuditLogs;
@@ -44,10 +43,6 @@ public static class EntityMappingConfig
         TypeAdapterConfig<Organization, OrganizationDto>
             .NewConfig()
             .Map(dest => dest.Children, src => src.Children.Select(c => c.Adapt<OrganizationDto>()).ToList());
-
-        // Permission 实体映射
-        TypeAdapterConfig<Permission, PermissionDto>
-            .NewConfig();
 
         // DataPermission 实体映射
         TypeAdapterConfig<DataPermission, DataPermissionDto>

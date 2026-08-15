@@ -112,9 +112,9 @@ public class UserAppService : IUserAppService
         return ApiResponseDto<PagedResponseDto<UserDto>>.Success(result);
     }
 
-    public async Task<ApiResponseDto<List<UserDto>>> GetAllListAsync(long? tenantId, string? realNameFilter)
+    public async Task<ApiResponseDto<List<UserDto>>> GetAllListAsync(long? tenantId, string? realNameFilter, long? userId = null, List<long>? organizationIds = null, long? creatorTenantId = null)
     {
-        var users = await _userRepository.GetListAsync(tenantId);
+        var users = await _userRepository.GetListAsync(tenantId, userId, organizationIds, creatorTenantId);
 
         // 按姓名筛选（忽略大小写）
         if (!string.IsNullOrWhiteSpace(realNameFilter))
@@ -138,6 +138,16 @@ public class UserAppService : IUserAppService
 
     public async Task<ApiResponseDto<UserDto?>> GetByIdAsync(long id)
     {
+        // 权限校验：数据权限 + 租户隔离 + 级别约束（修复 S4）
+        // 原 GetById 仅 [Authorize]，任意登录用户可查询超管手机号/邮箱/组织/租户。
+        // 查询场景允许查看自己（allowSelf=true），其余走 CheckCanOperateUserAsync 统一校验：
+        // - super_admin 放行
+        // - tenant_admin 仅本租户且不得查看 super_admin
+        // - 普通用户仅本租户、非管理员、级别更低、组织在 DataScope 内
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        await _permissionChecker.CheckCanOperateUserAsync(permCtx, id, allowSelf: true);
+
         var user = await _userRepository.GetByIdAsync(id);
         if (user == null)
         {
@@ -169,18 +179,17 @@ public class UserAppService : IUserAppService
         var currentUserId = GetCurrentUserId();
         var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
         await _permissionChecker.CheckCanAssignRolesAsync(permCtx, dto.RoleIds);
-        await _permissionChecker.CheckCanMoveToOrganizationAsync(permCtx, dto.OrganizationId);
+        // 创建场景：非超管必须指定组织归属（编辑场景由 UpdateAsync 走默认 isCreate=false 分支）
+        await _permissionChecker.CheckCanMoveToOrganizationAsync(permCtx, dto.OrganizationId, isCreate: true);
 
         // 非 super_admin 强制使用当前租户（不允许通过 dto 指定其他租户）
         if (!permCtx.IsSuperAdmin)
         {
             // 重写 context 中的租户信息，防止前端伪造
             context.CurrentTenantId = permCtx.TenantId;
-            // 由 UserCreateContext 的 IsSuperAdmin/IsTenantAdmin 决定下面的分支
-            // 这里强制走非 super_admin 分支
-            context.CurrentUserRoles = permCtx.IsTenantAdmin
-                ? new List<string> { "tenant_admin" }
-                : new List<string>();
+            // 强制走非 super_admin 分支（IsSuperAdmin=false），不保留 tenant_admin 角色信息
+            // tenant_admin 与普通用户在创建用户逻辑上无差异，统一走 else 分支使用当前租户
+            context.CurrentUserRoles = new List<string>();
         }
 
         // 验证用户名唯一性
@@ -541,6 +550,17 @@ public class UserAppService : IUserAppService
 
     public async Task<ApiResponseDto<List<UserRoleDto>>> GetUserRolesAsync(long userId)
     {
+        // 权限校验：数据权限 + 租户隔离 + 级别约束（修复 M5）
+        // 原 GetUserRoles 无权限校验，任意登录用户可枚举用户 ID 查询各用户角色，
+        // 识别 tenant_admin/super_admin 账号作为后续攻击目标。
+        // 查询场景允许查看自己（allowSelf=true），其余走 CheckCanOperateUserAsync 统一校验：
+        // - super_admin 放行
+        // - tenant_admin 仅本租户且不得查看 super_admin
+        // - 普通用户仅本租户、非管理员、级别更低、组织在 DataScope 内
+        var currentUserId = GetCurrentUserId();
+        var permCtx = await _permissionChecker.GetContextAsync(currentUserId);
+        await _permissionChecker.CheckCanOperateUserAsync(permCtx, userId, allowSelf: true);
+
         var roles = await _roleRepository.GetByUserIdAsync(userId);
         var result = roles.Select(r => new UserRoleDto
         {

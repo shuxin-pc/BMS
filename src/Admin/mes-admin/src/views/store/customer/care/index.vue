@@ -15,6 +15,14 @@
                   style="width: 180px"
                 />
               </el-form-item>
+              <el-form-item label="手机号">
+                <el-input
+                  v-model="birthdaySearchForm.phone"
+                  placeholder="请输入手机号"
+                  clearable
+                  style="width: 180px"
+                />
+              </el-form-item>
               <el-form-item label="关怀状态">
                 <el-select v-model="birthdaySearchForm.careStatus" placeholder="全部" clearable style="width: 130px">
                   <el-option label="待关怀" :value="1" />
@@ -37,9 +45,6 @@
 
         <!-- 操作栏 -->
         <div class="table-toolbar">
-          <div class="toolbar-left">
-            <span class="toolbar-title">生日提醒列表</span>
-          </div>
           <div class="toolbar-right">
             <el-button circle @click="loadBirthdayData">
               <el-icon><Refresh /></el-icon>
@@ -127,6 +132,14 @@
                   style="width: 180px"
                 />
               </el-form-item>
+              <el-form-item label="手机号">
+                <el-input
+                  v-model="thanksSearchForm.phone"
+                  placeholder="请输入手机号"
+                  clearable
+                  style="width: 180px"
+                />
+              </el-form-item>
               <el-form-item label="感谢状态">
                 <el-select v-model="thanksSearchForm.thankStatus" placeholder="全部" clearable style="width: 130px">
                   <el-option label="待感谢" :value="1" />
@@ -149,9 +162,6 @@
 
         <!-- 操作栏 -->
         <div class="table-toolbar">
-          <div class="toolbar-left">
-            <span class="toolbar-title">消费感谢列表</span>
-          </div>
           <div class="toolbar-right">
             <el-button circle @click="loadThanksData">
               <el-icon><Refresh /></el-icon>
@@ -277,6 +287,7 @@ const birthdayLoading = ref(false)
 const birthdayData = ref<BirthdayReminder[]>([])
 const birthdaySearchForm = reactive({
   customerName: '',
+  phone: '',
   careStatus: undefined as number | undefined
 })
 const birthdayPagination = reactive({
@@ -290,6 +301,7 @@ const loadBirthdayData = async () => {
   try {
     const res = await getBirthdayReminders({
       customerName: birthdaySearchForm.customerName || undefined,
+      phone: birthdaySearchForm.phone || undefined,
       careStatus: birthdaySearchForm.careStatus,
       pageIndex: birthdayPagination.pageIndex,
       pageSize: birthdayPagination.pageSize
@@ -310,6 +322,7 @@ const handleBirthdaySearch = () => {
 
 const handleBirthdayReset = () => {
   birthdaySearchForm.customerName = ''
+  birthdaySearchForm.phone = ''
   birthdaySearchForm.careStatus = undefined
   handleBirthdaySearch()
 }
@@ -329,6 +342,7 @@ const thanksLoading = ref(false)
 const thanksData = ref<ConsumeThankRecord[]>([])
 const thanksSearchForm = reactive({
   customerName: '',
+  phone: '',
   thankStatus: undefined as number | undefined
 })
 const thanksPagination = reactive({
@@ -342,6 +356,7 @@ const loadThanksData = async () => {
   try {
     const res = await getConsumeThanks({
       customerName: thanksSearchForm.customerName || undefined,
+      phone: thanksSearchForm.phone || undefined,
       thankStatus: thanksSearchForm.thankStatus,
       pageIndex: thanksPagination.pageIndex,
       pageSize: thanksPagination.pageSize
@@ -362,6 +377,7 @@ const handleThanksSearch = () => {
 
 const handleThanksReset = () => {
   thanksSearchForm.customerName = ''
+  thanksSearchForm.phone = ''
   thanksSearchForm.thankStatus = undefined
   handleThanksSearch()
 }
@@ -438,6 +454,23 @@ onMounted(async () => {
   width: 100%;
 }
 
+/* Tabs样式 */
+:deep(.el-tabs__item) {
+  color: var(--text-secondary);
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: var(--primary);
+}
+
+:deep(.el-tabs__active-bar) {
+  background-color: var(--primary);
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  border-color: var(--border-primary);
+}
+
 /* 卡片样式 */
 .card {
   background: var(--bg-tertiary);
@@ -489,22 +522,10 @@ onMounted(async () => {
 /* 操作栏 */
 .table-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   padding: 0 4px;
-}
-
-.toolbar-left {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .toolbar-right {

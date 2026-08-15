@@ -3,7 +3,7 @@ namespace Bms.Store.Domain.Entities;
 /// <summary>
 /// 疗程卡销售项目明细（购买时按实际售价分摊计算折算单价并锁定）
 /// </summary>
-public class TreatmentCardSaleItem : StoreTenantEntityBase
+public class TreatmentCardSaleItem : StoreBusinessEntityBase
 {
     /// <summary>
     /// 疗程卡销售记录ID

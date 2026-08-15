@@ -42,10 +42,11 @@ export type {
 export async function getAppointments(query?: AppointmentQuery): Promise<PagedResponse<Appointment>> {
   const qs = buildQuery({
     customerId: query?.customerId,
+    customerName: query?.customerName,
+    phone: query?.phone,
     status: query?.status,
     appointmentDateStart: query?.appointmentDateStart,
     appointmentDateEnd: query?.appointmentDateEnd,
-    technicianSource: query?.technicianSource,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })

@@ -3,18 +3,8 @@ namespace Bms.Store.Domain.Entities;
 /// <summary>
 /// 疗程卡销售记录
 /// </summary>
-public class TreatmentCardSale : StoreTenantEntityBase
+public class TreatmentCardSale : StoreEntity
 {
-    /// <summary>
-    /// 购买门店ID（可空，疗程卡在租户内跨店通用）
-    /// </summary>
-    public long? StoreId { get; set; }
-
-    /// <summary>
-    /// 购买门店编码
-    /// </summary>
-    public string? StoreCode { get; set; }
-
     /// <summary>
     /// 疗程卡ID
     /// </summary>

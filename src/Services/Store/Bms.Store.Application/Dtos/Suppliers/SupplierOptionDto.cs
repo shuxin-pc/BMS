@@ -10,4 +10,7 @@ public class SupplierOptionDto
 
     /// <summary>供应商名称</summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>数据范围（1:门店通用 2:门店私用），用于前端区分显示标签</summary>
+    public int Scope { get; set; }
 }

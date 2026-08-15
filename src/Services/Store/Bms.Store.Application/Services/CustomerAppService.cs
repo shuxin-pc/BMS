@@ -38,29 +38,47 @@ public class CustomerAppService : ICustomerAppService
     public async Task<ApiResponseDto<PagedResponseDto<CustomerDto>>> GetPagedListAsync(CustomerQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<CustomerDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<CustomerDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.Customers
-            .Where(c => !c.IsDeleted && c.TenantId == tenantId);
+            .Where(c => !c.IsDeleted && c.TenantId == tenantId && c.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.Name))
             queryable = queryable.Where(c => c.Name.Contains(query.Name));
         if (!string.IsNullOrWhiteSpace(query.Phone))
-            queryable = queryable.Where(c => c.Phone == query.Phone);
+            queryable = queryable.Where(c => c.Phone.Contains(query.Phone));
         if (query.LevelId.HasValue)
             queryable = queryable.Where(c => c.LevelId == query.LevelId.Value);
+        if (query.TagId.HasValue)
+            queryable = queryable.Where(c => c.CustomerTagLinks.Any(l => !l.IsDeleted && l.TagId == query.TagId.Value));
+        if (query.Gender.HasValue)
+            queryable = queryable.Where(c => c.Gender == query.Gender.Value);
 
         var total = await queryable.CountAsync();
         var items = await queryable
+            .Include(c => c.Level)
+            .Include(c => c.CustomerTagLinks).ThenInclude(l => l.Tag)
             .OrderByDescending(c => c.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync();
 
+        var dtos = items.Adapt<List<CustomerDto>>();
+        for (var i = 0; i < dtos.Count; i++)
+        {
+            // 填充等级名称（Mapster 不会自动映射导航属性到 LevelName）
+            dtos[i].LevelName = items[i].Level?.Name;
+            dtos[i].Tags = items[i].CustomerTagLinks
+                .Where(l => !l.IsDeleted && l.Tag != null && !l.Tag.IsDeleted)
+                .Select(l => new CustomerTagBriefDto { Id = l.Tag!.Id, Name = l.Tag.Name, Color = l.Tag.Color })
+                .ToList();
+        }
+
         var result = new PagedResponseDto<CustomerDto>
         {
-            List = items.Adapt<List<CustomerDto>>(),
+            List = dtos,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -74,13 +92,21 @@ public class CustomerAppService : ICustomerAppService
     public async Task<ApiResponseDto<CustomerDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Customers
-            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
+            .Include(c => c.Level)
+            .Include(c => c.CustomerTagLinks).ThenInclude(l => l.Tag)
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value && c.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<CustomerDto?>.Fail("客户不存在", 404);
-        return ApiResponseDto<CustomerDto?>.Ok(entity.Adapt<CustomerDto>());
+        var dto = entity.Adapt<CustomerDto>();
+        dto.LevelName = entity.Level?.Name;
+        dto.Tags = entity.CustomerTagLinks
+            .Where(l => !l.IsDeleted && l.Tag != null && !l.Tag.IsDeleted)
+            .Select(l => new CustomerTagBriefDto { Id = l.Tag!.Id, Name = l.Tag.Name, Color = l.Tag.Color })
+            .ToList();
+        return ApiResponseDto<CustomerDto?>.Ok(dto);
     }
 
     /// <summary>
@@ -89,25 +115,32 @@ public class CustomerAppService : ICustomerAppService
     public async Task<ApiResponseDto<CustomerDto>> CreateAsync(CustomerCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<CustomerDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
+        // 手机号唯一性按门店隔离：同租户同门店内不可重复，跨店可复用
         var phoneExists = await _dbContext.Customers
-            .AnyAsync(c => c.Phone == dto.Phone && c.TenantId == tenantId && !c.IsDeleted);
+            .AnyAsync(c => c.Phone == dto.Phone && c.TenantId == tenantId && c.StoreId == storeId && !c.IsDeleted);
         if (phoneExists)
             return ApiResponseDto<CustomerDto>.Fail($"手机号 {dto.Phone} 已存在", 400);
 
         var entity = dto.Adapt<CustomerEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = storeId;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.Customers.Add(entity);
         await _dbContext.SaveChangesAsync();
+
+        // 处理客户标签关联（已有标签 + 新建标签）
+        await SyncCustomerTagsAsync(entity, dto.TagIds, dto.NewTagNames);
+
         return ApiResponseDto<CustomerDto>.Ok(entity.Adapt<CustomerDto>(), "创建成功");
     }
 
@@ -117,22 +150,23 @@ public class CustomerAppService : ICustomerAppService
     public async Task<ApiResponseDto<CustomerDto>> UpdateAsync(CustomerUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
             return ApiResponseDto<CustomerDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.Customers
-            .FirstOrDefaultAsync(c => c.Id == dto.Id && !c.IsDeleted && c.TenantId == tenantId);
+            .FirstOrDefaultAsync(c => c.Id == dto.Id && !c.IsDeleted && c.TenantId == tenantId && c.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<CustomerDto>.Fail("客户不存在", 404);
 
         if (entity.Phone != dto.Phone)
         {
             var phoneExists = await _dbContext.Customers
-                .AnyAsync(c => c.Phone == dto.Phone && c.TenantId == tenantId && !c.IsDeleted && c.Id != dto.Id);
+                .AnyAsync(c => c.Phone == dto.Phone && c.TenantId == tenantId && c.StoreId == storeId && !c.IsDeleted && c.Id != dto.Id);
             if (phoneExists)
                 return ApiResponseDto<CustomerDto>.Fail($"手机号 {dto.Phone} 已存在", 400);
         }
@@ -143,13 +177,16 @@ public class CustomerAppService : ICustomerAppService
         entity.Birthday = dto.Birthday;
         entity.LevelId = dto.LevelId;
         entity.Address = dto.Address;
-        entity.Tags = dto.Tags;
         entity.AuthorizationStatus = dto.AuthorizationStatus;
         entity.AuthorizationTime = dto.AuthorizationTime;
         entity.Remark = dto.Remark;
         entity.UpdatedTime = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
+
+        // 全量替换标签关联
+        await SyncCustomerTagsAsync(entity, dto.TagIds, dto.NewTagNames);
+
         return ApiResponseDto<CustomerDto>.Ok(entity.Adapt<CustomerDto>(), "更新成功");
     }
 
@@ -159,10 +196,10 @@ public class CustomerAppService : ICustomerAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Customers
-            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value && c.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto.Fail("客户不存在", 404);
 
@@ -178,12 +215,12 @@ public class CustomerAppService : ICustomerAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.Customers
-            .Where(c => ids.Contains(c.Id) && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value)
+            .Where(c => ids.Contains(c.Id) && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value && c.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         foreach (var entity in entities)
@@ -199,19 +236,22 @@ public class CustomerAppService : ICustomerAppService
     /// 获取客户消费统计（消费频次、客单价、消费偏好）
     /// 偏好维度：按订单类型、商品类型、商品分类、时段、技师分组
     /// 仅统计近 6 个月已完成订单，避免历史数据干扰
+    /// 注：客户按门店归属，但消费统计跨门店聚合（客户可能在连锁其他门店消费）
     /// </summary>
     public async Task<ApiResponseDto<CustomerConsumptionStatDto>> GetConsumptionStatAsync(long customerId)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<CustomerConsumptionStatDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<CustomerConsumptionStatDto>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var customer = await _dbContext.Customers
-            .FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted && c.TenantId == tenantId);
+            .FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted && c.TenantId == tenantId && c.StoreId == storeId);
         if (customer == null)
             return ApiResponseDto<CustomerConsumptionStatDto>.Fail("客户不存在", 404);
 
         // 仅统计近 6 个月已完成订单（Status=2 已完成，排除退款/取消）
+        // 订单按租户聚合（跨门店消费统计），不按 StoreId 过滤
         var sixMonthsAgo = DateTime.Now.AddMonths(-6);
         var orders = await _dbContext.Orders
             .Where(o => o.CustomerId == customerId && o.TenantId == tenantId && o.Status == 2 && o.OrderTime >= sixMonthsAgo)
@@ -248,7 +288,7 @@ public class CustomerAppService : ICustomerAppService
         var orderIds = orders.Select(o => o.Id).ToList();
         var orderItems = await _dbContext.OrderItems
             .Where(oi => orderIds.Contains(oi.OrderId))
-            .Include(oi => oi.Product).ThenInclude(p => p != null ? p.Category : null)
+            .Include(oi => oi.Product).ThenInclude(p => p != null ? p.Master : null).ThenInclude(m => m != null ? m.Category : null)
             .Include(oi => oi.Order)
             .ToListAsync();
 
@@ -269,8 +309,8 @@ public class CustomerAppService : ICustomerAppService
         {
             OrderTime = oi.Order?.OrderTime ?? DateTime.MinValue,
             Amount = oi.DiscountedAmount,
-            ProductTypeId = oi.Product?.Type ?? 0,
-            CategoryName = oi.Product?.Category?.Name ?? string.Empty,
+            ProductTypeId = oi.Product?.Master?.Type ?? 0,
+            CategoryName = oi.Product?.Master?.Category?.Name ?? string.Empty,
             TechnicianName = oi.TechnicianId.HasValue && technicians.TryGetValue(oi.TechnicianId.Value, out var tName) ? tName : string.Empty
         }).ToList();
 
@@ -362,19 +402,21 @@ public class CustomerAppService : ICustomerAppService
 
     /// <summary>
     /// 永久删除客户档案（物理删除）
-    /// 物理删除客户档案及关联的个人信息（美容档案、身体数据、对比照片、偏好、积分流水、消费记录、储值账户、疗程卡记录）
+    /// 物理删除客户档案及关联的个人信息（美容档案、体型数据、服务对比照片、消费偏好、积分流水、消费记录、储值账户、疗程卡记录）
     /// 订单业务数据脱敏保留（CustomerId 置空，断开与客户的关联）
     /// 前置条件：无未完成订单、无未核销疗程卡、无储值余额
     /// 审计日志永久保留，满足《个人信息保护法》第 47 条合规要求
+    /// 注：仅能删除本店客户；关联数据按租户聚合清除（含跨门店消费记录）
     /// </summary>
     public async Task<ApiResponseDto> PermanentlyDeleteAsync(long id, CustomerPermanentDeleteDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var entity = await _dbContext.Customers
-            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == tenantId);
+            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == tenantId && c.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto.Fail("客户不存在", 404);
 
@@ -393,7 +435,7 @@ public class CustomerAppService : ICustomerAppService
 
         // 前置条件2：无未核销疗程卡（Status=1 有效 且 RemainingTimes > 0）
         var hasActiveTreatmentCards = await _dbContext.TreatmentCardSales
-            .AnyAsync(t => t.CustomerId == id && t.TenantId == tenantId && t.Status == 1 && t.RemainingTimes > 0);
+            .AnyAsync(t => t.CustomerId == id && t.TenantId == tenantId && !t.IsDeleted && t.Status == 1 && t.RemainingTimes > 0);
         if (hasActiveTreatmentCards)
             return ApiResponseDto.Fail("客户存在未核销的疗程卡，无法永久删除", 400);
 
@@ -417,7 +459,9 @@ public class CustomerAppService : ICustomerAppService
         // 物理删除客户关联的个人信息
         // 包含方案要求的三个表 + 其他以 CustomerId 为外键的个人敏感信息表
         // 这些表 CustomerId 均为非空外键且 OnDelete(Restrict)，必须物理删除才能删除 Customer
+        // 注意：CustomerBeautyProfiles 配置了 HasQueryFilter，永久删除需 IgnoreQueryFilters 才能查到已软删除的档案，避免遗留孤儿数据
         var beautyProfiles = await _dbContext.CustomerBeautyProfiles
+            .IgnoreQueryFilters()
             .Where(p => p.CustomerId == id && p.TenantId == tenantId).ToListAsync();
         var bodyDataRecords = await _dbContext.BodyDataRecords
             .Where(r => r.CustomerId == id && r.TenantId == tenantId).ToListAsync();
@@ -459,7 +503,99 @@ public class CustomerAppService : ICustomerAppService
         // 物理删除客户档案
         _dbContext.Customers.Remove(entity);
 
-        await _dbContext.SaveChangesAsync();
+        // 临时关闭软删除拦截器，确保执行真正的物理 DELETE 而非被转为 IsDeleted=true 的 UPDATE
+        _dbContext.SkipSoftDelete = true;
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        finally
+        {
+            _dbContext.SkipSoftDelete = false;
+        }
         return ApiResponseDto.Success(null, "客户档案已永久删除");
+    }
+
+    /// <summary>
+    /// 同步客户标签关联（全量替换策略）
+    /// 1. 处理 NewTagNames：查同门店同名标签，存在则复用 Id，不存在则创建
+    /// 2. 合并 TagIds + 新建标签 Id
+    /// 3. 软删除不再关联的旧 link
+    /// 4. 新增缺失的 link
+    /// </summary>
+    private async Task SyncCustomerTagsAsync(CustomerEntity customer, List<long>? tagIds, List<string>? newTagNames)
+    {
+        var tenantId = customer.TenantId;
+        var storeId = customer.StoreId;
+        var tenantCode = customer.TenantCode;
+        var storeCode = customer.StoreCode;
+        var now = DateTime.Now;
+
+        var allTagIds = new HashSet<long>(tagIds ?? new List<long>());
+
+        // 处理新标签名称：查同门店同名标签，存在则复用，不存在则创建
+        if (newTagNames != null && newTagNames.Count > 0)
+        {
+            var distinctNames = newTagNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList();
+            foreach (var name in distinctNames)
+            {
+                var existing = await _dbContext.CustomerTags
+                    .FirstOrDefaultAsync(t => !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId && t.Name == name);
+                if (existing != null)
+                {
+                    allTagIds.Add(existing.Id);
+                }
+                else
+                {
+                    var newTag = new CustomerTag
+                    {
+                        Name = name,
+                        Sort = 0,
+                        TenantId = tenantId,
+                        TenantCode = tenantCode,
+                        StoreId = storeId,
+                        StoreCode = storeCode,
+                        CreatedTime = now
+                    };
+                    _dbContext.CustomerTags.Add(newTag);
+                    await _dbContext.SaveChangesAsync();
+                    allTagIds.Add(newTag.Id);
+                }
+            }
+        }
+
+        // 查现有未删除 links
+        var currentLinks = await _dbContext.CustomerTagLinks
+            .Where(l => l.CustomerId == customer.Id && !l.IsDeleted && l.TenantId == tenantId && l.StoreId == storeId)
+            .ToListAsync();
+
+        var currentTagIds = currentLinks.Select(l => l.TagId).ToList();
+
+        // 软删除不再关联的 link
+        var toRemove = currentLinks.Where(l => !allTagIds.Contains(l.TagId)).ToList();
+        foreach (var link in toRemove)
+        {
+            link.IsDeleted = true;
+            link.UpdatedTime = now;
+        }
+
+        // 新增缺失的 link
+        var toAdd = allTagIds.Except(currentTagIds).ToList();
+        foreach (var tagId in toAdd)
+        {
+            _dbContext.CustomerTagLinks.Add(new CustomerTagLink
+            {
+                CustomerId = customer.Id,
+                TagId = tagId,
+                TenantId = tenantId,
+                TenantCode = tenantCode,
+                StoreId = storeId,
+                StoreCode = storeCode,
+                CreatedTime = now
+            });
+        }
+
+        if (toRemove.Count > 0 || toAdd.Count > 0)
+            await _dbContext.SaveChangesAsync();
     }
 }

@@ -20,17 +20,20 @@ public class OutboundAppService : IOutboundAppService
     private readonly ICurrentUser _currentUser;
     private readonly IValidator<OutboundCreateDto> _validator;
     private readonly ILogger<OutboundAppService> _logger;
+    private readonly IInventoryAlertAppService _alertAppService;
 
     public OutboundAppService(
         StoreDbContext dbContext,
         ICurrentUser currentUser,
         IValidator<OutboundCreateDto> validator,
-        ILogger<OutboundAppService> logger)
+        ILogger<OutboundAppService> logger,
+        IInventoryAlertAppService alertAppService)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _validator = validator;
         _logger = logger;
+        _alertAppService = alertAppService;
     }
 
     /// <summary>
@@ -40,7 +43,7 @@ public class OutboundAppService : IOutboundAppService
     public async Task<ApiResponseDto<OutboundResultDto>> CreateAsync(OutboundCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<OutboundResultDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<OutboundResultDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _validator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -124,12 +127,22 @@ public class OutboundAppService : IOutboundAppService
             return ApiResponseDto<OutboundResultDto>.Fail("出库失败，请重试", 500);
         }
 
-        // 5. post-commit 重查询填充显示字段（移出 try 块：若此查询失败，数据已落库，
+        // 5. 即时检测预警（失败不影响出库结果，定时任务兜底）
+        try
+        {
+            await _alertAppService.CheckInventoryAlertsAsync(tenantId, storeId, dto.ProductId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "出库后预警检测失败：ProductId={ProductId}", dto.ProductId);
+        }
+
+        // 6. post-commit 重查询填充显示字段（移出 try 块：若此查询失败，数据已落库，
         // 不应回滚已提交事务或返回 500 让用户误重试导致重复出库）
         try
         {
             var logs = await _dbContext.InventoryLogs
-                .Include(l => l.Product)
+                .Include(l => l.Product).ThenInclude(p => p.Master!)
                 .Include(l => l.Supplier)
                 .Where(l => logIds.Contains(l.Id))
                 .OrderBy(l => l.Id)
@@ -152,9 +165,10 @@ public class OutboundAppService : IOutboundAppService
                 Remark = l.Remark,
                 CreatedAt = l.CreatedTime,
                 UpdatedAt = l.UpdatedTime,
-                ProductName = l.Product?.Name,
-                ProductCode = l.Product?.Code,
+                ProductName = l.Product?.Master?.Name,
+                ProductCode = l.Product?.Master?.Code,
                 SupplierName = l.Supplier?.Name,
+                OperatorId = l.OperatorId,
                 OperatorName = l.OperatorName
             }).ToList();
 
@@ -162,8 +176,8 @@ public class OutboundAppService : IOutboundAppService
             var result = new OutboundResultDto
             {
                 ProductId = dto.ProductId,
-                ProductName = firstLog?.Product?.Name,
-                ProductCode = firstLog?.Product?.Code,
+                ProductName = firstLog?.Product?.Master?.Name,
+                ProductCode = firstLog?.Product?.Master?.Code,
                 SourceType = dto.SourceType,
                 TotalQuantity = totalQuantity,
                 BeforeQuantity = beforeQuantity,
@@ -238,6 +252,7 @@ public class OutboundAppService : IOutboundAppService
                 BatchNo = batch.BatchNo,
                 ExpirationDate = batch.ExpirationDate,
                 Remark = dto.Remark,
+                OperatorId = _currentUser.UserId,
                 OperatorName = operatorName,
                 TenantId = tenantId,
                 TenantCode = _currentUser.TenantCode ?? string.Empty,
@@ -302,6 +317,7 @@ public class OutboundAppService : IOutboundAppService
                 BatchNo = batch.BatchNo,
                 ExpirationDate = batch.ExpirationDate,
                 Remark = dto.Remark,
+                OperatorId = _currentUser.UserId,
                 OperatorName = operatorName,
                 TenantId = tenantId,
                 TenantCode = _currentUser.TenantCode ?? string.Empty,

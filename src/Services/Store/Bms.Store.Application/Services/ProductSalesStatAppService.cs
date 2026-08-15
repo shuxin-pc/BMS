@@ -37,7 +37,7 @@ public class ProductSalesStatAppService : IProductSalesStatAppService
     public async Task<ApiResponseDto<PagedResponseDto<ProductSalesStatDto>>> GetPagedListAsync(ProductSalesStatQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<ProductSalesStatDto>>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<PagedResponseDto<ProductSalesStatDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var queryable = _dbContext.ProductSalesStats
@@ -73,7 +73,7 @@ public class ProductSalesStatAppService : IProductSalesStatAppService
     public async Task<ApiResponseDto<ProductSalesStatDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ProductSalesStatDto?>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ProductSalesStatDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.ProductSalesStats
             .FirstOrDefaultAsync(s => s.Id == id && s.TenantId == _currentUser.TenantId.Value);
@@ -88,7 +88,7 @@ public class ProductSalesStatAppService : IProductSalesStatAppService
     public async Task<ApiResponseDto<ProductSalesStatDto>> CreateAsync(ProductSalesStatCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ProductSalesStatDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ProductSalesStatDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -111,7 +111,7 @@ public class ProductSalesStatAppService : IProductSalesStatAppService
     public async Task<ApiResponseDto<ProductSalesStatDto>> UpdateAsync(ProductSalesStatUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<ProductSalesStatDto>.Fail("无法确定当前租户", 401);
+            return ApiResponseDto<ProductSalesStatDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -142,7 +142,7 @@ public class ProductSalesStatAppService : IProductSalesStatAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.ProductSalesStats
             .FirstOrDefaultAsync(s => s.Id == id && s.TenantId == _currentUser.TenantId.Value);
@@ -160,7 +160,7 @@ public class ProductSalesStatAppService : IProductSalesStatAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 

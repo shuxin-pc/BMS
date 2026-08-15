@@ -3,10 +3,10 @@ namespace Bms.Store.Domain.Entities;
 /// <summary>
 /// 品项-供应商 关联表（多对多）
 /// 对应需求 G2.6.2：一个品项可关联多个供应商，一个供应商可供应多个品项
-/// 同时通过 IsDefault 标识品项的默认供应商（冗余写入 Product.SupplierId 以提升查询效率）
+/// 通过 IsDefault 标识品项的默认供应商（Product.SupplierId 冗余字段已移除，IsDefault 为唯一权威源）
 /// 关联表无软删除（解除关联即物理删除，避免历史数据干扰采购可选品项过滤）
 /// </summary>
-public class ProductSupplier : StoreTenantEntityBase
+public class ProductSupplier : StoreBusinessEntityBase
 {
     /// <summary>
     /// 商品ID（关联 Product.Id）

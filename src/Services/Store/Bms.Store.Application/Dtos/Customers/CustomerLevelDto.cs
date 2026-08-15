@@ -10,12 +10,11 @@ public class CustomerLevelDto
     public string Code { get; set; } = string.Empty;
 
     /// <summary>
-    /// 等级值（1:普通会员 2:会员）
+    /// 等级值（同租户内唯一，由门店自定义）
     /// </summary>
     public int Level { get; set; }
 
     public decimal DiscountRate { get; set; }
-    public int Sort { get; set; }
     public string? Remark { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

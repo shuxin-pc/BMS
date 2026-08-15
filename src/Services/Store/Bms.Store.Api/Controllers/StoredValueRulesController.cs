@@ -65,4 +65,11 @@ public class StoredValueRulesController : ControllerBase
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
+
+    /// <summary>
+    /// 试算充值赠送金额（充值弹窗输入金额时实时展示，与实际充值同一计算口径）
+    /// </summary>
+    [HttpGet("gift-preview")]
+    public async Task<ApiResponseDto<StoredValueGiftPreviewDto>> PreviewGift([FromQuery] decimal amount)
+        => await _appService.PreviewGiftAmountAsync(amount);
 }

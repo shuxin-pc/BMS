@@ -14,5 +14,8 @@ public class ServiceProductCreateDto
     /// </summary>
     public List<long> EquipmentTypeIds { get; set; } = new();
 
-    public string? ApplicableSkills { get; set; }
+    /// <summary>
+    /// 适用技师技能分类 ID 列表（树形选择，选父级即覆盖其所有子级）
+    /// </summary>
+    public List<long> SkillCategoryIds { get; set; } = new();
 }

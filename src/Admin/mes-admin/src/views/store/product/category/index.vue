@@ -46,13 +46,22 @@
       <el-table
         ref="tableRef"
         v-loading="tableLoading"
-        :data="filteredTreeData"
+        :data="displayData"
         row-key="id"
         :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
         style="width: 100%"
       >
-        <el-table-column prop="name" label="分类名称" min-width="240" />
-        <el-table-column prop="sort" label="排序" width="100" align="center" />
+        <el-table-column prop="name" label="分类名称" min-width="240">
+          <template #default="{ row }">
+            <span :class="{ 'row-highlight': isRowHighlighted(row) }">{{ row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="code" label="分类编码" width="200">
+          <template #default="{ row }">{{ row.code || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="创建时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleAdd(row)">
@@ -86,28 +95,21 @@
         label-width="100px"
       >
         <el-form-item label="父分类">
-          <el-tree-select
+          <el-cascader
             v-model="formData.parentId"
-            :data="categoryOptions"
-            :props="{ label: 'name', children: 'children' }"
-            node-key="id"
-            placeholder="请选择父分类（不选为顶级分类）"
-            check-strictly
+            :options="categoryOptions"
+            :props="{ checkStrictly: true, value: 'id', label: 'name', emitPath: false }"
+            placeholder="请选择父分类（顶级分类请选择）"
             clearable
             style="width: 100%"
+            :disabled="isEdit && formData.parentId === '0'"
           />
         </el-form-item>
         <el-form-item label="分类名称" prop="name">
           <el-input v-model="formData.name" placeholder="请输入分类名称" />
         </el-form-item>
-        <el-form-item label="排序" prop="sort">
-          <el-input-number
-            v-model="formData.sort"
-            :min="0"
-            :step="1"
-            controls-position="right"
-            style="width: 100%"
-          />
+        <el-form-item label="分类编码" prop="code">
+          <el-input v-model="formData.code" placeholder="请输入分类编码" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -121,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import {
@@ -142,36 +144,122 @@ const tableLoading = ref(false)
 const tableData = ref<ProductCategory[]>([])
 const tableRef = ref()
 
-// 根据搜索关键字过滤树形数据
-const filteredTreeData = computed(() => {
-  if (!searchForm.name) return tableData.value
-  const filterTree = (nodes: ProductCategory[]): ProductCategory[] => {
-    const result: ProductCategory[] = []
-    for (const node of nodes) {
-      const children = node.children ? filterTree(node.children) : []
-      const matched = node.name.includes(searchForm.name)
-      if (matched || children.length > 0) {
-        result.push({ ...node, children })
+// 显示用数据（点击搜索后更新，保留匹配项及其父级路径）
+const displayData = ref<ProductCategory[]>([])
+// 高亮节点 id 集合（仅真正匹配搜索关键字的节点）
+const highlightedIds = ref<Set<string>>(new Set())
+
+// 递归过滤树形数据，同时收集匹配节点 id
+const filterTree = (
+  nodes: ProductCategory[],
+  keyword: string,
+  matchedIds: Set<string>
+): ProductCategory[] => {
+  const result: ProductCategory[] = []
+  for (const node of nodes) {
+    const children = node.children
+      ? filterTree(node.children, keyword, matchedIds)
+      : []
+    const matched = node.name.includes(keyword)
+    if (matched || children.length > 0) {
+      result.push({ ...node, children })
+      if (matched) {
+        matchedIds.add(String(node.id))
       }
     }
-    return result
   }
-  return filterTree(tableData.value)
-})
+  return result
+}
 
-// 分类选项（用于父分类选择，添加顶级选项）
-const categoryOptions = computed<ProductCategory[]>(() => {
+// 应用搜索：过滤数据 + 收集高亮 + 展开父级路径
+const applySearch = async () => {
+  if (!searchForm.name) {
+    displayData.value = tableData.value
+    highlightedIds.value = new Set()
+    await nextTick(() => collapseAllRows())
+    return
+  }
+  const matchedIds = new Set<string>()
+  displayData.value = filterTree(tableData.value, searchForm.name, matchedIds)
+  highlightedIds.value = matchedIds
+  // 展开所有含子节点的行，使匹配结果所在的父级路径可见
+  await nextTick(() => expandAllRows())
+}
+
+// 展开显示数据中所有含子节点的行
+const expandAllRows = () => {
+  if (!tableRef.value) return
+  const expandRecursive = (data: ProductCategory[]) => {
+    data.forEach((row) => {
+      if (row.children && row.children.length > 0) {
+        tableRef.value!.toggleRowExpansion(row, true)
+        expandRecursive(row.children)
+      }
+    })
+  }
+  expandRecursive(displayData.value)
+}
+
+// 折叠所有行
+const collapseAllRows = () => {
+  if (!tableRef.value) return
+  const rows = tableRef.value.store.states.data.value
+  rows.forEach((row: ProductCategory) => {
+    tableRef.value.toggleRowExpansion(row, false)
+  })
+}
+
+// 判断行是否需要高亮
+const isRowHighlighted = (row: ProductCategory): boolean => {
+  return highlightedIds.value.has(String(row.id))
+}
+
+// 分类选项（用于父分类级联选择，固定包含"顶级分类"选项）
+const categoryOptions = computed(() => {
+  const processCategory = (cat: ProductCategory): any => ({
+    id: cat.id,
+    name: cat.name,
+    children: cat.children && cat.children.length > 0
+      ? cat.children.map(child => processCategory(child))
+      : []
+  })
   return [
-    { id: 0, name: '顶级分类', parentId: 0, sort: 0 },
-    ...tableData.value
+    { id: '0', name: '顶级分类', children: [] } as any,
+    ...tableData.value.map(cat => processCategory(cat))
   ]
 })
+
+// 递归查找指定 id 的分类节点（用字符串比较避免大数精度丢失）
+const findNode = (nodes: ProductCategory[], id: any): ProductCategory | null => {
+  const targetId = String(id)
+  for (const node of nodes) {
+    if (String(node.id) === targetId) return node
+    if (node.children) {
+      const found = findNode(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/**
+ * 格式化日期时间（标准 ISO 字符串转 YYYY-MM-DD HH:mm:ss）
+ */
+const formatDateTime = (dateStr?: string): string => {
+  if (!dateStr) return '-'
+  const dt = new Date(dateStr)
+  if (Number.isNaN(dt.getTime())) return dateStr
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
+}
 
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
   try {
     tableData.value = await getCategoryTree()
+    // 加载完成后应用当前搜索条件，保持筛选状态一致
+    await applySearch()
   } catch (error) {
     ElMessage.error('加载分类数据失败')
   } finally {
@@ -181,12 +269,13 @@ const loadData = async () => {
 
 // 搜索
 const handleSearch = () => {
-  // computed 自动响应搜索关键字
+  applySearch()
 }
 
 // 重置
 const handleReset = () => {
   searchForm.name = ''
+  applySearch()
 }
 
 // 弹窗
@@ -196,16 +285,21 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const formData = reactive({
-  id: 0,
+  id: 0 as any,
   name: '',
-  parentId: 0,
-  sort: 0
+  code: '',
+  parentId: '0' as any
 })
 
 const formRules: FormRules = {
   name: [
     { required: true, message: '分类名称不能为空', trigger: 'blur' },
     { max: 50, message: '分类名称最多50个字符', trigger: 'blur' }
+  ],
+  code: [
+    { required: true, message: '分类编码不能为空', trigger: 'blur' },
+    { min: 2, max: 50, message: '分类编码长度为2-50个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9_-]+$/, message: '分类编码只能包含字母、数字、下划线、横线', trigger: 'blur' }
   ]
 }
 
@@ -213,15 +307,15 @@ const formRules: FormRules = {
 const resetFormData = () => {
   formData.id = 0
   formData.name = ''
-  formData.parentId = 0
-  formData.sort = 0
+  formData.code = ''
+  formData.parentId = '0'
 }
 
 // 新增
 const handleAdd = (row?: ProductCategory) => {
   isEdit.value = false
   resetFormData()
-  // 如果指定了父节点，设置为父分类
+  // 如果指定了父节点，设置为父分类（保持字符串 id 避免精度丢失）
   if (row) {
     formData.parentId = row.id
   }
@@ -233,16 +327,23 @@ const handleEdit = (row: ProductCategory) => {
   isEdit.value = true
   formData.id = row.id
   formData.name = row.name
+  // 保持字符串 id 避免精度丢失，'0' 表示顶级分类
   formData.parentId = row.parentId
-  formData.sort = row.sort
+  formData.code = row.code || ''
   dialogVisible.value = true
 }
 
 // 删除
 const handleDelete = async (row: ProductCategory) => {
+  // 从原始数据中查找完整节点，避免搜索过滤导致 children 不完整
+  const fullNode = findNode(tableData.value, row.id)
+  if (fullNode?.children && fullNode.children.length > 0) {
+    ElMessage.warning(`分类"${row.name}"包含 ${fullNode.children.length} 个子分类，请先删除子分类后再删除`)
+    return
+  }
   try {
     await ElMessageBox.confirm(
-      `确定要删除分类 "${row.name}" 吗？如果包含子分类将一并删除，此操作不可恢复！`,
+      `确定要删除分类 "${row.name}" 吗？此操作不可恢复！`,
       '警告',
       {
         type: 'warning',
@@ -255,7 +356,7 @@ const handleDelete = async (row: ProductCategory) => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(error.message || '删除失败')
     }
   }
 }
@@ -269,8 +370,8 @@ const handleSubmit = async () => {
       try {
         const payload = {
           name: formData.name,
-          parentId: formData.parentId,
-          sort: formData.sort
+          code: formData.code || undefined,
+          parentId: formData.parentId
         }
         if (isEdit.value) {
           await updateCategory({ ...payload, id: formData.id })
@@ -389,5 +490,14 @@ onMounted(() => {
 
 :deep(.el-table__body-wrapper) {
   background-color: transparent;
+}
+
+/* 搜索高亮样式 */
+.row-highlight {
+  color: var(--primary) !important;
+  font-weight: 600;
+  background: rgba(6, 212, 228, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 </style>

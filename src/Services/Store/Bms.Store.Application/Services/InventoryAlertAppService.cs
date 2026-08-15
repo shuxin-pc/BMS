@@ -33,35 +33,75 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     }
 
     /// <summary>
-    /// 获取库存预警分页列表
+    /// 获取库存预警分页列表（联表商品主档/分类/门店，支持按商品名称模糊查询）
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<InventoryAlertDto>>> GetPagedListAsync(InventoryAlertQueryDto query)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<PagedResponseDto<InventoryAlertDto>>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<PagedResponseDto<InventoryAlertDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
-        var queryable = _dbContext.InventoryAlerts
-            .Where(a => a.TenantId == tenantId && a.StoreId == storeId);
+
+        // join Products -> ProductMaster + Stores 获取显示字段
+        // 左连接 InventoryBatches 取 BatchNo（仅效期预警有值）
+        var queryable = from alert in _dbContext.InventoryAlerts
+                        join prod in _dbContext.Products on alert.ProductId equals prod.Id
+                        join master in _dbContext.ProductMasters on prod.MasterId equals master.Id
+                        join store in _dbContext.Stores on alert.StoreId equals store.Id
+                        join batch in _dbContext.InventoryBatches on alert.BatchId equals batch.Id into batchGroup
+                        from batch in batchGroup.DefaultIfEmpty()
+                        where alert.TenantId == tenantId && alert.StoreId == storeId
+                              && prod.Status == 1 // 排除下架商品
+                        select new
+                        {
+                            alert,
+                            ProductName = master.Name,
+                            ProductCode = master.Code,
+                            StoreName = store.Name,
+                            BatchNo = batch != null ? batch.BatchNo : null
+                        };
 
         if (query.ProductId.HasValue)
-            queryable = queryable.Where(a => a.ProductId == query.ProductId.Value);
+            queryable = queryable.Where(x => x.alert.ProductId == query.ProductId.Value);
         if (query.AlertType.HasValue)
-            queryable = queryable.Where(a => a.AlertType == query.AlertType.Value);
+            queryable = queryable.Where(x => x.alert.AlertType == query.AlertType.Value);
         if (query.IsProcessed.HasValue)
-            queryable = queryable.Where(a => a.IsProcessed == query.IsProcessed.Value);
+            queryable = queryable.Where(x => x.alert.IsProcessed == query.IsProcessed.Value);
+        if (!string.IsNullOrWhiteSpace(query.ProductName))
+            queryable = queryable.Where(x => x.ProductName.Contains(query.ProductName));
 
         var total = await queryable.CountAsync();
-        var items = await queryable
-            .OrderByDescending(a => a.CreatedTime)
+        var rows = await queryable
+            .OrderByDescending(x => x.alert.CreatedTime)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync();
 
+        var list = rows.Select(x => new InventoryAlertDto
+        {
+            Id = x.alert.Id,
+            ProductId = x.alert.ProductId,
+            AlertType = x.alert.AlertType,
+            CurrentQuantity = x.alert.CurrentQuantity,
+            AlertValue = x.alert.AlertValue,
+            ExpirationDate = x.alert.ExpirationDate,
+            BatchId = x.alert.BatchId,
+            IsProcessed = x.alert.IsProcessed,
+            ProcessedTime = x.alert.ProcessedTime,
+            ProcessedRemark = x.alert.ProcessedRemark,
+            CreatedAt = x.alert.CreatedTime,
+            UpdatedAt = x.alert.UpdatedTime,
+            ProductName = x.ProductName,
+            ProductCode = x.ProductCode,
+            BatchNo = x.BatchNo,
+            StoreName = x.StoreName,
+            ShortageAmount = x.alert.AlertType == 1 ? x.alert.AlertValue - x.alert.CurrentQuantity : 0
+        }).ToList();
+
         var result = new PagedResponseDto<InventoryAlertDto>
         {
-            List = items.Adapt<List<InventoryAlertDto>>(),
+            List = list,
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize
@@ -75,7 +115,7 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     public async Task<ApiResponseDto<InventoryAlertDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryAlertDto?>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryAlertDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.InventoryAlerts
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value && a.StoreId == _currentUser.StoreId.Value);
@@ -90,7 +130,7 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     public async Task<ApiResponseDto<InventoryAlertDto>> CreateAsync(InventoryAlertCreateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryAlertDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryAlertDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _createValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -116,7 +156,7 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     public async Task<ApiResponseDto<InventoryAlertDto>> UpdateAsync(InventoryAlertUpdateDto dto)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryAlertDto>.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto<InventoryAlertDto>.Fail("登录状态异常，请重新登录", 401);
 
         var validation = await _updateValidator.ValidateAsync(dto);
         if (!validation.IsValid)
@@ -149,7 +189,7 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.InventoryAlerts
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value && a.StoreId == _currentUser.StoreId.Value);
@@ -167,7 +207,7 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
         if (ids == null || !ids.Any())
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
@@ -209,79 +249,143 @@ public class InventoryAlertAppService : IInventoryAlertAppService
     }
 
     /// <summary>
-    /// 即时检测指定商品的低库存预警（库存变动后调用）
+    /// 即时检测指定商品的预警（库存变动后调用）
+    /// 双向处理低库存/积压预警的生成与关闭，并关闭已用完批次的效期预警
     /// </summary>
-    public async Task CheckLowStockAsync(long tenantId, long storeId, long productId)
+    public async Task CheckInventoryAlertsAsync(long tenantId, long storeId, long productId)
     {
         var now = DateTime.Now;
 
-        // 查询商品阈值
-        var threshold = await _dbContext.Products
+        // 查询商品（含阈值与租户/门店编码）
+        var product = await _dbContext.Products
             .Where(p => p.Id == productId && p.TenantId == tenantId && !p.IsDeleted)
-            .Select(p => p.LowStockThreshold)
+            .Select(p => new { p.LowStockThreshold, p.OverstockThreshold, p.TenantCode, p.StoreCode })
             .FirstOrDefaultAsync();
+        if (product == null) return;
 
-        if (threshold == null)
-            return; // 未设置阈值，不预警
-
-        // 查询当前库存
+        // 查询当前库存，无 Inventory 记录视为 0（与库存管理页面状态判定一致）
         var inventory = await _dbContext.Inventories
             .FirstOrDefaultAsync(i => i.TenantId == tenantId && i.StoreId == storeId && i.ProductId == productId);
+        var currentQuantity = inventory?.Quantity ?? 0m;
 
-        if (inventory == null || inventory.Quantity >= threshold.Value)
-            return; // 库存充足，不预警
-
-        // 去重：同一门店+商品+低库存类型且未处理的预警已存在则跳过
-        var exists = await _dbContext.InventoryAlerts
-            .AnyAsync(a => a.TenantId == tenantId && a.StoreId == storeId
-                        && a.ProductId == productId && a.AlertType == 1 && !a.IsProcessed);
-        if (exists)
-            return;
-
-        var product = await _dbContext.Products
-            .Where(p => p.Id == productId)
-            .Select(p => new { p.TenantCode, p.StoreCode })
-            .FirstOrDefaultAsync();
-
-        _dbContext.InventoryAlerts.Add(new InventoryAlertEntity
+        // ===== 低库存预警：双向处理 =====
+        if (product.LowStockThreshold.HasValue)
         {
-            TenantId = tenantId,
-            TenantCode = product?.TenantCode ?? string.Empty,
-            StoreId = storeId,
-            StoreCode = product?.StoreCode ?? string.Empty,
-            ProductId = productId,
-            AlertType = 1,
-            CurrentQuantity = inventory.Quantity,
-            AlertValue = threshold.Value,
-            IsProcessed = false,
-            CreatedTime = now
-        });
+            var threshold = product.LowStockThreshold.Value;
+            if (currentQuantity < threshold)
+            {
+                // 库存低于阈值：若无未处理预警则生成
+                var exists = await _dbContext.InventoryAlerts
+                    .AnyAsync(a => a.TenantId == tenantId && a.StoreId == storeId
+                                && a.ProductId == productId && a.AlertType == 1 && !a.IsProcessed);
+                if (!exists)
+                {
+                    _dbContext.InventoryAlerts.Add(new InventoryAlertEntity
+                    {
+                        TenantId = tenantId,
+                        TenantCode = product.TenantCode,
+                        StoreId = storeId,
+                        StoreCode = product.StoreCode,
+                        ProductId = productId,
+                        AlertType = 1,
+                        CurrentQuantity = currentQuantity,
+                        AlertValue = threshold,
+                        IsProcessed = false,
+                        CreatedTime = now
+                    });
+                }
+            }
+            else
+            {
+                // 库存已恢复：关闭未处理低库存预警
+                await CloseAlertsAsync(tenantId, storeId, productId, 1, "系统自动关闭（库存已恢复）", now);
+            }
+        }
+
+        // ===== 积压预警：双向处理 =====
+        if (product.OverstockThreshold.HasValue)
+        {
+            var threshold = product.OverstockThreshold.Value;
+            if (currentQuantity > threshold)
+            {
+                // 库存超过阈值：若无未处理预警则生成
+                var exists = await _dbContext.InventoryAlerts
+                    .AnyAsync(a => a.TenantId == tenantId && a.StoreId == storeId
+                                && a.ProductId == productId && a.AlertType == 3 && !a.IsProcessed);
+                if (!exists)
+                {
+                    _dbContext.InventoryAlerts.Add(new InventoryAlertEntity
+                    {
+                        TenantId = tenantId,
+                        TenantCode = product.TenantCode,
+                        StoreId = storeId,
+                        StoreCode = product.StoreCode,
+                        ProductId = productId,
+                        AlertType = 3,
+                        CurrentQuantity = currentQuantity,
+                        AlertValue = threshold,
+                        IsProcessed = false,
+                        CreatedTime = now
+                    });
+                }
+            }
+            else
+            {
+                // 库存已恢复：关闭未处理积压预警
+                await CloseAlertsAsync(tenantId, storeId, productId, 3, "系统自动关闭（库存已恢复）", now);
+            }
+        }
+
+        // ===== 效期预警：关闭已用完批次对应预警 =====
+        // 效期预警的生成由定时扫描 ScanExpiryAsync 负责（含近效期+已过期），此处仅关闭
+        var usedUpBatchIds = await _dbContext.InventoryBatches
+            .Where(b => b.TenantId == tenantId && b.StoreId == storeId && b.ProductId == productId
+                    && (b.Status == 2 || (b.Status == 3 && b.Quantity == 0)))
+            .Select(b => (long?)b.Id)
+            .ToListAsync();
+        if (usedUpBatchIds.Any())
+        {
+            await CloseExpiryAlertsAsync(tenantId, storeId, productId, usedUpBatchIds, "系统自动关闭（批次已用完）", now);
+        }
 
         await _dbContext.SaveChangesAsync();
     }
 
     /// <summary>
-    /// 标记预警已处理
+    /// 关闭指定商品+预警类型的未处理预警（通用方法）
     /// </summary>
-    public async Task<ApiResponseDto> ProcessAsync(long id, string? remark)
+    private async Task CloseAlertsAsync(long tenantId, long storeId, long productId, int alertType, string remark, DateTime now)
     {
-        if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto.Fail("无法确定当前租户或门店", 401);
+        var alerts = await _dbContext.InventoryAlerts
+            .Where(a => a.TenantId == tenantId && a.StoreId == storeId
+                    && a.ProductId == productId && a.AlertType == alertType && !a.IsProcessed)
+            .ToListAsync();
+        foreach (var alert in alerts)
+        {
+            alert.IsProcessed = true;
+            alert.ProcessedTime = now;
+            alert.ProcessedRemark = remark;
+            alert.UpdatedTime = now;
+        }
+    }
 
-        var entity = await _dbContext.InventoryAlerts
-            .FirstOrDefaultAsync(a => a.Id == id
-                && a.TenantId == _currentUser.TenantId.Value
-                && a.StoreId == _currentUser.StoreId.Value);
-        if (entity == null)
-            return ApiResponseDto.Fail("库存预警不存在", 404);
-
-        entity.IsProcessed = true;
-        entity.ProcessedTime = DateTime.Now;
-        entity.ProcessedRemark = remark;
-        entity.UpdatedTime = DateTime.Now;
-
-        await _dbContext.SaveChangesAsync();
-        return ApiResponseDto.Success(null, "处理成功");
+    /// <summary>
+    /// 关闭指定商品+批次的未处理效期预警
+    /// </summary>
+    private async Task CloseExpiryAlertsAsync(long tenantId, long storeId, long productId, List<long?> batchIds, string remark, DateTime now)
+    {
+        var alerts = await _dbContext.InventoryAlerts
+            .Where(a => a.TenantId == tenantId && a.StoreId == storeId
+                    && a.ProductId == productId && a.AlertType == 2 && !a.IsProcessed
+                    && a.BatchId.HasValue && batchIds.Contains(a.BatchId.Value))
+            .ToListAsync();
+        foreach (var alert in alerts)
+        {
+            alert.IsProcessed = true;
+            alert.ProcessedTime = now;
+            alert.ProcessedRemark = remark;
+            alert.UpdatedTime = now;
+        }
     }
 
     // ============================================================
@@ -290,26 +394,33 @@ public class InventoryAlertAppService : IInventoryAlertAppService
 
     /// <summary>
     /// 低库存预警扫描
+    /// 以 Product 为主表左连接 Inventory，使无库存记录的商品（quantity=0）也能被扫描到，
+    /// 与 InventoryAppService.GetPagedListAsync 的查询结构保持一致
     /// </summary>
     private async Task<int> ScanLowStockAsync(DateTime now)
     {
-        // 查询库存低于阈值的商品（阈值非空），排除样品(4)/赠品(5)，它们由 SampleGiftAppService 独立管理
+        // 查询库存低于阈值的商品（阈值非空），正品/样品/赠品统一处理
+        // 无 Inventory 记录的商品视为 quantity=0，与库存管理页面状态判定逻辑一致
         var candidates = await (
-            from inv in _dbContext.Inventories
-            join prod in _dbContext.Products on inv.ProductId equals prod.Id
-            where prod.LowStockThreshold != null
-                  && inv.Quantity < prod.LowStockThreshold
-                  && !prod.IsDeleted
-                  && prod.Type != 4 && prod.Type != 5
+            from p in _dbContext.Products
+            join i in _dbContext.Inventories
+                on new { ProductId = p.Id, p.TenantId, p.StoreId }
+                equals new { ProductId = i.ProductId, i.TenantId, i.StoreId }
+                into inventories
+            from i in inventories.DefaultIfEmpty()
+            where p.LowStockThreshold != null
+                  && !p.IsDeleted
+                  && p.Status == 1 // 排除下架商品
+                  && (i == null ? 0m : i.Quantity) < p.LowStockThreshold
             select new
             {
-                inv.TenantId,
-                inv.TenantCode,
-                inv.StoreId,
-                inv.StoreCode,
-                inv.ProductId,
-                inv.Quantity,
-                Threshold = prod.LowStockThreshold!.Value
+                p.TenantId,
+                p.TenantCode,
+                p.StoreId,
+                p.StoreCode,
+                ProductId = p.Id,
+                Quantity = i == null ? 0m : i.Quantity,
+                Threshold = p.LowStockThreshold!.Value
             }
         ).ToListAsync();
 
@@ -348,6 +459,33 @@ public class InventoryAlertAppService : IInventoryAlertAppService
         if (created > 0)
             await _dbContext.SaveChangesAsync();
 
+        // 关闭已恢复的未处理低库存预警（库存 >= 阈值）
+        var resolvedAlerts = await (
+            from a in _dbContext.InventoryAlerts
+            join p in _dbContext.Products on a.ProductId equals p.Id
+            join i in _dbContext.Inventories
+                on new { ProductId = p.Id, p.TenantId, p.StoreId }
+                equals new { ProductId = i.ProductId, i.TenantId, i.StoreId }
+                into inventories
+            from i in inventories.DefaultIfEmpty()
+            where a.AlertType == 1 && !a.IsProcessed
+                  && p.LowStockThreshold != null
+                  && !p.IsDeleted
+                  && (i == null ? 0m : i.Quantity) >= p.LowStockThreshold
+            select a
+        ).ToListAsync();
+
+        foreach (var alert in resolvedAlerts)
+        {
+            alert.IsProcessed = true;
+            alert.ProcessedTime = now;
+            alert.ProcessedRemark = "系统自动关闭（库存已恢复）";
+            alert.UpdatedTime = now;
+        }
+
+        if (resolvedAlerts.Count > 0)
+            await _dbContext.SaveChangesAsync();
+
         return created;
     }
 
@@ -370,15 +508,21 @@ public class InventoryAlertAppService : IInventoryAlertAppService
         if (expiredBatches.Count > 0)
             await _dbContext.SaveChangesAsync();
 
-        // 2. 查询近效期批次（阈值非空且剩余天数 <= 阈值）
+        // 2. 查询近效期批次（Status=1 且剩余天数 <= 阈值）和已过期批次（Status=3 且 Quantity > 0）
+        // 已过期批次也需生成预警，确保门店能看到过期商品（需销毁处理）
         var candidates = await (
             from batch in _dbContext.InventoryBatches
             join prod in _dbContext.Products on batch.ProductId equals prod.Id
-            where batch.Status == 1
+            where !prod.IsDeleted
+                  && prod.Status == 1 // 排除下架商品
                   && batch.ExpirationDate != null
-                  && prod.ExpiryAlertDays != null
-                  && batch.ExpirationDate.Value <= today.AddDays(prod.ExpiryAlertDays!.Value)
-                  && !prod.IsDeleted
+                  && (
+                      // 近效期：Status=1 且剩余天数 <= ExpiryAlertDays
+                      (batch.Status == 1 && prod.ExpiryAlertDays != null
+                       && batch.ExpirationDate.Value <= today.AddDays(prod.ExpiryAlertDays!.Value))
+                      // 已过期且有库存：Status=3 且 Quantity > 0
+                      || (batch.Status == 3 && batch.Quantity > 0)
+                  )
             select new
             {
                 batch.TenantId,
@@ -386,26 +530,23 @@ public class InventoryAlertAppService : IInventoryAlertAppService
                 batch.StoreId,
                 batch.StoreCode,
                 batch.ProductId,
+                BatchId = (long?)batch.Id,
                 batch.BatchNo,
-                batch.ExpirationDate,
-                ExpiryAlertDays = prod.ExpiryAlertDays!.Value
+                batch.ExpirationDate
             }
         ).ToListAsync();
 
-        if (candidates.Count == 0)
-            return (0, expiredBatches.Count);
-
-        // 去重：同一门店+商品+效期日期+效期预警类型且未处理的预警已存在则跳过
+        // 去重：同一门店+商品+批次+效期预警类型且未处理的预警已存在则跳过
         var existingKeys = await _dbContext.InventoryAlerts
             .Where(a => a.AlertType == 2 && !a.IsProcessed)
-            .Select(a => new { a.StoreId, a.ProductId, a.ExpirationDate })
+            .Select(a => new { a.StoreId, a.ProductId, a.BatchId })
             .ToListAsync();
-        var existingSet = existingKeys.Select(k => (k.StoreId, k.ProductId, k.ExpirationDate)).ToHashSet();
+        var existingSet = existingKeys.Select(k => (k.StoreId, k.ProductId, k.BatchId)).ToHashSet();
 
         var created = 0;
         foreach (var c in candidates)
         {
-            if (existingSet.Contains((c.StoreId, c.ProductId, c.ExpirationDate)))
+            if (existingSet.Contains((c.StoreId, c.ProductId, c.BatchId)))
                 continue;
 
             var remainingDays = (int)(c.ExpirationDate!.Value.Date - today).TotalDays;
@@ -421,6 +562,7 @@ public class InventoryAlertAppService : IInventoryAlertAppService
                 CurrentQuantity = 0,
                 AlertValue = remainingDays,
                 ExpirationDate = c.ExpirationDate,
+                BatchId = c.BatchId,
                 IsProcessed = false,
                 CreatedTime = now
             });
@@ -430,31 +572,62 @@ public class InventoryAlertAppService : IInventoryAlertAppService
         if (created > 0)
             await _dbContext.SaveChangesAsync();
 
+        // 3. 关闭已用完批次（Status=2 或 Status=3 且 Qty=0）的未处理效期预警
+        var usedUpBatchIds = await _dbContext.InventoryBatches
+            .Where(b => b.Status == 2 || (b.Status == 3 && b.Quantity == 0))
+            .Select(b => (long?)b.Id)
+            .ToListAsync();
+
+        if (usedUpBatchIds.Any())
+        {
+            var resolvedAlerts = await _dbContext.InventoryAlerts
+                .Where(a => a.AlertType == 2 && !a.IsProcessed
+                        && a.BatchId.HasValue && usedUpBatchIds.Contains(a.BatchId.Value))
+                .ToListAsync();
+
+            foreach (var alert in resolvedAlerts)
+            {
+                alert.IsProcessed = true;
+                alert.ProcessedTime = now;
+                alert.ProcessedRemark = "系统自动关闭（批次已用完）";
+                alert.UpdatedTime = now;
+            }
+
+            if (resolvedAlerts.Count > 0)
+                await _dbContext.SaveChangesAsync();
+        }
+
         return (created, expiredBatches.Count);
     }
 
     /// <summary>
     /// 积压预警扫描
+    /// 以 Product 为主表左连接 Inventory，与 ScanLowStockAsync 查询结构保持一致
     /// </summary>
     private async Task<int> ScanOverstockAsync(DateTime now)
     {
-        // 查询库存超过积压阈值的商品（阈值非空），排除样品(4)/赠品(5)，它们由 SampleGiftAppService 独立管理
+        // 查询库存超过积压阈值的商品（阈值非空），正品/样品/赠品统一处理
+        // 无 Inventory 记录的商品视为 quantity=0，不会触发积压预警，逻辑等价于 INNER JOIN
         var candidates = await (
-            from inv in _dbContext.Inventories
-            join prod in _dbContext.Products on inv.ProductId equals prod.Id
-            where prod.OverstockThreshold != null
-                  && inv.Quantity > prod.OverstockThreshold
-                  && !prod.IsDeleted
-                  && prod.Type != 4 && prod.Type != 5
+            from p in _dbContext.Products
+            join i in _dbContext.Inventories
+                on new { ProductId = p.Id, p.TenantId, p.StoreId }
+                equals new { ProductId = i.ProductId, i.TenantId, i.StoreId }
+                into inventories
+            from i in inventories.DefaultIfEmpty()
+            where p.OverstockThreshold != null
+                  && !p.IsDeleted
+                  && p.Status == 1 // 排除下架商品
+                  && (i == null ? 0m : i.Quantity) > p.OverstockThreshold
             select new
             {
-                inv.TenantId,
-                inv.TenantCode,
-                inv.StoreId,
-                inv.StoreCode,
-                inv.ProductId,
-                inv.Quantity,
-                Threshold = prod.OverstockThreshold!.Value
+                p.TenantId,
+                p.TenantCode,
+                p.StoreId,
+                p.StoreCode,
+                ProductId = p.Id,
+                Quantity = i == null ? 0m : i.Quantity,
+                Threshold = p.OverstockThreshold!.Value
             }
         ).ToListAsync();
 
@@ -491,6 +664,33 @@ public class InventoryAlertAppService : IInventoryAlertAppService
         }
 
         if (created > 0)
+            await _dbContext.SaveChangesAsync();
+
+        // 关闭已恢复的未处理积压预警（库存 <= 阈值）
+        var resolvedAlerts = await (
+            from a in _dbContext.InventoryAlerts
+            join p in _dbContext.Products on a.ProductId equals p.Id
+            join i in _dbContext.Inventories
+                on new { ProductId = p.Id, p.TenantId, p.StoreId }
+                equals new { ProductId = i.ProductId, i.TenantId, i.StoreId }
+                into inventories
+            from i in inventories.DefaultIfEmpty()
+            where a.AlertType == 3 && !a.IsProcessed
+                  && p.OverstockThreshold != null
+                  && !p.IsDeleted
+                  && (i == null ? 0m : i.Quantity) <= p.OverstockThreshold
+            select a
+        ).ToListAsync();
+
+        foreach (var alert in resolvedAlerts)
+        {
+            alert.IsProcessed = true;
+            alert.ProcessedTime = now;
+            alert.ProcessedRemark = "系统自动关闭（库存已恢复）";
+            alert.UpdatedTime = now;
+        }
+
+        if (resolvedAlerts.Count > 0)
             await _dbContext.SaveChangesAsync();
 
         return created;
