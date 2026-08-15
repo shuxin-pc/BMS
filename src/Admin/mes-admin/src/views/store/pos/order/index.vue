@@ -436,8 +436,8 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载数据失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载数据失败')
   } finally {
     tableLoading.value = false
   }
@@ -469,8 +469,8 @@ const handleDetail = async (row: Order) => {
   detailLoading.value = true
   try {
     currentOrder.value = await getOrder(row.id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载详情失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载详情失败')
   } finally {
     detailLoading.value = false
   }
@@ -527,8 +527,8 @@ const handleRefundSubmit = async () => {
         ElMessage.success('退款成功')
         refundVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '退款失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '退款失败')
       } finally {
         refundLoading.value = false
       }
@@ -574,8 +574,8 @@ const handleCancelSubmit = async () => {
         ElMessage.success('取消订单成功')
         cancelVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '取消订单失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '取消订单失败')
       } finally {
         cancelLoading.value = false
       }

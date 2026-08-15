@@ -120,7 +120,7 @@ const loadCustomers = async () => {
   customerLoading.value = true
   try {
     customerOptions.value = await getCustomerOptions()
-  } catch (error) {
+  } catch {
     ElMessage.error('加载客户列表失败')
   } finally {
     customerLoading.value = false

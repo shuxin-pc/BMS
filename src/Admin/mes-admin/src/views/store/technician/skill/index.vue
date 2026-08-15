@@ -188,8 +188,8 @@ const loadData = async () => {
     tableData.value = await getSkillCategoryTree({
       name: searchForm.name || undefined
     })
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载数据失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载数据失败')
   } finally {
     tableLoading.value = false
   }
@@ -249,9 +249,9 @@ const handleDelete = async (row: SkillCategory) => {
     await deleteSkillCategory(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -277,8 +277,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

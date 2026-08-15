@@ -348,7 +348,7 @@ const loadData = async () => {
     }
     const res = await getAppointments({ appointmentDateStart: startDate, appointmentDateEnd: endDate, pageSize: 100 })
     allAppointments.value = res.list
-  } catch (error) {
+  } catch {
     ElMessage.error('加载预约数据失败')
   } finally {
     loading.value = false

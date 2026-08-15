@@ -176,7 +176,7 @@ async function handleClickMessage(msg: MessageInboxItem) {
     try {
       await markAsRead(msg.id)
       messageStore.onMessageRead()
-    } catch (error) {
+    } catch {
       ElMessage.error('标记已读失败')
       return
     }
@@ -196,7 +196,7 @@ async function handleMarkAllRead() {
     messageStore.onAllRead()
     await messageStore.fetchRecentMessages()
     ElMessage.success('已全部标记为已读')
-  } catch (error) {
+  } catch {
     ElMessage.error('操作失败')
   }
 }

@@ -269,7 +269,7 @@
       if (searchForm.tenantId === undefined) {
         searchForm.tenantId = '1'
       }
-    } catch (error) {
+    } catch {
       // 加载租户失败
     }
   }
@@ -283,8 +283,14 @@
   })
 
   // 组织树选项（用于级联选择）- 使用表单专用组织列表
+  interface OrgTreeOption {
+    id: number
+    name: string
+    disabled: boolean
+    children: OrgTreeOption[]
+  }
   const orgTreeOptions = computed(() => {
-    const processOrg = (org: Organization): any => {
+    const processOrg = (org: Organization): OrgTreeOption => {
       return {
         id: org.id,
         name: org.name,
@@ -295,7 +301,7 @@
       }
     }
     return [
-      { id: 0, name: '顶级组织', children: [], disabled: false } as any,
+      { id: 0, name: '顶级组织', children: [], disabled: false } as OrgTreeOption,
       ...formOrganizationList.value.map(org => processOrg(org))
     ]
   })
@@ -305,7 +311,7 @@
     try {
       const res = await getOrganizations({ tenantId: currentTenantId.value })
       formOrganizationList.value = res || []
-    } catch (error) {
+    } catch {
       // 加载组织列表失败
     }
   }
@@ -361,7 +367,7 @@
           collapseAllRows()
         })
       }
-    } catch (error) {
+    } catch {
       ElMessage.error('加载数据失败')
     } finally {
       tableLoading.value = false
@@ -408,7 +414,7 @@
       userLoading.value = true
       const users = await getUserList(tenantId, realName)
       allUsers.value = users
-    } catch (error) {
+    } catch {
       // 加载用户列表失败
     } finally {
       userLoading.value = false
@@ -501,7 +507,7 @@
   }
 
   // 递归查找指定 id 的组织节点（用字符串比较避免大数精度丢失）
-  const findNode = (nodes: Organization[], id: any): Organization | null => {
+  const findNode = (nodes: Organization[], id: number | string): Organization | null => {
     const targetId = String(id)
     for (const node of nodes) {
       if (String(node.id) === targetId) return node
@@ -528,9 +534,9 @@
       await deleteOrganization(row.id)
       ElMessage.success('删除成功')
       loadData()
-    } catch (error: any) {
+    } catch (error) {
       if (error !== 'cancel') {
-        ElMessage.error(error.message || '删除失败')
+        ElMessage.error((error as Error).message || '删除失败')
       }
     }
   }
@@ -575,8 +581,8 @@
           }
           dialogVisible.value = false
           loadData()
-        } catch (error: any) {
-          ElMessage.error(error.message || '操作失败')
+        } catch (error) {
+          ElMessage.error((error as Error).message || '操作失败')
         } finally {
           submitLoading.value = false
         }
@@ -600,7 +606,7 @@
 
   // 获取组织类型标签样式
   const getTypeTagType = (type: string | number) => {
-    const map: Record<string | number, any> = {
+    const map: Record<string | number, string> = {
       1: 'primary',
       2: 'warning',
       3: 'info',

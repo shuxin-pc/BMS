@@ -351,7 +351,7 @@ import {
 } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { Role, RoleCreate, RoleUpdate, RoleMenuGrouped, Tenant, Menu } from '@/api/system/types'
+import type { Role, RoleCreate, RoleUpdate, RoleMenuGrouped, Tenant, Menu, Organization } from '@/api/system/types'
 
 const userStore = useUserStore()
 const systemConfigStore = useSystemConfigStore()
@@ -397,7 +397,7 @@ const loadTenants = async () => {
     if (searchForm.tenantId === undefined) {
       searchForm.tenantId = '1'
     }
-  } catch (error) {
+  } catch {
     // 加载租户失败
   }
 }
@@ -458,7 +458,7 @@ const formRules: FormRules = {
 }
 
 // 组织树（用于自定义数据范围）
-const organizationTree = ref<any[]>([])
+const organizationTree = ref<Organization[]>([])
 const treeProps = {
   children: 'children',
   label: 'name'
@@ -469,9 +469,9 @@ const orgExpandedKeys = ref<string[]>([])
 const orgTreeKey = ref(0)
 
 // 根据勾选节点 ID 计算需要展开的祖先节点 ID 列表
-const calcOrgExpandedKeys = (tree: any[], checkedIds: string[]): string[] => {
+const calcOrgExpandedKeys = (tree: Organization[], checkedIds: string[]): string[] => {
   const expandedKeys = new Set<string>()
-  const findPath = (nodes: any[], targetId: string): boolean => {
+  const findPath = (nodes: Organization[], targetId: string): boolean => {
     for (const node of nodes) {
       if (String(node.id) === targetId) {
         return true
@@ -500,7 +500,7 @@ const activeSubsystemIds = ref<number[]>([])
 
 // 菜单树ref管理
 const menuTreeRefs = reactive<Record<number, TreeInstance | null>>({})
-const setMenuTreeRef = (subsystemId: number, el: any) => {
+const setMenuTreeRef = (subsystemId: number, el: TreeInstance) => {
   if (el) {
     // 仅在 el 实例变化时初始化选中状态
     // 内联 ref 函数每次渲染都会生成新实例并触发回调，若不守卫会反复 setCheckedKeys 重置用户勾选
@@ -582,7 +582,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -596,7 +596,7 @@ const loadOrganizationTree = async () => {
     const res = await getOrganizationOptions()
     // 后端 /organizations/options 已返回树形结构，直接使用
     organizationTree.value = res || []
-  } catch (error) {
+  } catch {
     // 加载组织树失败
   }
 }
@@ -675,7 +675,7 @@ const loadMenuData = async (roleId: number) => {
         treeRef.setCheckedKeys(leafIds)
       }
     })
-  } catch (error) {
+  } catch {
     ElMessage.error('加载菜单权限失败')
   } finally {
     menuLoading.value = false
@@ -693,7 +693,7 @@ const getSubsystemSelectedCount = (group: RoleMenuGrouped): number => {
 }
 
 // 菜单选中事件
-const handleMenuCheck = (_group: RoleMenuGrouped, _data: any, _info: any) => {
+const handleMenuCheck = (_group: RoleMenuGrouped, _data: unknown, _info: unknown) => {
   // 不需要在这里处理，保存时统一获取
 }
 
@@ -719,8 +719,8 @@ const handleMenuSave = async () => {
     ElMessage.success('保存成功')
     // 重新加载数据
     await loadMenuData(currentRole.value.id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '保存失败')
   } finally {
     menuSaveLoading.value = false
   }
@@ -744,9 +744,9 @@ const handleDelete = async (row: Role) => {
     await deleteRole(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -762,9 +762,9 @@ const handleBatchDelete = async () => {
     await deleteRoles(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -774,7 +774,7 @@ const handleBatchDelete = async () => {
 // 避免级联勾选下"勾选全部子节点导致父节点被自动授权"的问题
 const handleOrgCheck = () => {
   const checkedKeys = orgTreeRef.value?.getCheckedKeys() || []
-  formData.customOrganizationIds = checkedKeys.map((id: any) => String(id))
+  formData.customOrganizationIds = checkedKeys.map((id: string | number) => String(id))
 }
 
 // 提交表单
@@ -812,8 +812,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

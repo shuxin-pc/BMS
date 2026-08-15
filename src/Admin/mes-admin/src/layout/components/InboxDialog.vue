@@ -243,8 +243,8 @@ async function loadData() {
     const result = await getInbox(buildQuery())
     tableData.value = result.list || []
     pagination.total = result.total || 0
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '加载失败')
   } finally {
     tableLoading.value = false
   }
@@ -289,7 +289,7 @@ async function handleViewDetail(row: MessageInboxItem) {
       await markAsRead(row.id)
       row.isRead = true
       messageStore.onMessageRead()
-    } catch (error) {
+    } catch {
       // 标记失败不影响查看
     }
   }
@@ -304,8 +304,8 @@ async function handleMarkRead(row: MessageInboxItem) {
     row.isRead = true
     messageStore.onMessageRead()
     ElMessage.success('已标记为已读')
-  } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '操作失败')
   }
 }
 
@@ -319,8 +319,8 @@ async function handleBatchRead() {
     ElMessage.success('批量标记成功')
     messageStore.fetchUnreadCount()
     loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '操作失败')
   }
 }
 
@@ -341,8 +341,8 @@ async function handleDelete(row: MessageInboxItem) {
       messageStore.onMessageRead()
     }
     loadData()
-  } catch (error: any) {
-    if (error !== 'cancel' && error?.message) {
+  } catch (error) {
+    if (error !== 'cancel' && error instanceof Error && error.message) {
       ElMessage.error(error.message)
     }
   }
@@ -363,8 +363,8 @@ async function handleBatchDelete() {
     ElMessage.success('批量删除成功')
     messageStore.fetchUnreadCount()
     loadData()
-  } catch (error: any) {
-    if (error !== 'cancel' && error?.message) {
+  } catch (error) {
+    if (error !== 'cancel' && error instanceof Error && error.message) {
       ElMessage.error(error.message)
     }
   }

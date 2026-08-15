@@ -147,8 +147,8 @@ const handleSubmit = async () => {
     ElMessage.success('充值成功')
     emit('update:modelValue', false)
     emit('success', { amount: form.amount, giftAmount: giftAmount.value })
-  } catch (error: any) {
-    ElMessage.error(error.message || '充值失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '充值失败')
   } finally {
     submitting.value = false
   }

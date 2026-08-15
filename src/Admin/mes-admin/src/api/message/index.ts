@@ -49,7 +49,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
       throw new Error(errorMessage || '请求失败')
     }
     return result.data
-  } catch (err: any) {
+  } catch {
     if (errorMessage) {
       throw new Error(errorMessage)
     }
@@ -60,7 +60,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 /**
  * 构建查询参数
  */
-function buildQuery(params: Record<string, any>): string {
+function buildQuery<T extends object>(params: T): string {
   const searchParams = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {

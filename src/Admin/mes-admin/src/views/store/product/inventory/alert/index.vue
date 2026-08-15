@@ -203,7 +203,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载预警数据失败')
   } finally {
     tableLoading.value = false
@@ -219,7 +219,7 @@ const handleScan = async () => {
     ElMessage.success(`扫描完成：低库存 ${result.lowStockCreated} 条、效期 ${result.expiryCreated} 条、积压 ${result.overstockCreated} 条`)
     pagination.pageIndex = 1
     await loadData()
-  } catch (error) {
+  } catch {
     ElMessage.error('扫描失败')
   } finally {
     scanning.value = false

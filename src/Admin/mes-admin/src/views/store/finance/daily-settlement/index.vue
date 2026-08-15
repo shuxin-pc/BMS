@@ -741,8 +741,8 @@ const handleSummarizeConfirm = async () => {
     summarizeDialogVisible.value = false
     await loadTodaySummary()
     await loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '汇总失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '汇总失败')
   } finally {
     settleLoading.value = false
   }
@@ -762,8 +762,8 @@ const handleConfirm = async (row: DailySettlement) => {
       confirmDialogVisible.value = false
       return
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '校验失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '校验失败')
     confirmDialogVisible.value = false
   }
 }
@@ -778,8 +778,8 @@ const handleConfirmSubmit = async () => {
     confirmDialogVisible.value = false
     await loadTodaySummary()
     await loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '确认失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '确认失败')
   } finally {
     confirmLoading.value = false
   }
@@ -793,8 +793,8 @@ const handleRecalculate = async (id: number) => {
     ElMessage.success('已重新汇总')
     await loadTodaySummary()
     await loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '重算失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '重算失败')
   } finally {
     recalcLoading.value = false
   }
@@ -817,8 +817,8 @@ const handleReverseSubmit = async () => {
     reverseDialogVisible.value = false
     await loadTodaySummary()
     await loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '反日结失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '反日结失败')
   } finally {
     reverseLoading.value = false
   }
@@ -846,8 +846,8 @@ const handleViewDetail = async (row: DailySettlement) => {
   detailData.value = null
   try {
     detailData.value = await getDailySettlement(row.id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载详情失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载详情失败')
     detailDialogVisible.value = false
   } finally {
     detailLoading.value = false

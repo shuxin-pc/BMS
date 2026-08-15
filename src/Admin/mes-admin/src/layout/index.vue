@@ -203,9 +203,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, markRaw, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, markRaw, nextTick, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { Menu as SystemMenu } from '@/api/system/types'
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { useMessageHub } from '@/composables/useMessageHub'
@@ -229,7 +230,7 @@ const systemConfig = useSystemConfigStore()
 const { start: startMessageHub, stop: stopMessageHub } = useMessageHub()
 const isCollapse = ref(false)
 const searchQuery = ref('')
-const menus = ref<any[]>([])
+const menus = ref<SystemMenu[]>([])
 const menuRef = ref()
 // el-menu 选中项：用 ref 控制，菜单数据异步加载后需强制触发选中
 const activeMenu = ref(route.path)
@@ -240,11 +241,11 @@ watch(() => route.path, (path) => {
 })
 
 // 查找当前路由对应的父级菜单路径（用于展开 sub-menu）
-const findParentMenuPath = (menus: any[], targetPath: string): string | null => {
+const findParentMenuPath = (menus: SystemMenu[], targetPath: string): string | null => {
   for (const menu of menus) {
     if (menu.children && menu.children.length > 0) {
-      const found = menu.children.some((child: any) => child.path === targetPath)
-      if (found) return menu.path
+      const found = menu.children.some((child: SystemMenu) => child.path === targetPath)
+      if (found) return menu.path ?? null
     }
   }
   return null
@@ -291,7 +292,7 @@ const currentStoreName = computed(() => userStore.currentStoreName)
 
 // 图标名称到组件的映射
 // 图标组件使用 markRaw 避免响应式开销（名称与 IconPicker 保持一致）
-const iconMap: Record<string, any> = {
+const iconMap: Record<string, Component> = {
   Setting: markRaw(Setting),
   Box: markRaw(Box),
   Calendar: markRaw(Calendar),
@@ -369,7 +370,7 @@ const _breadcrumbs = computed(() => {
     title: item.meta.title
   }))
 })
-void _breadcrumbs // 占位，避免未使用警告
+void _breadcrumbs.value // 占位，避免未使用警告
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
@@ -432,7 +433,7 @@ const handleCommand = (command: string) => {
           responseStatus: 200,
           requestPath: '/logout'
         })
-      } catch (error) {
+      } catch {
         // 记录登出审计日志失败，不影响退出流程
       }
 

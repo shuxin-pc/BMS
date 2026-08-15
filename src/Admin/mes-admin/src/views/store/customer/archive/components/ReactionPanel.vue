@@ -276,7 +276,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -333,7 +333,7 @@ const loadOrderOptions = async (customerId: number | undefined) => {
     const res = await getOrders({ customerId, pageIndex: 1, pageSize: 9999 })
     // 前端过滤仅显示 orderType=2(服务) 或 3(疗程卡核销)
     orderOptions.value = res.list.filter(o => o.orderType === 2 || o.orderType === 3)
-  } catch (error) {
+  } catch {
     ElMessage.error('加载订单列表失败')
     orderOptions.value = []
   } finally {
@@ -399,8 +399,8 @@ const handleSubmit = async () => {
       ElMessage.success('记录添加成功')
       dialogVisible.value = false
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '保存失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '保存失败')
     } finally {
       submitLoading.value = false
     }

@@ -83,7 +83,8 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const user = await getCurrentUser()
 
-      const roles = user.roles?.map((r: any) => typeof r === 'string' ? r : r.code) || []
+      // 后端可能返回角色对象而非字符串（类型声明为 string[]，此处防御性兼容对象形状）
+      const roles = user.roles?.map(r => typeof r === 'string' ? r : ((r as unknown as { code?: string }).code ?? '')) || []
       const roleIds = user.roleIds || []
 
       userStore.userInfo = {
@@ -121,7 +122,7 @@ router.beforeEach(async (to, _from, next) => {
       if (userStore.isStoreSubsystem && userStore.authorizedStores.length === 0) {
         await userStore.getAuthorizedStores()
       }
-    } catch (error) {
+    } catch {
       // 获取用户信息失败，跳转到登录页
       localStorage.removeItem('token')
       next('/login')

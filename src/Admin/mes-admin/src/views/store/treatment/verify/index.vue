@@ -294,7 +294,7 @@ const handleSearchCards = async () => {
     if (customerCards.value.length === 0) {
       ElMessage.info('未找到有效的疗程卡')
     }
-  } catch (error) {
+  } catch {
     ElMessage.error('查询失败')
   } finally {
     cardLoading.value = false
@@ -325,7 +325,7 @@ const loadVerifyRecords = async () => {
     })
     verifyRecords.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载核销记录失败')
   } finally {
     recordLoading.value = false
@@ -444,7 +444,7 @@ const handleVerify = async (row: TreatmentCardSale) => {
     try {
       const config = await getTreatmentCardConfig(row.cardId)
       cardItems.value = config.items || []
-    } catch (error) {
+    } catch {
       ElMessage.error('加载疗程卡项目失败')
     } finally {
       itemsLoading.value = false
@@ -478,8 +478,8 @@ const handleSubmitVerify = async () => {
         // 刷新数据
         handleSearchCards()
         loadVerifyRecords()
-      } catch (error: any) {
-        ElMessage.error(error.message || '核销失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '核销失败')
       } finally {
         verifyLoading.value = false
       }

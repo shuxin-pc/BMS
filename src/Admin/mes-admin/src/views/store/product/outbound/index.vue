@@ -271,7 +271,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -284,7 +284,7 @@ const loadOptions = async () => {
     const list = await getProductOptions()
     // 过滤掉服务商品（Type=2），服务商品无实物库存不参与出库
     productOptions.value = list.filter(p => p.type !== 2)
-  } catch (error) {
+  } catch {
     ElMessage.error('加载选项数据失败')
   }
 }
@@ -388,7 +388,7 @@ const handleProductChange = async (productId: number) => {
     // 加载在库批次列表（手动模式使用）
     batchOptions.value = await getProductBatches(productId)
     formData.batchItems = []
-  } catch (error) {
+  } catch {
     currentStock.value = '--'
     batchOptions.value = []
   }
@@ -453,8 +453,8 @@ const handleSubmit = async () => {
         ElMessage.success('出库成功')
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '出库失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '出库失败')
       } finally {
         submitLoading.value = false
       }

@@ -188,8 +188,8 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     tableData.value = await getAllCustomerTags()
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载数据失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载数据失败')
   } finally {
     tableLoading.value = false
   }
@@ -268,9 +268,9 @@ const handleDelete = async (row: CustomerTag) => {
     await deleteCustomerTag(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -287,9 +287,9 @@ const handleBatchDelete = async () => {
     await batchDeleteCustomerTags(selectedRows.value.map(r => r.id))
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -316,8 +316,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

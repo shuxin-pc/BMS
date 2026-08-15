@@ -222,7 +222,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -260,7 +260,7 @@ const handleSendRemind = async (row: TomorrowReminder, channel: 'sms' | 'wechat'
     await sendReminder(row.id, channel)
     ElMessage.success(`${channelName}提醒已发送`)
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -279,7 +279,7 @@ const handleBatchRemind = async () => {
     }
     ElMessage.success('批量提醒已发送')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -295,7 +295,7 @@ const handleConfirm = async (row: TomorrowReminder) => {
     await confirmTomorrowAppointment(row.id)
     ElMessage.success('已确认预约')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }

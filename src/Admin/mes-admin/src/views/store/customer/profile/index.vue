@@ -701,7 +701,7 @@ const formRules: FormRules = {
 const loadCustomerLevels = async () => {
   try {
     customerLevels.value = await getCustomerLevels()
-  } catch (error) {
+  } catch {
     customerLevels.value = []
   }
 }
@@ -725,7 +725,7 @@ const handleAuthorizationStatusChange = (value: AuthorizationStatus) => {
 const loadAllTags = async () => {
   try {
     allTags.value = await getAllCustomerTags()
-  } catch (error) {
+  } catch {
     allTags.value = []
   }
 }
@@ -745,7 +745,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -818,7 +818,7 @@ const handleDelete = async (row: Customer) => {
     await deleteCustomer(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -870,8 +870,8 @@ const handleSubmitPermanentDelete = async () => {
       ElMessage.success('客户档案已永久删除')
       permanentDeleteVisible.value = false
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '永久删除失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '永久删除失败')
     } finally {
       permanentDeleteLoading.value = false
     }
@@ -899,8 +899,8 @@ const handleViewDetail = async (row: Customer) => {
   statData.value = null
   try {
     statData.value = await getCustomerConsumptionStat(row.id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载消费统计失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载消费统计失败')
   } finally {
     statLoading.value = false
   }
@@ -911,8 +911,8 @@ const openCustomerDetailById = async (customerId: number) => {
   try {
     const customer = await getCustomer(customerId)
     await handleViewDetail(customer)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载客户详情失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载客户详情失败')
   }
 }
 
@@ -942,7 +942,7 @@ const pointsAdjustRules: FormRules = {
   points: [
     { required: true, message: '变动积分不能为空', trigger: 'blur' },
     {
-      validator: (_rule: any, value: number, callback: any) => {
+      validator: (_rule: unknown, value: number, callback: (error?: string | Error) => void) => {
         if (value === 0) return callback(new Error('变动积分不能为0'))
         if (detailData.value && detailData.value.totalPoints + value < 0)
           return callback(new Error('扣减后积分不能为负'))
@@ -985,8 +985,8 @@ const handleSubmitPointsAdjust = async () => {
       detailData.value!.totalPoints += pointsAdjustForm.points
       // 刷新表格数据
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '积分调整失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '积分调整失败')
     } finally {
       pointsAdjustLoading.value = false
     }
@@ -1018,7 +1018,7 @@ const handleBatchDelete = async () => {
     await deleteCustomers(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -1060,8 +1060,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

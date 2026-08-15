@@ -508,7 +508,7 @@ const loadData = async () => {
       supplierId: searchForm.supplierId,
       productId: searchForm.productId,
       orderNo: searchForm.orderNo || undefined,
-      purchaseType: searchForm.purchaseType as any,
+      purchaseType: searchForm.purchaseType as PurchaseType | undefined,
       orderDateStart: searchForm.dateRange?.[0] || undefined,
       orderDateEnd: searchForm.dateRange?.[1] || undefined,
       pageIndex: pagination.pageIndex,
@@ -718,8 +718,8 @@ const handleCreate = async () => {
     ElMessage.success('创建成功')
     createDialogVisible.value = false
     loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '创建失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '创建失败')
   } finally {
     createLoading.value = false
   }

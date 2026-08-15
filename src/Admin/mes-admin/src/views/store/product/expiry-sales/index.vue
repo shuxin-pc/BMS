@@ -251,8 +251,8 @@ async function loadData() {
     const result = await getProductExpirySalesStats(query)
     tableData.value = result.list || []
     pagination.total = result.total || 0
-  } catch (err: any) {
-    ElMessage.error(err.message || '加载效期销售统计失败')
+  } catch (err) {
+    ElMessage.error((err as Error).message || '加载效期销售统计失败')
     tableData.value = []
     pagination.total = 0
   } finally {

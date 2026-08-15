@@ -204,10 +204,10 @@ import { Plus, Refresh, Edit, Delete, Menu, FolderOpened, Link, Close } from '@e
 import IconPicker from '@/components/IconPicker/index.vue'
 import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/system'
 import { useSortAutoFill } from '@/composables/useSortAutoFill'
-import type { Menu as MenuData } from '@/api/system/types'
+import type { Menu as MenuData, MenuCreate, MenuUpdate } from '@/api/system/types'
 
 // 兼容旧代码：MenuType 在此处实际指 MenuData 接口（包含 children）
-// eslint-disable-next-line @typescript-eslint/no-redeclare
+ 
 type MenuType = MenuData
 
 // 表格数据
@@ -257,8 +257,14 @@ const formRules: FormRules = {
 }
 
 // 菜单树选项（用于级联选择）- 仅支持3级，禁用第3级作为父级
+interface MenuTreeOption {
+  id: number
+  name: string
+  disabled: boolean
+  children: MenuTreeOption[]
+}
 const menuTreeOptions = computed(() => {
-  const processMenu = (menu: MenuType, level: number): any => {
+  const processMenu = (menu: MenuType, level: number): MenuTreeOption => {
     // 第3级及以上禁用（只能选到第2级作为父级）
     const disabled = level >= 2
     return {
@@ -271,7 +277,7 @@ const menuTreeOptions = computed(() => {
     }
   }
   return [
-    { id: 0, name: '顶级菜单', children: [], disabled: false } as any,
+    { id: 0, name: '顶级菜单', children: [], disabled: false } as MenuTreeOption,
     ...tableData.value.map(menu => processMenu(menu, 0))
   ]
 })
@@ -301,7 +307,7 @@ const loadData = async () => {
   try {
     const res = await getMenuTree()
     tableData.value = res
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -378,7 +384,7 @@ const handleEdit = (row: MenuType) => {
 }
 
 // 递归查找指定 id 的菜单节点（用字符串比较避免大数精度丢失）
-const findNode = (nodes: MenuType[], id: any): MenuType | null => {
+const findNode = (nodes: MenuType[], id: number | string): MenuType | null => {
   const targetId = String(id)
   for (const node of nodes) {
     if (String(node.id) === targetId) return node
@@ -405,9 +411,9 @@ const handleDelete = async (row: MenuType) => {
     await deleteMenu(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -435,7 +441,7 @@ const handleSubmit = async () => {
       submitLoading.value = true
       try {
         if (isEdit.value) {
-          const data: any = {
+          const data = {
             id: formData.id,
             parentId: formData.parentId === 0 ? null : formData.parentId,
             name: formData.name,
@@ -450,10 +456,10 @@ const handleSubmit = async () => {
             isCache: formData.isCache === 1,
             permissionCode: formData.permission || undefined
           }
-          await updateMenu(data)
+          await updateMenu(data as unknown as MenuUpdate)
           ElMessage.success('更新成功')
         } else {
-          const data: any = {
+          const data = {
             parentId: formData.parentId === 0 ? null : formData.parentId,
             name: formData.name,
             path: formData.path || undefined,
@@ -467,13 +473,13 @@ const handleSubmit = async () => {
             isCache: formData.isCache === 1,
             permissionCode: formData.permission || undefined
           }
-          await createMenu(data)
+          await createMenu(data as unknown as MenuCreate)
           ElMessage.success('创建成功')
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

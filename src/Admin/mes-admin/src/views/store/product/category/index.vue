@@ -215,8 +215,13 @@ const isRowHighlighted = (row: ProductCategory): boolean => {
 }
 
 // 分类选项（用于父分类级联选择，固定包含"顶级分类"选项）
+interface CategoryOption {
+  id: number | string
+  name: string
+  children: CategoryOption[]
+}
 const categoryOptions = computed(() => {
-  const processCategory = (cat: ProductCategory): any => ({
+  const processCategory = (cat: ProductCategory): CategoryOption => ({
     id: cat.id,
     name: cat.name,
     children: cat.children && cat.children.length > 0
@@ -224,13 +229,13 @@ const categoryOptions = computed(() => {
       : []
   })
   return [
-    { id: '0', name: '顶级分类', children: [] } as any,
+    { id: '0', name: '顶级分类', children: [] } as CategoryOption,
     ...tableData.value.map(cat => processCategory(cat))
   ]
 })
 
 // 递归查找指定 id 的分类节点（用字符串比较避免大数精度丢失）
-const findNode = (nodes: ProductCategory[], id: any): ProductCategory | null => {
+const findNode = (nodes: ProductCategory[], id: number | string): ProductCategory | null => {
   const targetId = String(id)
   for (const node of nodes) {
     if (String(node.id) === targetId) return node
@@ -260,7 +265,7 @@ const loadData = async () => {
     tableData.value = await getCategoryTree()
     // 加载完成后应用当前搜索条件，保持筛选状态一致
     await applySearch()
-  } catch (error) {
+  } catch {
     ElMessage.error('加载分类数据失败')
   } finally {
     tableLoading.value = false
@@ -285,10 +290,10 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const formData = reactive({
-  id: 0 as any,
+  id: 0,
   name: '',
   code: '',
-  parentId: '0' as any
+  parentId: '0' as string | number
 })
 
 const formRules: FormRules = {
@@ -354,9 +359,9 @@ const handleDelete = async (row: ProductCategory) => {
     await deleteCategory(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -371,7 +376,7 @@ const handleSubmit = async () => {
         const payload = {
           name: formData.name,
           code: formData.code || undefined,
-          parentId: formData.parentId
+          parentId: formData.parentId as number
         }
         if (isEdit.value) {
           await updateCategory({ ...payload, id: formData.id })
@@ -382,8 +387,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

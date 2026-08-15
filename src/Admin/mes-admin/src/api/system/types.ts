@@ -480,7 +480,7 @@ export interface MenuUpdate extends MenuCreate {
 /**
  * API统一响应结构
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   /** 状态码：200-成功，其他-失败 */
   code: number
   /** 响应消息 */

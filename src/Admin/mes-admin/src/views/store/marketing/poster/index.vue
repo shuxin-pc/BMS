@@ -869,9 +869,9 @@ const togglePanel = (key: PropsPanelKey) => {
 
 // ==================== 防抖工具 ====================
 /** 简单防抖函数 */
-function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
+function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
   let timer: ReturnType<typeof setTimeout> | null = null
-  return ((...args: any[]) => {
+  return ((...args: Parameters<T>) => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => fn(...args), delay)
   }) as T

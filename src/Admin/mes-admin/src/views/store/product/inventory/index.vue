@@ -284,7 +284,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -347,7 +347,7 @@ const handleDetail = async (row: Inventory) => {
       pageSize: 100
     })
     detailDialog.rows = res.list
-  } catch (error) {
+  } catch {
     ElMessage.error('加载批次详情失败')
   } finally {
     detailDialog.loading = false
@@ -504,7 +504,7 @@ const handleExport = async () => {
     URL.revokeObjectURL(url)
 
     ElMessage.success(`导出成功，共 ${totalRows} 条记录`)
-  } catch (error) {
+  } catch {
     ElMessage.error('导出失败')
   } finally {
     exporting.value = false

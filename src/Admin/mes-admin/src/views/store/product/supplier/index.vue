@@ -374,7 +374,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -483,7 +483,7 @@ const handleDelete = async (row: Supplier) => {
     await deleteSupplier(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -507,7 +507,7 @@ const handleBatchDelete = async () => {
     await deleteSuppliers(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -541,8 +541,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -573,8 +573,8 @@ const loadSupplierProducts = async () => {
       if (ps.leadTimeDays === 0) ps.leadTimeDays = undefined
     })
     supplierProductList.value = list
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载品项失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载品项失败')
   } finally {
     productLoading.value = false
   }
@@ -585,7 +585,7 @@ const loadAllProductOptions = async () => {
   try {
     const res = await getProducts({ pageIndex: 1, pageSize: 500 })
     allProductOptions.value = res.list
-  } catch (error) {
+  } catch {
     allProductOptions.value = []
   }
 }
@@ -601,8 +601,8 @@ const handleAddProduct = async () => {
     ElMessage.success('添加成功')
     addProductId.value = undefined
     await loadSupplierProducts()
-  } catch (error: any) {
-    ElMessage.error(error.message || '添加失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '添加失败')
   }
 }
 
@@ -617,8 +617,8 @@ const handleSetDefaultProduct = async (row: ProductSupplier) => {
     })
     ElMessage.success('已设为默认')
     await loadSupplierProducts()
-  } catch (error: any) {
-    ElMessage.error(error.message || '设置失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '设置失败')
   }
 }
 
@@ -633,8 +633,8 @@ const handleUpdateProductReferencePrice = async (row: ProductSupplier, val: numb
         leadTimeDays: row.leadTimeDays
       })
       ElMessage.success('参考价已更新')
-    } catch (error: any) {
-      ElMessage.error(error.message || '更新失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '更新失败')
       await loadSupplierProducts()
     }
   }
@@ -653,8 +653,8 @@ const handleUpdateProductLeadTime = async (row: ProductSupplier, val: number | u
         leadTimeDays
       })
       ElMessage.success('供货周期已更新')
-    } catch (error: any) {
-      ElMessage.error(error.message || '更新失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '更新失败')
       await loadSupplierProducts()
     }
   }
@@ -671,9 +671,9 @@ const handleUnbindProduct = async (row: ProductSupplier) => {
     await unbindProduct(row.productId, currentSupplierId.value)
     ElMessage.success('解除关联成功')
     await loadSupplierProducts()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '解除关联失败')
+      ElMessage.error((error as Error).message || '解除关联失败')
     }
   }
 }

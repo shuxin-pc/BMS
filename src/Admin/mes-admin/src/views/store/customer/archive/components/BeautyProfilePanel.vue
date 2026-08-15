@@ -212,7 +212,7 @@ const loadData = async () => {
       pageSize: 1
     })
     profile.value = res.list[0] || null
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -274,9 +274,9 @@ const handleDelete = async () => {
     await deleteBeautyProfile(profile.value.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -313,8 +313,8 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '保存失败')
   } finally {
     submitLoading.value = false
   }

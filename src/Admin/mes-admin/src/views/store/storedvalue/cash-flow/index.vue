@@ -107,8 +107,8 @@ const loadData = async () => {
     const startDate = searchForm.dateRange?.[0] || undefined
     const endDate = searchForm.dateRange?.[1] || undefined
     cashFlow.value = await getStoredValueCashFlow(startDate, endDate)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载统计数据失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载统计数据失败')
   } finally {
     loading.value = false
   }

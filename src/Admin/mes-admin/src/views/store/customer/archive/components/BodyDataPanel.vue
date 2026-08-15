@@ -261,7 +261,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -348,8 +348,8 @@ const handleSubmit = async () => {
       ElMessage.success('记录添加成功')
       dialogVisible.value = false
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '保存失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '保存失败')
     } finally {
       submitLoading.value = false
     }

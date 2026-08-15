@@ -451,7 +451,7 @@ const loadDashboardData = async () => {
     await nextTick()
     updateTrendChart()
     await initPieChart()
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载首页数据失败', error)
   } finally {
     loading.value = false

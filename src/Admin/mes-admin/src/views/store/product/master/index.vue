@@ -476,7 +476,7 @@ import { getEquipmentTypeOptions } from '@/api/equipment-type'
 import { getSkillCategoryTree } from '@/api/skill'
 import { getTechniciansAvailableByService } from '@/api/staff'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { ProductCategory, ProductType } from '@/api/product/types'
+import type { ProductCategory, ProductType, RequiredRoomType } from '@/api/product/types'
 import type { EquipmentType } from '@/api/equipment-type'
 import type { Store } from '@/api/store/types'
 import type { SkillCategory } from '@/api/skill'
@@ -704,9 +704,9 @@ const handleDelete = async (row: ProductMaster) => {
     await deleteProductMaster(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -731,7 +731,7 @@ const handleSubmit = async () => {
         // 服务项目子表字段
         if (formData.type === 2) {
           payload.duration = formData.duration
-          payload.requiredRoomType = formData.requiredRoomType as any
+          payload.requiredRoomType = formData.requiredRoomType as RequiredRoomType
           payload.equipmentTypeIds = formData.equipmentTypeIds
           payload.skillCategoryIds = formData.skillCategoryIds
         }
@@ -744,8 +744,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -853,8 +853,8 @@ const handleStoreConfigSubmit = async () => {
       let preview
       try {
         preview = await getStoreConfigPreview(currentMaster.value!.id, selectedStoreIds.value)
-      } catch (error: any) {
-        ElMessage.error(error.message || '获取门店档案预览失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '获取门店档案预览失败')
         return
       }
 
@@ -898,8 +898,8 @@ const handleStoreConfigSubmit = async () => {
         await batchConfigStoreFields(currentMaster.value!.id, payload)
         ElMessage.success('门店档案配置已应用')
         storeConfigDialogVisible.value = false
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         storeConfigSubmitLoading.value = false
       }

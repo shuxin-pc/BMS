@@ -42,7 +42,7 @@ if (token) {
       const firstPath = userStore.firstAuthorizedLeafPath || '/no-permission'
       window.history.replaceState({}, '', `#${firstPath}`)
     }
-  } catch (e) {
+  } catch {
     // token 过期或加载失败：清空 token，让路由守卫跳登录页
     localStorage.removeItem('token')
   }

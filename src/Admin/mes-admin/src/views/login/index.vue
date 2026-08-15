@@ -47,7 +47,7 @@
           <p class="form-subtitle">请输入您的账号和密码</p>
         </div>
 
-        <el-form ref="formRef" :model="loginForm" :rules="rules" class="login-form" @submit.native.prevent>
+        <el-form ref="formRef" :model="loginForm" :rules="rules" class="login-form" @submit.prevent>
           <el-form-item prop="username">
             <el-input
               v-model="loginForm.username"
@@ -208,8 +208,8 @@ const handleLogin = async () => {
         // 跳转到根路径，由路由守卫根据当前子系统的授权菜单决定首页
         // 有授权菜单时跳转到排序第1的叶子菜单；无授权菜单时跳转到 /no-permission
         await router.push('/')
-      } catch (error: any) {
-        ElMessage.error(error?.message || '登录失败，请检查用户名和密码')
+      } catch (error) {
+        ElMessage.error((error as Error)?.message || '登录失败，请检查用户名和密码')
       } finally {
         loading.value = false
       }

@@ -542,8 +542,8 @@ const loadCategories = async () => {
   try {
     const tree = await getCategoryTree()
     categories.value = [{ id: 0, name: '全部' }, ...tree.map(c => ({ id: c.id, name: c.name }))]
-  } catch (e: any) {
-    ElMessage.error('加载分类失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('加载分类失败: ' + (e as Error).message)
   }
 }
 
@@ -565,8 +565,8 @@ const loadProducts = async () => {
         productType: p.type,
         colorClass: colorClasses[idx % colorClasses.length]
       }))
-  } catch (e: any) {
-    ElMessage.error('加载商品失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('加载商品失败: ' + (e as Error).message)
   }
 }
 
@@ -589,8 +589,8 @@ const loadGifts = async () => {
         productType: p.type,
         colorClass: colorClasses[idx % colorClasses.length]
       }))
-  } catch (e: any) {
-    ElMessage.error('加载赠品失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('加载赠品失败: ' + (e as Error).message)
   }
 }
 
@@ -636,9 +636,9 @@ const customerLevels = ref<CustomerLevel[]>([])
 const loadCustomerLevels = async () => {
   try {
     customerLevels.value = await getCustomerLevels()
-  } catch (e: any) {
+  } catch (e) {
     // 静默失败，不影响主流程
-    console.warn('加载客户等级失败:', e.message)
+    console.warn('加载客户等级失败:', (e as Error).message)
   }
 }
 
@@ -647,9 +647,9 @@ const activityOptions = ref<ActivityOption[]>([])
 const loadActivityOptions = async () => {
   try {
     activityOptions.value = await getActivityOptions()
-  } catch (e: any) {
+  } catch (e) {
     // 静默失败，不影响主流程
-    console.warn('加载活动选项失败:', e.message)
+    console.warn('加载活动选项失败:', (e as Error).message)
   }
 }
 
@@ -696,7 +696,7 @@ const handleMemberSearch = async () => {
       if (accounts.list.length > 0) {
         balance = accounts.list[0].balance
       }
-    } catch (e) {
+    } catch {
       // 储值账户查询失败不阻塞
     }
     selectedMember.value = {
@@ -710,8 +710,8 @@ const handleMemberSearch = async () => {
     }
     memberKeyword.value = ''
     ElMessage.success('会员查询成功')
-  } catch (e: any) {
-    ElMessage.error('会员查询失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('会员查询失败: ' + (e as Error).message)
   }
 }
 
@@ -881,8 +881,8 @@ const openExpiryDialog = async (product: POSProduct) => {
     if (recommended) {
       selectedExpirationDates.value = [recommended.expirationDate]
     }
-  } catch (e: any) {
-    ElMessage.error('加载效期信息失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('加载效期信息失败: ' + (e as Error).message)
     pendingProduct.value = null
     return
   }
@@ -1106,7 +1106,7 @@ const openPayDialog = async () => {
     try {
       const rule = await getPointsRule()
       comboPointsRule.value = { deductRate: rule?.deductRate ?? 0 }
-    } catch (e) {
+    } catch {
       // 积分规则加载失败不阻塞，组合支付积分栏将不可用
       comboPointsRule.value = { deductRate: 0 }
     }
@@ -1168,7 +1168,7 @@ const handleConfirmPay = async () => {
       '确认收款',
       { type: 'info', confirmButtonText: '确认', cancelButtonText: '取消' }
     )
-  } catch (e) {
+  } catch {
     return  // 用户取消
   }
 
@@ -1245,13 +1245,14 @@ const handleConfirmPay = async () => {
     storedValueAmount.value = 0
     pointsAmount.value = 0
     generateOrderNo()
-  } catch (e: any) {
+  } catch (e) {
+    const err = e as { code?: number; message: string }
     // 409: 选中效期库存不足（并发冲突），弹窗让店员决定是否自动从近效期补足
-    if (e.code === 409 && e.message?.startsWith('INSUFFICIENT_EXPIRY_STOCK')) {
-      await handleInsufficientExpiryStock(e.message, payload)
+    if (err.code === 409 && err.message?.startsWith('INSUFFICIENT_EXPIRY_STOCK')) {
+      await handleInsufficientExpiryStock(err.message, payload)
       return
     }
-    ElMessage.error('下单失败: ' + e.message)
+    ElMessage.error('下单失败: ' + err.message)
   } finally {
     paying.value = false
   }
@@ -1300,8 +1301,8 @@ const handleInsufficientExpiryStock = async (errorMessage: string, originalPaylo
       storedValueAmount.value = 0
       pointsAmount.value = 0
       generateOrderNo()
-    } catch (retryErr: any) {
-      ElMessage.error('下单失败: ' + retryErr.message)
+    } catch (retryErr) {
+      ElMessage.error('下单失败: ' + (retryErr as Error).message)
     }
   } catch {
     // 用户取消：提示重新选择效期
@@ -1321,8 +1322,8 @@ const openTechDialog = async (item: CartItem) => {
   try {
     const res = await getTechnicians({ status: 1, pageIndex: 1, pageSize: 1000 })
     technicianList.value = res.list
-  } catch (e: any) {
-    ElMessage.error('加载技师失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('加载技师失败: ' + (e as Error).message)
     return
   }
   techDialogVisible.value = true
@@ -1436,8 +1437,8 @@ const loadCustomerCards = async () => {
     }
     cardList.value = cardRes.list
     ElMessage.success(`找到 ${cardRes.list.length} 张有效疗程卡`)
-  } catch (e: any) {
-    ElMessage.error('查询疗程卡失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('查询疗程卡失败: ' + (e as Error).message)
   }
 }
 
@@ -1464,8 +1465,8 @@ const confirmVerifyCard = async () => {
     verifyDialogVisible.value = false
     // 刷新疗程卡列表
     await loadCustomerCards()
-  } catch (e: any) {
-    ElMessage.error('核销失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('核销失败: ' + (e as Error).message)
   } finally {
     verifying.value = false
   }
@@ -1489,8 +1490,8 @@ const handleAppointmentToOrder = async () => {
     })
     todayAppointments.value = res.list
     appointmentDialogVisible.value = true
-  } catch (e: any) {
-    ElMessage.error('加载今日预约失败: ' + e.message)
+  } catch (e) {
+    ElMessage.error('加载今日预约失败: ' + (e as Error).message)
   }
 }
 

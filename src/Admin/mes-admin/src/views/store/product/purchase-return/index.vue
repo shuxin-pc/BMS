@@ -429,8 +429,8 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载退货记录失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载退货记录失败')
   } finally {
     tableLoading.value = false
   }
@@ -623,9 +623,10 @@ const handleDelete = async (row: PurchaseReturn) => {
     await deletePurchaseReturn(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
-    if (error !== 'cancel' && error?.message) {
-      ElMessage.error(error.message)
+  } catch (error) {
+    const errMessage = error !== 'cancel' ? (error as { message?: string }).message : undefined
+    if (errMessage) {
+      ElMessage.error(errMessage)
     }
   }
 }
@@ -643,9 +644,10 @@ const handleBatchDelete = async () => {
     await batchDeletePurchaseReturns(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
-    if (error !== 'cancel' && error?.message) {
-      ElMessage.error(error.message)
+  } catch (error) {
+    const errMessage = error !== 'cancel' ? (error as { message?: string }).message : undefined
+    if (errMessage) {
+      ElMessage.error(errMessage)
     }
   }
 }
@@ -706,8 +708,8 @@ const handleSubmit = async () => {
       }
       dialogVisible.value = false
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '操作失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '操作失败')
     } finally {
       submitLoading.value = false
     }

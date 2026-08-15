@@ -298,7 +298,7 @@ const loadData = async () => {
     })
     photoPairs.value = buildPhotoPairs(res.list)
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -368,8 +368,8 @@ const handleDelete = async (pair: PhotoPairDisplay) => {
     await batchDeleteComparisonPhotos(ids)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '删除失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '删除失败')
   }
 }
 

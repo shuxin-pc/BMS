@@ -479,7 +479,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -784,7 +784,7 @@ const loadResourceAvailability = async () => {
     const start = `${formData.appointmentDate} ${formData.startTime}:00`
     const end = `${formData.appointmentDate} ${formData.endTime}:00`
     resourceAvailability.value = await getResourceAvailability(start, end)
-  } catch (e) {
+  } catch {
     // 静默失败：占用查询失败不影响主流程
     resourceAvailability.value = null
   } finally {
@@ -1025,8 +1025,8 @@ const handleSubmit = async () => {
         ElMessage.success('创建预约成功')
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '创建失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '创建失败')
       } finally {
         submitLoading.value = false
       }
@@ -1045,7 +1045,7 @@ const handleConfirm = async (row: Appointment) => {
     await updateAppointmentStatus({ id: row.id, status: 2 })
     ElMessage.success('已确认')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -1061,7 +1061,7 @@ const handleArrive = async (row: Appointment) => {
     await updateAppointmentStatus({ id: row.id, status: 3 })
     ElMessage.success('已标记到店')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -1077,7 +1077,7 @@ const handleCancel = async (row: Appointment) => {
     await updateAppointmentStatus({ id: row.id, status: 5 })
     ElMessage.success('已取消预约')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }

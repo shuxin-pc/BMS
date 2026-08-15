@@ -387,7 +387,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -398,7 +398,7 @@ const loadData = async () => {
 const loadOptions = async () => {
   try {
     storeOptions.value = await getStoreOptions()
-  } catch (error) {
+  } catch {
     ElMessage.error('加载选项数据失败')
   }
 }
@@ -479,8 +479,8 @@ const loadFromStoreProducts = async (fromStoreId: string) => {
   if (productOptionsByFromStore.value[fromStoreId]) return
   try {
     productOptionsByFromStore.value[fromStoreId] = await getFromStoreProducts(fromStoreId)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载调出门店商品列表失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载调出门店商品列表失败')
   }
 }
 
@@ -490,8 +490,8 @@ const loadProductBatches = async (fromStoreId: string, productId: number) => {
   if (batchOptionsByProduct.value[key]) return
   try {
     batchOptionsByProduct.value[key] = await getFromStoreProductBatches(fromStoreId, productId)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载商品批次列表失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载商品批次列表失败')
   }
 }
 
@@ -618,8 +618,8 @@ const handleSubmit = async () => {
         ElMessage.success('创建调拨单成功')
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '创建失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '创建失败')
       } finally {
         submitLoading.value = false
       }
@@ -655,8 +655,8 @@ const handleViewDetail = async (row: StockTransfer) => {
     detailData.remark = detail.remark || ''
     detailData.items = detail.items
     detailDialogVisible.value = true
-  } catch (error: any) {
-    ElMessage.error(error.message || '获取详情失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '获取详情失败')
   }
 }
 
@@ -671,9 +671,9 @@ const handleExecute = async (row: StockTransfer) => {
     await executeStockTransfer(row.id)
     ElMessage.success('调拨执行成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '操作失败')
+      ElMessage.error((error as Error).message || '操作失败')
     }
   }
 }
@@ -689,9 +689,9 @@ const handleCancel = async (row: StockTransfer) => {
     await cancelStockTransfer(row.id)
     ElMessage.success('取消成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '操作失败')
+      ElMessage.error((error as Error).message || '操作失败')
     }
   }
 }

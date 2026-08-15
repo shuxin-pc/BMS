@@ -229,7 +229,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -268,7 +268,7 @@ const handleNotify = async (row: TreatmentCardExpiry) => {
     )
     // Mock 模式下直接提示成功
     ElMessage.success('通知已发送')
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -287,7 +287,7 @@ const handleBatchNotify = async () => {
       }
     )
     ElMessage.success('批量通知已发送')
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }

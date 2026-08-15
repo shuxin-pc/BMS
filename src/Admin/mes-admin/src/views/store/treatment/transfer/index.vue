@@ -267,7 +267,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -384,8 +384,8 @@ const handleSubmit = async () => {
       // 刷新选项数据（因为转让后卡的客户信息已变化）
       cardSaleOptions.value = []
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '转让失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '转让失败')
     } finally {
       submitLoading.value = false
     }

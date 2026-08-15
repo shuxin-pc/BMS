@@ -72,16 +72,17 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
         handleUnauthorized(errorMessage)
       }
       // 403 时附带后端返回的路径和所需权限，便于定位是哪个接口、缺什么权限
+      // path / requiredPermissions 不在 ApiResponse<T> 类型中声明，仅在后端 403 响应中存在
       const extra: string[] = []
-      const anyResult = result as any
-      if (anyResult.path) extra.push(`接口: ${anyResult.path}`)
-      if (anyResult.requiredPermissions?.length) {
-        extra.push(`需要权限: ${anyResult.requiredPermissions.join(', ')}`)
+      const errorDetail = result as unknown as { path?: string; requiredPermissions?: string[] }
+      if (errorDetail.path) extra.push(`接口: ${errorDetail.path}`)
+      if (errorDetail.requiredPermissions?.length) {
+        extra.push(`需要权限: ${errorDetail.requiredPermissions.join(', ')}`)
       }
       throw new Error(extra.length ? `${errorMessage}（${extra.join('；')}）` : (errorMessage || '请求失败'))
     }
     return result.data
-  } catch (err: any) {
+  } catch {
     // 如果已有错误信息，直接抛出
     if (errorMessage) {
       throw new Error(errorMessage)
@@ -656,15 +657,15 @@ export async function login(username: string, password: string): Promise<LoginRe
     const responseText = await response.text()
 
     // 尝试解析为 JSON
-    let errorData: any = {}
+    let errorData: Record<string, unknown> = {}
     try {
-      errorData = JSON.parse(responseText)
-    } catch (e) {
+      errorData = JSON.parse(responseText) as Record<string, unknown>
+    } catch {
       // 响应不是 JSON，使用默认错误
     }
 
     // 尝试各种可能的字段名
-    const msg = errorData.error_description || errorData.errorDescription || errorData.message || errorData.msg || '登录失败'
+    const msg = String(errorData.error_description || errorData.errorDescription || errorData.message || errorData.msg || '登录失败')
 
     throw new Error(msg)
   }

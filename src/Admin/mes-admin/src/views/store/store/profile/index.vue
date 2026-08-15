@@ -354,7 +354,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -434,7 +434,7 @@ const handleDelete = async (row: Store) => {
     await deleteStore(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -454,7 +454,7 @@ const handleBatchDelete = async () => {
     await deleteStores(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -506,8 +506,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -547,8 +547,8 @@ const handleAssignUser = async (row: Store) => {
     }))
     // 右侧默认显示已分配用户
     transferValue.value = users.filter(u => u.assigned).map(u => u.id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载用户列表失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载用户列表失败')
   }
 }
 
@@ -560,8 +560,8 @@ const handleUserSubmit = async () => {
     await assignStoreUsers(currentStoreForUser.value.id, transferValue.value)
     ElMessage.success('分配成功')
     userDialogVisible.value = false
-  } catch (error: any) {
-    ElMessage.error(error.message || '分配失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '分配失败')
   } finally {
     userSubmitLoading.value = false
   }

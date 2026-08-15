@@ -360,7 +360,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -371,7 +371,7 @@ const loadData = async () => {
 const loadOptions = async () => {
   try {
     productOptions.value = await getProductOptionsForCheck()
-  } catch (error) {
+  } catch {
     ElMessage.error('加载选项数据失败')
   }
 }
@@ -489,10 +489,10 @@ const handleGainBatchBlur = async () => {
       formData.gainShelfLifeDays = null
       formData.gainExpirationDate = ''
     }
-  } catch (error: any) {
+  } catch (error) {
     gainBatchCheckState.value = 'invalid'
     gainBatchMatchedQuantity.value = null
-    ElMessage.error(error.message || '批次号校验失败')
+    ElMessage.error((error as Error).message || '批次号校验失败')
   }
 }
 
@@ -645,8 +645,8 @@ const handleSubmit = async () => {
       ElMessage.success('盘点成功')
       dialogVisible.value = false
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '盘点失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '盘点失败')
     } finally {
       submitLoading.value = false
     }

@@ -85,7 +85,7 @@ export async function getSkillCategoryTree(query?: SkillCategoryQuery): Promise<
     pageSize: 1000
   })
   const paged = await request<PagedResponse<SkillCategory>>(`/skillCategories${qs}`)
-  let list = paged.list.map(item => ({ ...item, parentId: normalizeParentId(item.parentId) }))
+  const list = paged.list.map(item => ({ ...item, parentId: normalizeParentId(item.parentId) }))
 
   let tree = buildTree(list)
 

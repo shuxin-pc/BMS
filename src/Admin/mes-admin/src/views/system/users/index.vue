@@ -455,7 +455,7 @@ const loadTenants = async () => {
     if (searchForm.tenantId === undefined) {
       searchForm.tenantId = '1'
     }
-  } catch (error) {
+  } catch {
     // 加载租户失败
   }
 }
@@ -471,7 +471,7 @@ const loadOrganizations = async (tenantId?: number | string, targetRef: 'form' |
     } else {
       searchOrganizations.value = res || []
     }
-  } catch (error) {
+  } catch {
     // 加载组织失败
   }
 }
@@ -557,7 +557,7 @@ const getChildOrganizationIds = (organizationId: number, organizations: Organiza
   const result: number[] = [organizationId]
   // 获取子节点
   const getChildren = (node: Organization): Organization[] => {
-    return (node as any).children || (node as any).Children || []
+    return node.children || (node as Organization & { Children?: Organization[] }).Children || []
   }
   // 递归查找子节点
   const findChildren = (node: Organization) => {
@@ -615,7 +615,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -633,9 +633,9 @@ const loadRoles = async (tenantId?: number | string, targetRef: 'form' | 'search
     } else {
       searchRoles.value = roles || []
     }
-  } catch (error: any) {
+  } catch (error) {
     // 加载角色失败
-    ElMessage.error('加载角色失败: ' + (error.message || '未知错误'))
+    ElMessage.error('加载角色失败: ' + ((error as Error).message || '未知错误'))
     return
   }
   // 获取不过滤的角色列表（仅 super_admin 跨租户场景需要，失败不阻塞用户管理主流程）
@@ -643,8 +643,8 @@ const loadRoles = async (tenantId?: number | string, targetRef: 'form' | 'search
     try {
       const allRolesData = await getAllRolesWithoutFilter()
       allRolesWithoutFilter.value = allRolesData || []
-    } catch (e: any) {
-      console.warn('[loadRoles] getAllRolesWithoutFilter 失败:', e?.message)
+    } catch (e) {
+      console.warn('[loadRoles] getAllRolesWithoutFilter 失败:', (e as Error)?.message)
     }
   }
 }
@@ -694,7 +694,7 @@ const handleEdit = async (row: User) => {
     if (detailRes) {
       userDetail = detailRes
     }
-  } catch (error) {
+  } catch {
     // 获取用户详情失败，使用列表数据
   }
 
@@ -735,7 +735,7 @@ const handleDelete = async (row: User) => {
     await deleteUser(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -749,12 +749,12 @@ const handleBatchDelete = async () => {
     await ElMessageBox.confirm(`确定要删除选中的 ${selectedRows.value.length} 个用户吗？`, '提示', {
       type: 'warning'
     })
-    const ids = selectedRows.value.map((row: any) => row.id)
+    const ids = selectedRows.value.map(row => row.id)
     await deleteUsers(ids)
     ElMessage.success('批量删除成功')
     selectedRows.value = []
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -814,8 +814,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -842,8 +842,8 @@ const handleResetPwdSubmit = async () => {
         await resetPassword(row.id, resetPwdForm.password)
         ElMessage.success('密码重置成功')
         resetPwdVisible.value = false
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         resetLoading.value = false
       }

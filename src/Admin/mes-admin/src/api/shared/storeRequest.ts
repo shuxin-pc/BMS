@@ -96,9 +96,9 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
       throw error
     }
     return result.data
-  } catch (err: any) {
+  } catch (err) {
     // 如果已经是带 code 的错误（上方 throw 出来的），直接向上抛
-    if (err && typeof err.code === 'number') {
+    if (err instanceof Error && typeof (err as Error & { code?: number }).code === 'number') {
       throw err
     }
     if (errorMessage) {

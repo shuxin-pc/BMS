@@ -15,6 +15,8 @@
 import { useRouter } from 'vue-router'
 import { WarningFilled } from '@element-plus/icons-vue'
 
+defineOptions({ name: 'NotFound' })
+
 const router = useRouter()
 
 const goHome = () => {

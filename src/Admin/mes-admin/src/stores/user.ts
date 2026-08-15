@@ -228,7 +228,7 @@ export const useUserStore = defineStore('user', {
         ])
         unregisterDynamicRoutes(router)
         resetRouteRegistration()
-      } catch (error) {
+      } catch {
         // 路由清理失败不阻断 logout
       }
 
@@ -263,31 +263,28 @@ export const useUserStore = defineStore('user', {
     },
 
     async getUserInfo() {
-      try {
-        const user = await getCurrentUser()
-        this.userInfo = {
-          id: user.id,
-          userName: user.userName || '',
-          realName: user.realName || '',
-          avatar: user.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-          email: user.email || '',
-          phone: user.phone || '',
-          roles: user.roles?.map(r => typeof r === 'string' ? r : (r as any).code) || [],
-          roleIds: user.roleIds || [],
-          permissions: user.permissions || [],
-          tenantId: user.tenantId,
-          tenantCode: user.tenantCode,
-          maxRoleLevel: user.maxRoleLevel ?? 100
-        }
-        // 缓存租户信息到 localStorage
-        localStorage.setItem('tenantId', String(user.tenantId))
-        if (user.tenantCode) {
-          localStorage.setItem('tenantCode', user.tenantCode)
-        }
-        return this.userInfo
-      } catch (error) {
-        throw error
+      const user = await getCurrentUser()
+      this.userInfo = {
+        id: user.id,
+        userName: user.userName || '',
+        realName: user.realName || '',
+        avatar: user.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+        email: user.email || '',
+        phone: user.phone || '',
+        // 后端可能返回角色对象而非字符串（类型声明为 string[]，此处防御性兼容对象形状）
+        roles: user.roles?.map(r => typeof r === 'string' ? r : ((r as unknown as { code?: string }).code ?? '')) || [],
+        roleIds: user.roleIds || [],
+        permissions: user.permissions || [],
+        tenantId: user.tenantId,
+        tenantCode: user.tenantCode,
+        maxRoleLevel: user.maxRoleLevel ?? 100
       }
+      // 缓存租户信息到 localStorage
+      localStorage.setItem('tenantId', String(user.tenantId))
+      if (user.tenantCode) {
+        localStorage.setItem('tenantCode', user.tenantCode)
+      }
+      return this.userInfo
     },
 
     /**
@@ -328,7 +325,7 @@ export const useUserStore = defineStore('user', {
         }
 
         return this.authorizedSubsystems
-      } catch (error) {
+      } catch {
         this.authorizedSubsystems = []
         this.currentSubsystemId = ''
         localStorage.removeItem('currentSubsystemId')
@@ -357,7 +354,7 @@ export const useUserStore = defineStore('user', {
         unregisterDynamicRoutes(router)
         registerDynamicRoutes(router, this.menus, new Set<string>())
         registerNotFoundRoute(router)
-      } catch (error) {
+      } catch {
         // 路由注册失败不影响菜单切换，但可能导致页面 404
       }
 
@@ -389,7 +386,7 @@ export const useUserStore = defineStore('user', {
         }
 
         return this.authorizedStores
-      } catch (error: any) {
+      } catch {
         this.authorizedStores = []
         return []
       }
@@ -413,7 +410,7 @@ export const useUserStore = defineStore('user', {
         const { getSubsystemMenus } = await import('@/api/system')
         const menuIds = await getSubsystemMenus(subsystemId)
         return menuIds
-      } catch (error) {
+      } catch {
         return []
       }
     },
@@ -440,7 +437,7 @@ export const useUserStore = defineStore('user', {
         }
 
         return Array.from(roleMenuIdsSet)
-      } catch (error) {
+      } catch {
         return []
       }
     },
@@ -628,7 +625,7 @@ export const useUserStore = defineStore('user', {
 
         this.menus = filteredMenus
         return this.menus
-      } catch (error) {
+      } catch {
         // 如果API调用失败，返回本地菜单
         return this.menus
       }

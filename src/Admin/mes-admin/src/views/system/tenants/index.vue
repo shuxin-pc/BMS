@@ -307,7 +307,7 @@ import { Search, Refresh, Plus, Delete, Edit, View } from '@element-plus/icons-v
 import { getTenants, createTenant, updateTenant, deleteTenant, deleteTenants, getSubsystemsAll, getTenantSubsystems, assignTenantSubsystems } from '@/api/system'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { useUserStore } from '@/stores/user'
-import type { Tenant, Subsystem } from '@/api/system/types'
+import type { Tenant, Subsystem, TenantCreate, TenantUpdate } from '@/api/system/types'
 
 const systemConfigStore = useSystemConfigStore()
 const userStore = useUserStore()
@@ -399,7 +399,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -469,7 +469,7 @@ const loadSubsystemData = async (tenantId: number) => {
     ])
     allSubsystems.value = allSubsystemsRes
     selectedSubsystemIds.value = tenantSubsystemsRes
-  } catch (error) {
+  } catch {
     ElMessage.error('加载子系统数据失败')
   } finally {
     subsystemLoading.value = false
@@ -486,8 +486,8 @@ const handleSubsystemSave = async () => {
       SubsystemIds: selectedSubsystemIds.value
     })
     ElMessage.success('保存成功')
-  } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '保存失败')
   } finally {
     subsystemSaveLoading.value = false
   }
@@ -507,11 +507,11 @@ const handleTabBeforeChange = async (newName: string) => {
               type: 'warning',
               distinguishCancelAndClose: true
             })
-          } catch (error) {
+          } catch {
             return false
           }
         }
-      } catch (error) {
+      } catch {
         // 检查子系统更改时出错
       }
     }
@@ -530,7 +530,7 @@ const handleDelete = async (row: Tenant) => {
     await deleteTenant(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -550,7 +550,7 @@ const handleBatchDelete = async () => {
     await deleteTenants(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -565,7 +565,7 @@ const handleSubmit = async () => {
       submitLoading.value = true
       try {
         if (isEdit.value) {
-          const data: any = {
+          const data = {
             id: formData.id,
             name: formData.name,
             contactName: formData.contactName,
@@ -576,10 +576,10 @@ const handleSubmit = async () => {
             remark: formData.remark,
             isolationLevel: 1
           }
-          await updateTenant(data)
+          await updateTenant(data as unknown as TenantUpdate)
           ElMessage.success('更新成功')
         } else {
-          const data: any = {
+          const data = {
             name: formData.name,
             code: formData.code,
             contactName: formData.contactName,
@@ -590,13 +590,13 @@ const handleSubmit = async () => {
             remark: formData.remark,
             isolationLevel: 1
           }
-          await createTenant(data)
+          await createTenant(data as unknown as TenantCreate)
           ElMessage.success('创建成功')
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

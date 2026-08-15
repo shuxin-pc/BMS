@@ -280,7 +280,7 @@ const batchLoading = ref(false)
 const loadSampleOptions = async () => {
   try {
     sampleOptions.value = await getAllSamples()
-  } catch (error) {
+  } catch {
     sampleOptions.value = []
   }
 }
@@ -292,7 +292,7 @@ const activityOptions = ref<ActivityOption[]>([])
 const loadActivityOptions = async () => {
   try {
     activityOptions.value = await getActivityOptions()
-  } catch (error) {
+  } catch {
     activityOptions.value = []
   }
 }
@@ -314,8 +314,8 @@ const loadBatchOptions = async (sampleId: number | undefined) => {
     if (res.list.length === 0) {
       ElMessage.warning('该样品暂无在库批次，请先入库')
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载批次列表失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载批次列表失败')
     batchOptions.value = []
   } finally {
     batchLoading.value = false
@@ -338,7 +338,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -389,7 +389,7 @@ const searchCustomers = async (query: string) => {
   try {
     const res = await getCustomers({ name: query, pageIndex: 1, pageSize: 20 })
     customerOptions.value = res.list
-  } catch (error) {
+  } catch {
     customerOptions.value = []
   } finally {
     customerLoading.value = false
@@ -463,8 +463,8 @@ const handleSubmit = async () => {
         ElMessage.success('领用成功')
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }

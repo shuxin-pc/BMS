@@ -308,7 +308,7 @@ const loadTenants = async () => {
     if (searchForm.tenantId === undefined) {
       searchForm.tenantId = '1'
     }
-  } catch (error) {
+  } catch {
     // 加载租户失败
   }
 }
@@ -366,7 +366,7 @@ const loadData = async () => {
       const logDate = new Date(log.createdTime).toISOString().split('T')[0]
       return logDate === today
     }).length
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -446,7 +446,7 @@ const handleExport = async () => {
     URL.revokeObjectURL(link.href)
 
     ElMessage.success('导出成功')
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('导出失败')
     }
@@ -464,7 +464,7 @@ const handleClearHistory = async () => {
     const deletedCount = await clearExpiredAuditLogs()
     ElMessage.success(`已清理 ${deletedCount} 条历史日志`)
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -500,7 +500,7 @@ const getOperationTypeLabel = (type: string) => {
 
 // 获取操作类型颜色
 const getOperationTypeColor = (type: string) => {
-  const map: Record<string, any> = {
+  const map: Record<string, string> = {
     Login: 'success',
     Logout: 'info',
     Create: 'success',
@@ -541,14 +541,14 @@ const formatFullDate = (dateStr: string) => {
 }
 
 // 格式化JSON
-const formatJson = (data: any) => {
+const formatJson = (data: unknown): string => {
   if (!data) return '-'
   try {
     // 如果是已经序列化后的字符串，先解析再格式化
     const parsed = typeof data === 'string' ? JSON.parse(data) : data
     return JSON.stringify(parsed, null, 2)
   } catch {
-    return data
+    return String(data)
   }
 }
 

@@ -308,8 +308,8 @@ const loadBirthdayData = async () => {
     })
     birthdayData.value = res.list
     birthdayPagination.total = res.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载失败')
   } finally {
     birthdayLoading.value = false
   }
@@ -332,8 +332,8 @@ const handleMarkCared = async (row: BirthdayReminder) => {
     await markBirthdayCared(row.id)
     ElMessage.success('已标记为已关怀')
     loadBirthdayData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '操作失败')
   }
 }
 
@@ -363,8 +363,8 @@ const loadThanksData = async () => {
     })
     thanksData.value = res.list
     thanksPagination.total = res.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载失败')
   } finally {
     thanksLoading.value = false
   }
@@ -402,8 +402,8 @@ const handleThankSubmit = async () => {
     ElMessage.success('已标记为已感谢')
     thankDialogVisible.value = false
     loadThanksData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '操作失败')
   } finally {
     thankLoading.value = false
   }

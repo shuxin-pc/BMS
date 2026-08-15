@@ -8,7 +8,6 @@ export interface SortItem {
   sort?: number | null
   parentId?: number | null
   children?: SortItem[]
-  [key: string]: any
 }
 
 export interface FetchItemsOptions {
@@ -81,19 +80,19 @@ export function useSortAutoFill<T extends SortItem>(
         siblings = collectChildren(items, currentParentId)
       }
 
-      // 按分组筛选
+      // 按分组筛选（configGroup 为调用方自定义字段，此处精确断言后比较）
       if (currentGroup !== null && currentGroup !== undefined) {
-        siblings = siblings.filter(item => item.configGroup === currentGroup)
+        siblings = siblings.filter(item => (item as { configGroup?: unknown }).configGroup === currentGroup)
       }
 
-      // 排除自身
+      // 排除自身（id 为调用方自定义字段，此处精确断言后比较）
       const filtered = excludeId !== undefined
-        ? siblings.filter(item => item.id !== excludeId)
+        ? siblings.filter(item => (item as { id?: number }).id !== excludeId)
         : siblings
 
       const maxSort = filtered.reduce((max, item) => Math.max(max, item.sort ?? 0), 0)
       autoSort.value = maxSort + 1
-    } catch (error) {
+    } catch {
       autoSort.value = 0
     } finally {
       loading.value = false

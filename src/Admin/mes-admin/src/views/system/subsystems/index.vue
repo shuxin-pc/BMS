@@ -324,7 +324,7 @@ const loadData = async () => {
     }
 
     tableData.value = filteredData
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -343,7 +343,7 @@ const loadMenuTree = async (checkedIds?: number[]) => {
       const leafIds = collectLeafSelectedIds(menuTree.value, checkedIds)
       menuTreeRef.value.setCheckedKeys(leafIds)
     }
-  } catch (error) {
+  } catch {
     // 加载菜单树失败
   }
 }
@@ -433,9 +433,9 @@ const handleDelete = async (row: Subsystem) => {
     // 刷新用户store中的子系统列表
     await userStore.getAuthorizedSubsystems()
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -449,7 +449,7 @@ const handleAssignMenus = async (row: Subsystem) => {
     menuDialogVisible.value = true
     // 在弹窗显示后加载菜单树并设置选中状态
     await loadMenuTree(menuIds)
-  } catch (error) {
+  } catch {
     ElMessage.error('加载菜单失败')
   }
 }
@@ -488,8 +488,8 @@ const handleSubmit = async () => {
         // 刷新用户store中的子系统列表
         await userStore.getAuthorizedSubsystems()
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -500,20 +500,20 @@ const handleSubmit = async () => {
 // 提交菜单分配
 const handleMenuSubmit = async () => {
   if (!menuTreeRef.value || !currentSubsystem.value) return
-  const checkedNodes = menuTreeRef.value.getCheckedNodes(false)
+  const checkedNodes = menuTreeRef.value.getCheckedNodes(false) as Menu[]
   // 只保存叶子节点（没有子节点的菜单），不保存半选的父节点
   // 同时去重避免重复键错误
   const leafNodeIds = [...new Set(checkedNodes
-    .filter((n: any) => !n.children || n.children.length === 0)
-    .map((n: any) => n.id))]
+    .filter((n: Menu) => !n.children || n.children.length === 0)
+    .map((n: Menu) => n.id))]
 
   menuSubmitLoading.value = true
   try {
     await assignSubsystemMenus(currentSubsystem.value.id, { menuIds: leafNodeIds })
     ElMessage.success('分配成功')
     menuDialogVisible.value = false
-  } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '操作失败')
   } finally {
     menuSubmitLoading.value = false
   }

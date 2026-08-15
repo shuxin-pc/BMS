@@ -74,7 +74,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
       throw new Error(errorMessage || '请求失败')
     }
     return result.data
-  } catch (err: any) {
+  } catch {
     if (errorMessage) {
       throw new Error(errorMessage)
     }

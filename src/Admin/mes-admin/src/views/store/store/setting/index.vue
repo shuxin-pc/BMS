@@ -115,8 +115,8 @@ async function loadData() {
     form.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
     snapshot.allowCrossStoreVerify = data.allowCrossStoreVerify
     snapshot.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
-  } catch (err: any) {
-    ElMessage.error(err?.message || '加载门店设置失败')
+  } catch (err) {
+    ElMessage.error((err as { message?: string }).message || '加载门店设置失败')
   } finally {
     loading.value = false
   }
@@ -128,9 +128,9 @@ async function loadRoles() {
   try {
     const roles = await getAllRoles()
     roleOptions.value = roles || []
-  } catch (err: any) {
+  } catch (err) {
     // 角色加载失败不阻断页面，仅提示；用户仍可保存其他设置
-    ElMessage.error(err?.message || '加载角色列表失败')
+    ElMessage.error((err as { message?: string }).message || '加载角色列表失败')
   } finally {
     roleLoading.value = false
   }
@@ -150,8 +150,8 @@ async function handleSave() {
     form.allowCrossStoreVerify = data.allowCrossStoreVerify
     form.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
     ElMessage.success('保存成功')
-  } catch (err: any) {
-    ElMessage.error(err?.message || '保存失败')
+  } catch (err) {
+    ElMessage.error((err as { message?: string }).message || '保存失败')
   } finally {
     saving.value = false
   }

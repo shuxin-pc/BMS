@@ -368,6 +368,7 @@ import {
 } from '@/api/message/types'
 import { useUserStore } from '@/stores/user'
 import { getUserList, getAllRoles, getOrganizationOptions, getTenants } from '@/api/system'
+import type { User, Role, Organization, Tenant } from '@/api/system/types'
 
 const userStore = useUserStore()
 const isSuperAdmin = computed(() => userStore.isSuperAdmin)
@@ -403,12 +404,12 @@ const pagination = reactive({
 })
 
 // 目标选项数据（带租户归属，用于平台管理员多租户合并展示）
-const userOptions = ref<Array<any & { tenantId: number; tenantName: string }>>([])
-const roleOptions = ref<Array<any & { tenantId: number; tenantName: string }>>([])
-const orgOptions = ref<Array<any & { tenantId: number; tenantName: string }>>([])
-const tenantOptions = ref<any[]>([])
+const userOptions = ref<Array<User & { tenantId: number; tenantName: string }>>([])
+const roleOptions = ref<Array<Role & { tenantId: number; tenantName: string }>>([])
+const orgOptions = ref<Array<Organization & { tenantId: number; tenantName: string }>>([])
+const tenantOptions = ref<Tenant[]>([])
 // 搜索区租户筛选下拉选项（仅超级管理员用，与发送弹窗的 tenantOptions 分离）
-const searchTenantOptions = ref<any[]>([])
+const searchTenantOptions = ref<Tenant[]>([])
 
 const sendForm = reactive({
   title: '',
@@ -441,7 +442,7 @@ const sendRules: FormRules = {
   category: [{ required: true, message: '请选择分类', trigger: 'change' }],
   targetType: [{ required: true, message: '请选择目标类型', trigger: 'change' }],
   targetIds: [{
-    validator: (_rule: any, value: number[], callback: any) => {
+    validator: (_rule, value, callback) => {
       // User/Role/Organization 需要选目标；Tenant/All 不需要（targetTenantIds 即目标）
       if ([MessageTargetType.User, MessageTargetType.Role, MessageTargetType.Organization].includes(sendForm.targetType)
           && (!value || value.length === 0)) {
@@ -453,7 +454,7 @@ const sendRules: FormRules = {
     trigger: 'change'
   }],
   targetTenantIds: [{
-    validator: (_rule: any, value: number[], callback: any) => {
+    validator: (_rule, value, callback) => {
       // 平台管理员所有目标类型都需要选目标租户
       if (isSuperAdmin.value && (!value || value.length === 0)) {
         callback(new Error('请选择目标租户'))
@@ -477,8 +478,8 @@ async function loadSearchTenants() {
   if (!isSuperAdmin.value) return
   try {
     const result = await getTenants({ pageIndex: 1, pageSize: 200 })
-    searchTenantOptions.value = (result as any)?.list || []
-  } catch (error) {
+    searchTenantOptions.value = result.list || []
+  } catch {
     // 加载失败不阻塞列表查询
   }
 }
@@ -519,8 +520,8 @@ async function loadData() {
     const result = await getSentList(buildQuery())
     tableData.value = result.list || []
     pagination.total = result.total || 0
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载失败')
   } finally {
     tableLoading.value = false
   }
@@ -549,11 +550,11 @@ async function handleOpenSend() {
   try {
     if (isSuperAdmin.value) {
       const tenants = await getTenants({ pageIndex: 1, pageSize: 200 })
-      tenantOptions.value = (tenants as any)?.list || []
+      tenantOptions.value = tenants.list || []
     }
     // 按当前目标类型加载选项（租户管理员直接加载本租户）
     await loadTargetOptions()
-  } catch (error) {
+  } catch {
     // 选项加载失败不阻塞弹窗
   }
 }
@@ -567,10 +568,10 @@ function currentOptions(): Array<{ id: number; tenantId: number; tenantName: str
   if (sendForm.targetType === MessageTargetType.Role) return roleOptions.value
   if (sendForm.targetType === MessageTargetType.Organization) {
     const flat: Array<{ id: number; tenantId: number; tenantName: string }> = []
-    const walk = (nodes: any[]) => {
+    const walk = (nodes: Array<Organization & { tenantId: number; tenantName: string }>) => {
       nodes.forEach(n => {
         flat.push(n)
-        if (n.children?.length) walk(n.children)
+        if (n.children?.length) walk(n.children as Array<Organization & { tenantId: number; tenantName: string }>)
       })
     }
     walk(orgOptions.value)
@@ -642,7 +643,7 @@ async function loadTargetOptions() {
     // 清除被移除租户下的已选项（避免提交无效 ID）
     const validIds = new Set(currentOptions().map(o => o.id))
     sendForm.targetIds = sendForm.targetIds.filter(id => validIds.has(id))
-  } catch (error) {
+  } catch {
     // 加载失败保留空选项
   } finally {
     targetLoading.value = false
@@ -723,8 +724,8 @@ async function handleSend() {
       ElMessage.success('发送成功')
       sendVisible.value = false
       loadData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '发送失败')
+    } catch (error) {
+      ElMessage.error((error as Error).message || '发送失败')
     } finally {
       sending.value = false
     }
@@ -765,8 +766,8 @@ async function handleViewDetail(row: MessageSentItem) {
   readStatsLoading.value = true
   try {
     readStats.value = await getReadStats(row.id)
-  } catch (error: any) {
-    readStatsError.value = error?.message || '统计加载失败'
+  } catch (error) {
+    readStatsError.value = (error as Error)?.message || '统计加载失败'
   } finally {
     readStatsLoading.value = false
   }
@@ -798,9 +799,9 @@ async function handleRecall(row: MessageSentItem) {
     await recallMessage(row.id)
     ElMessage.success('已撤回')
     loadData()
-  } catch (error: any) {
-    if (error !== 'cancel' && error?.message) {
-      ElMessage.error(error.message)
+  } catch (error) {
+    if (error !== 'cancel' && (error as Error)?.message) {
+      ElMessage.error((error as Error).message)
     }
   }
 }

@@ -295,8 +295,8 @@ const loadRule = async () => {
       // 无规则：表单保持默认值，保存时走 Create
       ruleForm.id = 0
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载规则失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载规则失败')
   } finally {
     ruleLoading.value = false
   }
@@ -326,8 +326,8 @@ const handleSaveRule = async () => {
         ElMessage.success('保存成功')
         // 重新加载以获取后端生成的 id（新建场景）和时间戳
         await loadRule()
-      } catch (error: any) {
-        ElMessage.error(error.message || '保存失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '保存失败')
       } finally {
         ruleSaving.value = false
       }
@@ -361,8 +361,8 @@ const loadRecords = async () => {
     })
     recordData.value = res.list
     recordPagination.total = res.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载流水失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载流水失败')
   } finally {
     recordLoading.value = false
   }

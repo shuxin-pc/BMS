@@ -93,7 +93,7 @@ export function usePasswordPolicy() {
             break
         }
       }
-    } catch (error) {
+    } catch {
       // 加载密码策略失败，使用默认值
     } finally {
       loading.value = false
@@ -172,7 +172,7 @@ export function usePasswordPolicy() {
     }
 
     // 检查特殊字符
-    if (p.requireSpecialChar && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+    if (p.requireSpecialChar && !/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password)) {
       errors.push('必须包含特殊字符')
     }
 
@@ -188,7 +188,7 @@ export function usePasswordPolicy() {
    */
   function getPasswordRules() {
     return {
-      validator: (_rule: any, value: string, callback: (error?: Error) => void) => {
+      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
         if (!value) {
           callback(new Error('请输入新密码'))
           return

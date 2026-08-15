@@ -83,14 +83,10 @@ export const useSystemConfigStore = defineStore('systemConfig', {
      * 加载系统配置（从配置应用API获取，按租户优先级返回）
      */
     async loadSystemConfigs() {
-      try {
-        const configMap = await getSystemConfigDict()
-        this.systemConfigs = configMap
-        this.loaded = true
-        return configMap
-      } catch (error) {
-        throw error
-      }
+      const configMap = await getSystemConfigDict()
+      this.systemConfigs = configMap
+      this.loaded = true
+      return configMap
     }
   }
 })

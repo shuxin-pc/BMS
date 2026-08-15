@@ -469,7 +469,7 @@ import {
   updateProductRelation
 } from '@/api/supplier'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { Product, ProductCategory, ProductStatus, ProductType } from '@/api/product/types'
+import type { Product, ProductCategory, ProductCreate, ProductStatus, ProductType } from '@/api/product/types'
 import type { Supplier } from '@/api/supplier/types'
 import type { ProductSupplier } from '@/api/supplier/types'
 
@@ -488,7 +488,7 @@ const masterOptions = ref<ProductMasterOption[]>([])
 const loadCategoryTree = async () => {
   try {
     categoryTree.value = await getCategoryTree()
-  } catch (error) {
+  } catch {
     categoryTree.value = []
   }
 }
@@ -498,7 +498,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSuppliers({ pageIndex: 1, pageSize: 200 })
     supplierOptions.value = res.list
-  } catch (error) {
+  } catch {
     supplierOptions.value = []
   }
 }
@@ -507,7 +507,7 @@ const loadSuppliers = async () => {
 const loadMasterOptions = async () => {
   try {
     masterOptions.value = await getProductMasterOptions()
-  } catch (error) {
+  } catch {
     masterOptions.value = []
   }
 }
@@ -548,7 +548,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -702,7 +702,7 @@ const handleDelete = async (row: Product) => {
     await deleteProduct(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -722,7 +722,7 @@ const handleBatchDelete = async () => {
     await deleteProducts(ids)
     ElMessage.success('批量删除成功')
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -736,14 +736,14 @@ const handleSubmit = async () => {
     if (valid) {
       submitLoading.value = true
       try {
-        const payload: any = {
-          masterId: formData.masterId,
+        const payload: ProductCreate = {
+          masterId: formData.masterId as number,
           price: formData.price,
           costPrice: formData.costPrice || undefined,
           lowStockThreshold: formData.lowStockThreshold ?? undefined,
           expiryAlertDays: formData.expiryAlertDays ?? undefined,
           overstockThreshold: formData.overstockThreshold ?? undefined,
-          status: formData.status,
+          status: formData.status as ProductStatus,
           remark: formData.remark || undefined
         }
         if (isEdit.value) {
@@ -755,8 +755,8 @@ const handleSubmit = async () => {
         }
         dialogVisible.value = false
         loadData()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -807,8 +807,8 @@ const loadProductSuppliers = async () => {
     const def = list.find(ps => ps.isDefault)
     formData.defaultSupplierId = def?.supplierId
     formData.defaultSupplierName = def?.supplierName || ''
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载供应商失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载供应商失败')
   } finally {
     supplierLoading.value = false
   }
@@ -823,8 +823,8 @@ const handleAddSupplier = async () => {
     addSupplierId.value = undefined
     await loadProductSuppliers()
     loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '添加失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '添加失败')
   }
 }
 
@@ -840,8 +840,8 @@ const handleSetDefault = async (row: ProductSupplier) => {
     ElMessage.success('已设为默认')
     await loadProductSuppliers()
     loadData()
-  } catch (error: any) {
-    ElMessage.error(error.message || '设置失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '设置失败')
   }
 }
 
@@ -860,8 +860,8 @@ const handleUpdateReferencePrice = async (row: ProductSupplier, val: number | un
       leadTimeDays: row.leadTimeDays
     })
     ElMessage.success('参考价已更新')
-  } catch (error: any) {
-    ElMessage.error(error.message || '更新失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '更新失败')
     await loadProductSuppliers()
   }
 }
@@ -878,8 +878,8 @@ const handleUpdateLeadTime = async (row: ProductSupplier, val: number | undefine
       leadTimeDays
     })
     ElMessage.success('供货周期已更新')
-  } catch (error: any) {
-    ElMessage.error(error.message || '更新失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '更新失败')
     await loadProductSuppliers()
   }
 }
@@ -896,9 +896,9 @@ const handleUnbind = async (row: ProductSupplier) => {
     ElMessage.success('解除关联成功')
     await loadProductSuppliers()
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '解除关联失败')
+      ElMessage.error((error as Error).message || '解除关联失败')
     }
   }
 }

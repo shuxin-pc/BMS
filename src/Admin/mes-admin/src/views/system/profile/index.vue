@@ -349,7 +349,7 @@ const loadAvatarSizeConfig = async () => {
     if (maxSizeConfig) {
       maxAvatarSize.value = parseFloat(maxSizeConfig.configValue) || 2
     }
-  } catch (error) {
+  } catch {
     // 加载头像大小配置失败
   }
 }
@@ -433,8 +433,8 @@ const loadUserProfile = async () => {
     securityInfo.lastLoginIp = data.lastLoginIp || ''
     // 登录设备从浏览器获取
     securityInfo.userAgent = navigator.userAgent
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载用户信息失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载用户信息失败')
   }
 }
 
@@ -484,8 +484,8 @@ const handleAvatarChange = async (event: Event) => {
     userStore.userInfo.avatar = result.avatar || ''
 
     ElMessage.success('头像上传成功')
-  } catch (error: any) {
-    ElMessage.error(error.message || '头像上传失败')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '头像上传失败')
   }
 
   // 清空 input 值，允许重复选择同一文件
@@ -526,8 +526,8 @@ const handleEditSubmit = async () => {
         // 同步更新 store 中的用户信息
         const userStore = useUserStore()
         userStore.userInfo.realName = editForm.realName
-      } catch (error: any) {
-        ElMessage.error(error.message || '更新失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '更新失败')
       } finally {
         editLoading.value = false
       }
@@ -554,8 +554,8 @@ const handlePasswordChange = async () => {
           await userStore.logout()
           router.push('/login')
         }, 1500)
-      } catch (error: any) {
-        ElMessage.error(error.message || '密码修改失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '密码修改失败')
       } finally {
         passwordLoading.value = false
       }

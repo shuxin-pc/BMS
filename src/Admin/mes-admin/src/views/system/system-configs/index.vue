@@ -358,7 +358,7 @@ const loadTenants = async () => {
     if (searchForm.tenantId === undefined) {
       searchForm.tenantId = '1'  // 默认平台租户
     }
-  } catch (error) {
+  } catch {
     // 加载租户失败
   }
 }
@@ -383,7 +383,7 @@ const loadData = async () => {
     })
     tableData.value = res.list
     pagination.total = res.total
-  } catch (error) {
+  } catch {
     ElMessage.error('加载数据失败')
   } finally {
     tableLoading.value = false
@@ -422,7 +422,7 @@ const loadGroupCounts = async () => {
     configTabs.value.forEach(tab => {
       tab.count = counts[tab.key] ?? 0
     })
-  } catch (error) {
+  } catch {
     // 加载分组计数失败
   }
 }
@@ -518,9 +518,9 @@ const handleDelete = async (row: SystemConfig) => {
     ElMessage.success('删除成功')
     loadData()
     loadGroupCounts()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error((error as Error).message || '删除失败')
     }
   }
 }
@@ -561,8 +561,8 @@ const handleSubmit = async () => {
         dialogVisible.value = false
         loadData()
         loadGroupCounts()
-      } catch (error: any) {
-        ElMessage.error(error.message || '操作失败')
+      } catch (error) {
+        ElMessage.error((error as Error).message || '操作失败')
       } finally {
         submitLoading.value = false
       }
@@ -583,7 +583,7 @@ const getGroupLabel = (group: string) => {
 
 // 获取分组标签类型
 const getGroupTagType = (group: string) => {
-  const map: Record<string, any> = {
+  const map: Record<string, string> = {
     system: 'primary',
     security: 'danger',
     auditlog: 'warning',
