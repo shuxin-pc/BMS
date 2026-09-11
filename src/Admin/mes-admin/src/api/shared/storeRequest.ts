@@ -110,11 +110,24 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   }
 }
 
-/** 构建查询参数字符串 */
-export function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+/**
+ * 构建查询参数字符串
+ * 数组值展开为多个同名参数（如 statuses=[1,2] → statuses=1&statuses=2），
+ * 供后端集合类型（List<int> 等）按标准多值方式绑定，避免逗号分隔导致校验失败
+ */
+export function buildQuery(params: Record<string, string | number | boolean | undefined | null | Array<string | number>>): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null && item !== '') {
+          search.append(key, String(item))
+        }
+      }
+    } else {
       search.append(key, String(value))
     }
   }

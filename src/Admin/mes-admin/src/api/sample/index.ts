@@ -74,6 +74,7 @@ export async function getSampleReceives(query?: SampleReceiveQuery): Promise<Pag
   const qs = buildQuery({
     productId: query?.productId,
     customerId: query?.customerId,
+    keyword: query?.keyword,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })

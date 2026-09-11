@@ -50,7 +50,7 @@ public class OrdersController : ControllerBase
         => await _appService.CreateAsync(dto);
 
     /// <summary>
-    /// 订单退款（事务包裹，按订单类型联动库存/疗程卡/储值/积分）
+    /// 订单退款（事务包裹，按订单类型联动库存/项目卡/储值/积分）
     /// </summary>
     /// <param name="id">订单ID</param>
     /// <param name="dto">退款请求</param>
@@ -63,7 +63,7 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 取消订单（事务包裹，按 OrderType 全量回滚库存/BOM/疗程卡/积分/储值/统计/消费记录）
+    /// 取消订单（事务包裹，按 OrderType 全量回滚库存/BOM/项目卡/积分/储值/统计/消费记录）
     /// 订单 Status 改为 4（已取消），视为订单未发生
     /// </summary>
     /// <param name="id">订单ID</param>

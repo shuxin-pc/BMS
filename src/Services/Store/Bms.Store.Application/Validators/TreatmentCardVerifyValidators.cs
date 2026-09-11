@@ -4,14 +4,14 @@ using Bms.Store.Application.Dtos.TreatmentCards;
 namespace Bms.Store.Application.Validators;
 
 /// <summary>
-/// 创建疗程卡核销记录请求验证器
+/// 创建项目卡核销记录请求验证器
 /// </summary>
 public class TreatmentCardVerifyCreateDtoValidator : AbstractValidator<TreatmentCardVerifyCreateDto>
 {
     public TreatmentCardVerifyCreateDtoValidator()
     {
         RuleFor(x => x.CardSaleId)
-            .GreaterThan(0).WithMessage("疗程卡销售记录ID必须大于0");
+            .GreaterThan(0).WithMessage("项目卡销售记录ID必须大于0");
 
         RuleFor(x => x.Items)
             .NotEmpty().WithMessage("核销项目列表不能为空，至少包含 1 项");
@@ -36,7 +36,7 @@ public class TreatmentCardVerifyItemInputValidator : AbstractValidator<Treatment
 }
 
 /// <summary>
-/// 更新疗程卡核销记录请求验证器
+/// 更新项目卡核销记录请求验证器
 /// </summary>
 public class TreatmentCardVerifyUpdateDtoValidator : AbstractValidator<TreatmentCardVerifyUpdateDto>
 {

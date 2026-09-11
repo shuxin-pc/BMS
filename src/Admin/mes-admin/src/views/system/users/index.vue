@@ -86,7 +86,6 @@
         <el-table-column prop="email" label="邮箱" min-width="180" />
         <el-table-column prop="phone" label="手机号" width="130" />
         <el-table-column prop="organizationName" label="组织" width="150" />
-        <el-table-column prop="tenantName" label="租户" width="150" v-if="isSuperAdmin" />
         <el-table-column prop="roleNames" label="角色" width="150" />
         <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
@@ -248,6 +247,7 @@ import { getUsers, getUser, createUser, updateUser, deleteUser, deleteUsers, res
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { User, UserCreate, UserUpdate, Role, Tenant, Organization } from '@/api/system/types'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -871,18 +871,6 @@ const resetForm = () => {
   editingUserRoleCode.value = undefined
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 // 判断目标用户是否与当前登录用户属于同一租户
 const isSameTenant = (row: User): boolean => {

@@ -63,7 +63,7 @@ public class DailySettlement : StoreBusinessEntityBase
 
     /// <summary>
     /// 总成本（主营成本 = SalesOutboundCost + TreatmentCardOutboundCost）
-    /// 仅包含销售出库与疗程卡核销出库，其他出库类型独立计入对应维度字段
+    /// 仅包含销售出库与项目卡核销出库，其他出库类型独立计入对应维度字段
     /// </summary>
     public decimal TotalCost { get; set; }
 
@@ -73,7 +73,7 @@ public class DailySettlement : StoreBusinessEntityBase
     public decimal SalesOutboundCost { get; set; }
 
     /// <summary>
-    /// 疗程卡核销出库成本（核销时扣减的零售商品/BOM 耗材，SourceType=TreatmentCardOutbound）
+    /// 项目卡核销出库成本（核销时扣减的零售商品/BOM 耗材，SourceType=TreatmentCardOutbound）
     /// </summary>
     public decimal TreatmentCardOutboundCost { get; set; }
 
@@ -83,7 +83,7 @@ public class DailySettlement : StoreBusinessEntityBase
     public decimal InventoryLossAmount { get; set; }
 
     /// <summary>
-    /// 样品赠品费用（样品/赠品出库金额，SourceType=SampleGiftOutbound/SampleReceiveOutbound/GiftOutbound，营业外支出）
+    /// 样品赠品费用（样品/赠品出库金额，SourceType=SampleReceiveOutbound/GiftOutbound，营业外支出）
     /// </summary>
     public decimal SampleGiftAmount { get; set; }
 
@@ -119,7 +119,7 @@ public class DailySettlement : StoreBusinessEntityBase
     public int Source { get; set; } = 2;
 
     /// <summary>
-    /// 疗程卡核销折算金额（权责发生制：核销时将负债转营收，非售卖时一次性计入）
+    /// 项目卡核销折算金额（权责发生制：核销时将负债转营收，非售卖时一次性计入）
     /// </summary>
     public decimal TreatmentCardVerifyAmount { get; set; }
 

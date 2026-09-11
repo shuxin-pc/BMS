@@ -10,7 +10,7 @@ using Bms.Store.Infrastructure;
 namespace Bms.Store.Application.Services;
 
 /// <summary>
-/// 疗程卡项目关联应用服务实现
+/// 项目卡项目关联应用服务实现
 /// </summary>
 public class CourseCardItemAppService : ICourseCardItemAppService
 {
@@ -32,7 +32,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     }
 
     /// <summary>
-    /// 获取疗程卡项目关联分页列表
+    /// 获取项目卡项目关联分页列表
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<CourseCardItemDto>>> GetPagedListAsync(CourseCardItemQueryDto query)
     {
@@ -64,7 +64,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     }
 
     /// <summary>
-    /// 根据ID获取疗程卡项目关联详情
+    /// 根据ID获取项目卡项目关联详情
     /// </summary>
     public async Task<ApiResponseDto<CourseCardItemDto?>> GetByIdAsync(long id)
     {
@@ -74,12 +74,12 @@ public class CourseCardItemAppService : ICourseCardItemAppService
         var entity = await _dbContext.CourseCardItems
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
         if (entity == null)
-            return ApiResponseDto<CourseCardItemDto?>.Fail("疗程卡项目关联不存在", 404);
+            return ApiResponseDto<CourseCardItemDto?>.Fail("项目卡项目关联不存在", 404);
         return ApiResponseDto<CourseCardItemDto?>.Ok(entity.Adapt<CourseCardItemDto>());
     }
 
     /// <summary>
-    /// 创建疗程卡项目关联
+    /// 创建项目卡项目关联
     /// </summary>
     public async Task<ApiResponseDto<CourseCardItemDto>> CreateAsync(CourseCardItemCreateDto dto)
     {
@@ -102,7 +102,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     }
 
     /// <summary>
-    /// 更新疗程卡项目关联
+    /// 更新项目卡项目关联
     /// </summary>
     public async Task<ApiResponseDto<CourseCardItemDto>> UpdateAsync(CourseCardItemUpdateDto dto)
     {
@@ -117,7 +117,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
         var entity = await _dbContext.CourseCardItems
             .FirstOrDefaultAsync(c => c.Id == dto.Id && !c.IsDeleted && c.TenantId == tenantId);
         if (entity == null)
-            return ApiResponseDto<CourseCardItemDto>.Fail("疗程卡项目关联不存在", 404);
+            return ApiResponseDto<CourseCardItemDto>.Fail("项目卡项目关联不存在", 404);
 
         entity.ProductId = dto.ProductId;
         entity.Quantity = dto.Quantity;
@@ -129,7 +129,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     }
 
     /// <summary>
-    /// 删除疗程卡项目关联（软删除）
+    /// 删除项目卡项目关联（软删除）
     /// </summary>
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
@@ -139,7 +139,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
         var entity = await _dbContext.CourseCardItems
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.TenantId == _currentUser.TenantId.Value);
         if (entity == null)
-            return ApiResponseDto.Fail("疗程卡项目关联不存在", 404);
+            return ApiResponseDto.Fail("项目卡项目关联不存在", 404);
 
         entity.IsDeleted = true;
         entity.UpdatedTime = DateTime.Now;
@@ -148,7 +148,7 @@ public class CourseCardItemAppService : ICourseCardItemAppService
     }
 
     /// <summary>
-    /// 批量删除疗程卡项目关联（软删除）
+    /// 批量删除项目卡项目关联（软删除）
     /// </summary>
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {

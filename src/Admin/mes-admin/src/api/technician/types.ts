@@ -43,8 +43,8 @@ export interface Technician {
  * 技师查询参数
  */
 export interface TechnicianQuery {
-  name?: string
-  phone?: string
+  /** 技师姓名或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足） */
+  keyword?: string
   status?: TechnicianStatus
   source?: TechnicianSource
   pageIndex?: number

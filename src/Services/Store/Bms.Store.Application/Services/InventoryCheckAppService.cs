@@ -100,6 +100,32 @@ public class InventoryCheckAppService : IInventoryCheckAppService
             })
             .ToListAsync();
 
+        // 批量加载本次盘点批次明细（一次查询避免 N+1）
+        var checkIds = items.Select(i => i.Id).ToList();
+        var batchDetails = await _dbContext.InventoryCheckBatches
+            .Where(b => checkIds.Contains(b.CheckId) && b.TenantId == tenantId && b.StoreId == storeId)
+            .OrderBy(b => b.CreatedTime)
+            .Select(b => new
+            {
+                b.CheckId,
+                Dto = new InventoryCheckBatchDto
+                {
+                    Id = b.Id,
+                    BatchId = b.BatchId,
+                    BatchNo = b.BatchNo,
+                    Quantity = b.Quantity,
+                    UnitPrice = b.UnitPrice,
+                    ExpirationDate = b.ExpirationDate
+                }
+            })
+            .ToListAsync();
+        var detailsByCheck = batchDetails.GroupBy(x => x.CheckId).ToDictionary(g => g.Key, g => g.Select(x => x.Dto).ToList());
+        foreach (var item in items)
+        {
+            if (detailsByCheck.TryGetValue(item.Id, out var details))
+                item.Batches = details;
+        }
+
         var result = new PagedResponseDto<InventoryCheckDto>
         {
             List = items,
@@ -111,18 +137,46 @@ public class InventoryCheckAppService : IInventoryCheckAppService
     }
 
     /// <summary>
-    /// 根据ID获取库存盘点记录详情
+    /// 根据ID获取库存盘点记录详情（联查商品名称/编码，加载批次明细）
     /// </summary>
     public async Task<ApiResponseDto<InventoryCheckDto?>> GetByIdAsync(long id)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
             return ApiResponseDto<InventoryCheckDto?>.Fail("登录状态异常，请重新登录", 401);
 
+        var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId.Value;
+
         var entity = await _dbContext.InventoryChecks
-            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == _currentUser.TenantId.Value && c.StoreId == _currentUser.StoreId.Value);
+            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == tenantId && c.StoreId == storeId);
         if (entity == null)
             return ApiResponseDto<InventoryCheckDto?>.Fail("库存盘点记录不存在", 404);
-        return ApiResponseDto<InventoryCheckDto?>.Ok(entity.Adapt<InventoryCheckDto>());
+
+        // 联查商品展示字段（Include Master 导航，未启用延迟加载，否则 Master 为 null）
+        var product = await _dbContext.Products
+            .Include(p => p.Master)
+            .FirstOrDefaultAsync(p => p.Id == entity.ProductId && p.TenantId == tenantId && p.StoreId == storeId);
+
+        // 加载本次盘点批次明细
+        var batches = await _dbContext.InventoryCheckBatches
+            .Where(b => b.CheckId == id && b.TenantId == tenantId && b.StoreId == storeId)
+            .OrderBy(b => b.CreatedTime)
+            .Select(b => new InventoryCheckBatchDto
+            {
+                Id = b.Id,
+                BatchId = b.BatchId,
+                BatchNo = b.BatchNo,
+                Quantity = b.Quantity,
+                UnitPrice = b.UnitPrice,
+                ExpirationDate = b.ExpirationDate
+            })
+            .ToListAsync();
+
+        var dto = entity.Adapt<InventoryCheckDto>();
+        dto.ProductName = product?.Master?.Name;
+        dto.ProductCode = product?.Master?.Code;
+        dto.Batches = batches;
+        return ApiResponseDto<InventoryCheckDto?>.Ok(dto);
     }
 
     /// <summary>
@@ -207,7 +261,7 @@ public class InventoryCheckAppService : IInventoryCheckAppService
             _dbContext.InventoryChecks.Add(entity);
             await _dbContext.SaveChangesAsync(); // 保存以获取 entity.Id（InventoryLog.RelatedId 需要）
 
-            var errorMessage = await ApplyCheckDiffAsync(entity, dto.ActualQuantity, dto.DeductBatches, dto.GainBatchNo, dto.Remark, tenantId, storeId, tenantCode, now);
+            var errorMessage = await ApplyCheckDiffAsync(entity, dto.ActualQuantity, dto.DeductBatches, dto.GainBatches, dto.Remark, tenantId, storeId, tenantCode, now);
             if (errorMessage != null)
             {
                 await transaction.RollbackAsync();
@@ -302,7 +356,7 @@ public class InventoryCheckAppService : IInventoryCheckAppService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
-            var errorMessage = await ApplyCheckDiffAsync(entity, dto.ActualQuantity, dto.DeductBatches, dto.GainBatchNo, dto.Remark, tenantId, storeId, tenantCode, now);
+            var errorMessage = await ApplyCheckDiffAsync(entity, dto.ActualQuantity, dto.DeductBatches, dto.GainBatches, dto.Remark, tenantId, storeId, tenantCode, now);
             if (errorMessage != null)
             {
                 await transaction.RollbackAsync();
@@ -333,6 +387,7 @@ public class InventoryCheckAppService : IInventoryCheckAppService
 
     /// <summary>
     /// 应用盘点差异到库存（盘亏扣批次/盘盈累加批次/无差异不处理）
+    /// 盘亏与盘盈均将涉及批次明细写入 InventoryCheckBatches，用于追溯与详情展示
     /// 提取自 SubmitCheckAsync 和 CreateAndSubmitAsync 的公共逻辑，不含事务管理，由调用方负责事务边界
     /// 返回 null 表示成功，返回错误信息表示失败（调用方应回滚事务）
     /// </summary>
@@ -340,7 +395,7 @@ public class InventoryCheckAppService : IInventoryCheckAppService
         InventoryCheckEntity entity,
         decimal actualQuantity,
         List<BatchDeductItem>? deductBatches,
-        string? gainBatchNo,
+        List<GainBatchItem>? gainBatches,
         string? remark,
         long tenantId, long storeId, string tenantCode, DateTime now)
     {
@@ -362,28 +417,98 @@ public class InventoryCheckAppService : IInventoryCheckAppService
         }
         else if (diffQuantity > 0)
         {
-            // 盘盈：校验批次号必须为当前商品在当前门店的已有批次，累加到原批次库存（不新建批次）
-            if (string.IsNullOrWhiteSpace(gainBatchNo))
-                return "盘盈必须指定已有批次号";
+            // 盘盈：可累加到多个已有批次（不新建批次），每个批次分别录入累加数量
+            if (gainBatches == null || gainBatches.Count == 0)
+                return "盘盈必须指定至少一个累加批次";
 
-            var existingBatch = await _dbContext.InventoryBatches
-                .FirstOrDefaultAsync(b => b.ProductId == entity.ProductId
+            var batchIds = gainBatches.Select(i => i.BatchId).Distinct().ToList();
+            var targetBatches = await _dbContext.InventoryBatches
+                .Where(b => batchIds.Contains(b.Id)
+                    && b.ProductId == entity.ProductId
                     && b.TenantId == tenantId
-                    && b.StoreId == storeId
-                    && b.BatchNo == gainBatchNo);
+                    && b.StoreId == storeId)
+                .ToListAsync();
 
-            if (existingBatch == null)
-                return $"批次号 \"{gainBatchNo}\" 不存在于当前商品/门店";
+            // 校验所有批次均存在且属于当前商品/门店
+            var missingIds = batchIds.Except(targetBatches.Select(b => b.Id)).ToList();
+            if (missingIds.Any())
+                return $"批次 {string.Join(",", missingIds)} 不存在或不属于当前商品/门店";
 
-            // 累加到原批次，不修改原批次属性（单价/生产日期/保质期/过期日期保持不变）
-            existingBatch.Quantity += diffQuantity;
-            existingBatch.Status = 1; // 盘盈恢复在库（可能从已用完状态恢复）
-            existingBatch.UpdatedTime = now;
+            // 校验累加数量合计与差异数量匹配
+            var totalGain = gainBatches.Sum(i => i.Quantity);
+            if (totalGain != diffQuantity)
+                return $"盘盈累加数量合计 {totalGain} 与差异数量 {diffQuantity} 不匹配";
 
-            // 更新 Inventory 汇总表
+            // 读取库存汇总（用于流水 BeforeQuantity 递进）
             var inventory = await _dbContext.Inventories
                 .FirstOrDefaultAsync(inv => inv.ProductId == entity.ProductId && inv.TenantId == tenantId && inv.StoreId == storeId);
             var beforeQty = inventory?.Quantity ?? 0;
+
+            // 逐个批次累加 + 写盘点批次明细 + 写库存流水
+            var firstBatchNo = string.Empty;
+            decimal? firstUnitPrice = null;
+            DateTime? firstExpiration = null;
+            var totalAmount = 0m;
+
+            foreach (var batch in targetBatches)
+            {
+                var gainQty = gainBatches.First(i => i.BatchId == batch.Id).Quantity;
+
+                // 累加到原批次，不修改原批次属性（单价/生产日期/保质期/过期日期保持不变）
+                batch.Quantity += gainQty;
+                batch.Status = 1; // 盘盈恢复在库（可能从已用完状态恢复）
+                batch.UpdatedTime = now;
+
+                totalAmount += gainQty * batch.UnitPrice;
+
+                if (firstBatchNo.Length == 0)
+                {
+                    firstBatchNo = batch.BatchNo;
+                    firstUnitPrice = batch.UnitPrice;
+                    firstExpiration = batch.ExpirationDate;
+                }
+
+                // 写盘点批次明细（盘盈累加批次）
+                _dbContext.InventoryCheckBatches.Add(new InventoryCheckBatch
+                {
+                    CheckId = entity.Id,
+                    BatchId = batch.Id,
+                    BatchNo = batch.BatchNo,
+                    Quantity = gainQty,
+                    UnitPrice = batch.UnitPrice,
+                    ExpirationDate = batch.ExpirationDate,
+                    TenantId = tenantId,
+                    TenantCode = tenantCode,
+                    StoreId = storeId,
+                    CreatedTime = now
+                });
+
+                // 写库存流水（盘盈入库，Type=1，SourceType=盘点调整，用该批次信息）
+                _dbContext.InventoryLogs.Add(new InventoryLog
+                {
+                    ProductId = entity.ProductId,
+                    Type = 1,
+                    SourceType = InventoryLogSourceTypes.CheckAdjustment,
+                    Quantity = gainQty,
+                    BeforeQuantity = beforeQty,
+                    AfterQuantity = beforeQty + gainQty,
+                    BatchNo = batch.BatchNo,
+                    UnitPrice = batch.UnitPrice,
+                    ExpirationDate = batch.ExpirationDate,
+                    RelatedId = entity.Id,
+                    Remark = "盘盈入库",
+                    OperatorId = _currentUser.UserId,
+                    OperatorName = _currentUser.RealName ?? _currentUser.UserName,
+                    TenantId = tenantId,
+                    TenantCode = tenantCode,
+                    StoreId = storeId,
+                    CreatedTime = now
+                });
+
+                beforeQty += gainQty; // 递进后续批次流水的前值
+            }
+
+            // 更新 Inventory 汇总表
             if (inventory == null)
             {
                 inventory = new Inventory
@@ -403,32 +528,10 @@ public class InventoryCheckAppService : IInventoryCheckAppService
                 inventory.UpdatedTime = now;
             }
 
-            // 写库存流水（盘盈入库，Type=1，SourceType=盘点调整，用原批次信息）
-            _dbContext.InventoryLogs.Add(new InventoryLog
-            {
-                ProductId = entity.ProductId,
-                Type = 1,
-                SourceType = InventoryLogSourceTypes.CheckAdjustment,
-                Quantity = diffQuantity,
-                BeforeQuantity = beforeQty,
-                AfterQuantity = beforeQty + diffQuantity,
-                BatchNo = existingBatch.BatchNo,
-                UnitPrice = existingBatch.UnitPrice,
-                ExpirationDate = existingBatch.ExpirationDate,
-                RelatedId = entity.Id,
-                Remark = "盘盈入库",
-                OperatorId = _currentUser.UserId,
-                OperatorName = _currentUser.RealName ?? _currentUser.UserName,
-                TenantId = tenantId,
-                TenantCode = tenantCode,
-                StoreId = storeId,
-                CreatedTime = now
-            });
-
-            entity.BatchNo = existingBatch.BatchNo;
-            entity.UnitPrice = existingBatch.UnitPrice;
-            entity.ExpirationDate = existingBatch.ExpirationDate;
-            entity.DiffAmount = diffQuantity * existingBatch.UnitPrice; // 盘盈金额为正
+            entity.BatchNo = firstBatchNo;
+            entity.UnitPrice = firstUnitPrice;
+            entity.ExpirationDate = firstExpiration;
+            entity.DiffAmount = totalAmount; // 盘盈金额为正
         }
         else
         {
@@ -553,6 +656,21 @@ public class InventoryCheckAppService : IInventoryCheckAppService
                 batch.Status = 2; // 已用完
 
             totalAmount += deduct * batch.UnitPrice;
+
+            // 写盘点批次明细（盘亏扣减批次，每个批次一条）
+            _dbContext.InventoryCheckBatches.Add(new InventoryCheckBatch
+            {
+                CheckId = checkId,
+                BatchId = batch.Id,
+                BatchNo = batch.BatchNo,
+                Quantity = deduct,
+                UnitPrice = batch.UnitPrice,
+                ExpirationDate = batch.ExpirationDate,
+                TenantId = tenantId,
+                TenantCode = tenantCode,
+                StoreId = storeId,
+                CreatedTime = now
+            });
 
             if (!firstLogged)
             {
@@ -751,22 +869,44 @@ public class InventoryCheckAppService : IInventoryCheckAppService
     }
 
     /// <summary>
-    /// 盘盈批次号查询：按 productId + batchNo 查当前商品在当前门店的全部历史批次（含已扣完）
-    /// 用于盘盈录入时校验批次号存在性并带出批次属性，找到返回详情，找不到返回 null
+    /// 盘盈批次选项查询：按商品+门店列出可累加的目标批次（含已用完/已过期），供盘盈弹窗选择
+    /// - expirationDate 有值：精确匹配该过期日期的批次（无论批次是否已过期/已用完，均提供）
+    /// - noExpiry=true：匹配未录入效期（过期日期为空）的批次
+    /// 两个条件互斥，未传过期日期且非无效期时返回参数错误
     /// </summary>
-    public async Task<ApiResponseDto<InventoryCheckBatchLookupDto?>> GetBatchLookupForCheckAsync(long productId, string batchNo)
+    public async Task<ApiResponseDto<List<InventoryCheckBatchLookupDto>>> GetBatchOptionsForCheckAsync(long productId, DateTime? expirationDate, bool noExpiry)
     {
         if (!_currentUser.TenantId.HasValue || !_currentUser.StoreId.HasValue)
-            return ApiResponseDto<InventoryCheckBatchLookupDto?>.Fail("登录状态异常，请重新登录", 401);
+            return ApiResponseDto<List<InventoryCheckBatchLookupDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId.Value;
 
-        var batch = await _dbContext.InventoryBatches
+        // 按商品+门店取全部批次（数据层无软删除字段，含在库/已用完/已过期）
+        var query = _dbContext.InventoryBatches
             .Where(b => b.ProductId == productId
                 && b.TenantId == tenantId
-                && b.StoreId == storeId
-                && b.BatchNo == batchNo)
+                && b.StoreId == storeId);
+
+        if (noExpiry)
+        {
+            // 无效期：未录入效期（过期日期为空）的批次
+            query = query.Where(b => b.ExpirationDate == null);
+        }
+        else if (expirationDate.HasValue)
+        {
+            // 按过期日期：精确匹配所选日期（区间查询避免 DateTime 时间部分干扰）
+            var start = expirationDate.Value.Date;
+            var end = start.AddDays(1);
+            query = query.Where(b => b.ExpirationDate >= start && b.ExpirationDate < end);
+        }
+        else
+        {
+            return ApiResponseDto<List<InventoryCheckBatchLookupDto>>.Fail("请选择过期日期或选择无效期", 400);
+        }
+
+        var batches = await query
+            .OrderBy(b => b.CreatedTime)
             .Select(b => new InventoryCheckBatchLookupDto
             {
                 Id = b.Id,
@@ -778,9 +918,9 @@ public class InventoryCheckAppService : IInventoryCheckAppService
                 ExpirationDate = b.ExpirationDate,
                 Status = b.Status
             })
-            .FirstOrDefaultAsync();
+            .ToListAsync();
 
-        return ApiResponseDto<InventoryCheckBatchLookupDto?>.Ok(batch);
+        return ApiResponseDto<List<InventoryCheckBatchLookupDto>>.Ok(batches);
     }
 
     /// <summary>

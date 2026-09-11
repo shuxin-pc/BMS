@@ -43,7 +43,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:store:profile:add')">
           <el-icon><Plus /></el-icon>
           新增门店
         </el-button>
@@ -51,6 +51,7 @@
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
+          v-if="hasPermission('store:store:profile:batchDelete')"
         >
           <el-icon><Delete /></el-icon>
           批量删除
@@ -84,7 +85,11 @@
         <el-table-column prop="phone" label="联系电话" width="140" />
         <el-table-column prop="address" label="地址" min-width="220" show-overflow-tooltip />
         <el-table-column prop="managerName" label="店长" width="100" />
-        <el-table-column prop="businessHours" label="营业时间" width="140" />
+        <el-table-column label="营业时间" width="140">
+          <template #default="{ row }">
+            {{ parseBusinessHours(row.businessHours).join(' - ') }}
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small" effect="dark">
@@ -99,15 +104,15 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:store:profile:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="primary" size="small" @click="handleAssignUser(row)">
+            <el-button link type="primary" size="small" @click="handleAssignUser(row)" v-if="hasPermission('store:store:profile:assignUser')">
               <el-icon><User /></el-icon>
               分配用户
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:store:profile:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -272,9 +277,13 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Search, Refresh, Plus, Delete, Edit, User } from '@element-plus/icons-vue'
 import { getStores, createStore, updateStore, deleteStore, deleteStores, getStoreAvailableUsers, assignStoreUsers } from '@/api/store'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { Store } from '@/api/store/types'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -375,6 +384,17 @@ const handleReset = () => {
   handleSearch()
 }
 
+// 解析营业时间文本（如 "09:00 - 22:00"）为 [开始, 结束] 数组
+// 过滤空段与历史遗留的 "null" 占位：时间选择器清空后 v-model 为 null，
+// 曾被模板字符串拼入存库为 "null - 22:00" 等脏数据，回显与展示时需剔除
+const parseBusinessHours = (hours: string | undefined): string[] => {
+  if (!hours) return []
+  return hours
+    .split('-')
+    .map(s => s.trim())
+    .filter(p => p && p.toLowerCase() !== 'null')
+}
+
 // 重置表单数据
 const resetFormData = () => {
   formData.id = ''
@@ -410,10 +430,11 @@ const handleEdit = (row: Store) => {
   formData.phone = row.phone || ''
   formData.managerName = row.managerName || ''
   // 解析营业时间 "09:00 - 22:00" -> 开始/结束
-  const hours = row.businessHours || ''
-  const parts = hours.split('-').map(s => s.trim())
-  formData.businessStart = parts[0] || '09:00'
-  formData.businessEnd = parts[1] || '22:00'
+  // 空段与历史 "null" 占位一律保持空（而非回填默认值），如实回显用户删除营业时间的操作；
+  // 空串是 el-time-picker 认可的空值，传 "null" 才会导致解析崩溃
+  const [rawStart, rawEnd] = (row.businessHours || '').split('-').map(s => s.trim())
+  formData.businessStart = rawStart && rawStart.toLowerCase() !== 'null' ? rawStart : ''
+  formData.businessEnd = rawEnd && rawEnd.toLowerCase() !== 'null' ? rawEnd : ''
   formData.address = row.address || ''
   formData.area = row.area
   formData.logoUrl = row.logoUrl || ''
@@ -468,8 +489,8 @@ const handleSubmit = async () => {
     if (valid) {
       submitLoading.value = true
       try {
-        // 合并营业时间
-        const businessHours = `${formData.businessStart} - ${formData.businessEnd}`
+        // 合并营业时间（过滤空值，避免删除时间后存出 "null" 文本）
+        const businessHours = [formData.businessStart, formData.businessEnd].filter(Boolean).join(' - ')
         if (isEdit.value) {
           await updateStore({
             id: formData.id,
@@ -567,18 +588,6 @@ const handleUserSubmit = async () => {
   }
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 onMounted(async () => {
   // 确保系统配置已加载

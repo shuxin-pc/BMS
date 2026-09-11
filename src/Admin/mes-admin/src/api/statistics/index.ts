@@ -5,6 +5,7 @@ import type {
   DailyStat,
   ProductSalesStat,
   DashboardSummary,
+  DashboardAlert,
   TrendQuery,
   TopProductsQuery,
   ProductType,
@@ -16,6 +17,7 @@ export type {
   DailyStat,
   ProductSalesStat,
   DashboardSummary,
+  DashboardAlert,
   TrendQuery,
   TopProductsQuery,
   ProductType,
@@ -81,4 +83,13 @@ export async function getRevenueComposition(
   const month = query?.month ?? now.getMonth() + 1
   const path = `/dashboard/revenue-composition${buildQuery({ year, month })}`
   return request<{ name: string; value: number }[]>(path)
+}
+
+/**
+ * 获取首页预警提醒（库存预警/批次临期/项目卡到期/客户生日聚合）
+ * 对接后端：GET /api/store/dashboard/alerts
+ * @returns 预警提醒列表（按紧急度排序，最多 10 条）
+ */
+export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
+  return request<DashboardAlert[]>('/dashboard/alerts')
 }

@@ -40,8 +40,9 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
             return ApiResponseDto<PagedResponseDto<EquipmentMaintenanceDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.EquipmentMaintenances
-            .Where(p => p.TenantId == tenantId);
+            .Where(p => p.TenantId == tenantId && p.StoreId == storeId);
 
         if (query.EquipmentId.HasValue)
             queryable = queryable.Where(p => p.EquipmentId == query.EquipmentId.Value);
@@ -60,10 +61,10 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
             .Take(query.PageSize)
             .ToListAsync();
 
-        // 批量查询关联设备名称（展示用）
+        // 批量查询关联设备名称（展示用，按门店隔离）
         var equipmentIds = items.Select(p => p.EquipmentId).Distinct().ToList();
         var equipmentNames = await _dbContext.Equipments
-            .Where(e => equipmentIds.Contains(e.Id))
+            .Where(e => equipmentIds.Contains(e.Id) && e.StoreId == (_currentUser.StoreId ?? 0))
             .Select(e => new { e.Id, e.Name })
             .ToDictionaryAsync(e => e.Id, e => e.Name);
 
@@ -93,14 +94,15 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
             return ApiResponseDto<EquipmentMaintenanceDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.EquipmentMaintenances
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value
+                && p.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<EquipmentMaintenanceDto?>.Fail("设备维护记录不存在", 404);
 
         var dto = entity.Adapt<EquipmentMaintenanceDto>();
-        // 关联查询设备名称
+        // 关联查询设备名称（按门店隔离）
         var equipmentName = await _dbContext.Equipments
-            .Where(e => e.Id == entity.EquipmentId)
+            .Where(e => e.Id == entity.EquipmentId && e.StoreId == (_currentUser.StoreId ?? 0))
             .Select(e => e.Name)
             .FirstOrDefaultAsync();
         dto.EquipmentName = equipmentName;
@@ -124,15 +126,19 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
 
         var tenantId = _currentUser.TenantId.Value;
 
-        // 校验设备归属当前租户
+        // 校验设备归属当前门店（设备按门店隔离）
         var equipment = await _dbContext.Equipments
-            .FirstOrDefaultAsync(e => e.Id == dto.EquipmentId && !e.IsDeleted && e.TenantId == tenantId);
+            .FirstOrDefaultAsync(e => e.Id == dto.EquipmentId && !e.IsDeleted && e.TenantId == tenantId
+                && e.StoreId == (_currentUser.StoreId ?? 0));
         if (equipment == null)
             return ApiResponseDto<EquipmentMaintenanceDto>.Fail("关联设备不存在", 400);
 
         var entity = dto.Adapt<EquipmentMaintenanceEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        // 维护记录为门店级业务数据，记录门店归属（按 StoreId 隔离）
+        entity.StoreId = _currentUser.StoreId ?? 0;
+        entity.StoreCode = _currentUser.StoreCode ?? string.Empty;
         entity.CreatedTime = DateTime.Now;
 
         // 自动推算下次保养日期：dto 未传但设备配置了周期
@@ -182,7 +188,8 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var entity = await _dbContext.EquipmentMaintenances
-            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.Id == dto.Id && p.TenantId == tenantId
+                && p.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<EquipmentMaintenanceDto>.Fail("设备维护记录不存在", 404);
 
@@ -229,7 +236,8 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
             return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.EquipmentMaintenances
-            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _currentUser.TenantId.Value
+                && p.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto.Fail("设备维护记录不存在", 404);
 
@@ -249,7 +257,8 @@ public class EquipmentMaintenanceAppService : IEquipmentMaintenanceAppService
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.EquipmentMaintenances
-            .Where(p => ids.Contains(p.Id) && p.TenantId == _currentUser.TenantId.Value)
+            .Where(p => ids.Contains(p.Id) && p.TenantId == _currentUser.TenantId.Value
+                && p.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         _dbContext.EquipmentMaintenances.RemoveRange(entities);

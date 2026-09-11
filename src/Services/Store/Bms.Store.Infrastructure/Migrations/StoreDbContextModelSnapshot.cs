@@ -95,16 +95,10 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<DateTime>("AppointmentDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<string>("AppointmentNo")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
-
-                    b.Property<TimeSpan>("AppointmentTime")
-                        .HasColumnType("interval");
 
                     b.Property<DateTime?>("ArrivalTime")
                         .HasColumnType("timestamp without time zone");
@@ -156,6 +150,9 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Property<long?>("RoomId")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -187,10 +184,7 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AppointmentDate");
-
-                    b.HasIndex("AppointmentNo")
-                        .IsUnique();
+                    b.HasIndex("AppointmentNo");
 
                     b.HasIndex("CustomerId");
 
@@ -202,9 +196,15 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasIndex("RoomId");
 
+                    b.HasIndex("StartTime");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("TenantId", "StoreId");
+
+                    b.HasIndex("TenantId", "StoreId", "AppointmentNo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Appointments_Tenant_Store_AppointmentNo");
 
                     b.ToTable("Appointments", "bms_store");
 
@@ -732,6 +732,10 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.Property<int?>("Method")
                         .HasColumnType("integer");
+
+                    b.Property<string>("OperatorName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<long?>("RefOrderId")
                         .HasColumnType("bigint");
@@ -1749,10 +1753,6 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("Category")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1781,6 +1781,9 @@ namespace Bms.Store.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<long?>("ParentId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Spec")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -1808,6 +1811,8 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("IsActive");
+
+                    b.HasIndex("ParentId");
 
                     b.HasIndex("TenantId", "StoreId");
 
@@ -2135,6 +2140,75 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.HasAnnotation("IsTenantEntity", true);
                 });
 
+            modelBuilder.Entity("Bms.Store.Domain.Entities.InventoryCheckBatch", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("BatchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("BatchNo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long>("CheckId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ExpirationDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("StoreCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("StoreId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TenantCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("TenantId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("CheckId");
+
+                    b.HasIndex("TenantId", "StoreId");
+
+                    b.ToTable("InventoryCheckBatches", "bms_store");
+
+                    b.HasAnnotation("IsTenantEntity", true);
+                });
+
             modelBuilder.Entity("Bms.Store.Domain.Entities.InventoryLog", b =>
                 {
                     b.Property<long>("Id")
@@ -2351,6 +2425,10 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Property<int?>("CashPayMethod")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CheckoutSessionNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTime?>("CompleteTime")
                         .HasColumnType("timestamp without time zone");
 
@@ -2447,16 +2525,21 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasIndex("BackfillStatus");
 
+                    b.HasIndex("CheckoutSessionNo");
+
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("OrderNo")
-                        .IsUnique();
+                    b.HasIndex("OrderNo");
 
                     b.HasIndex("OrderTime");
 
                     b.HasIndex("Status");
 
                     b.HasIndex("TenantId", "StoreId");
+
+                    b.HasIndex("TenantId", "StoreId", "OrderNo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Orders_Tenant_Store_OrderNo");
 
                     b.ToTable("Orders", "bms_store");
 
@@ -2522,6 +2605,12 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.Property<long?>("RoomId")
                         .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ServiceEndTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ServiceStartTime")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("StoreCode")
                         .IsRequired()
@@ -2657,6 +2746,84 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.HasIndex("TenantId", "StoreId", "ProductId", "ExpirationDate");
 
                     b.ToTable("OrderItemBatches", "bms_store");
+
+                    b.HasAnnotation("IsTenantEntity", true);
+                });
+
+            modelBuilder.Entity("Bms.Store.Domain.Entities.ParkedOrder", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CartJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<long?>("CustomerId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ParkNo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Remark")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StoreCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("StoreId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TenantCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("TenantId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedTime");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TenantId", "StoreId");
+
+                    b.HasIndex("TenantId", "StoreId", "ParkNo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ParkedOrders_Tenant_Store_ParkNo");
+
+                    b.ToTable("ParkedOrders", "bms_store");
 
                     b.HasAnnotation("IsTenantEntity", true);
                 });
@@ -3187,7 +3354,7 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasIndex("StatMonth");
 
-                    b.HasIndex("TenantId", "StoreId", "StatDate", "ProductId")
+                    b.HasIndex("TenantId", "StoreId", "StatDate", "ProductId", "ProductType")
                         .IsUnique();
 
                     b.ToTable("ProductSalesStats", "bms_store");
@@ -4340,10 +4507,13 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasIndex("TransferDate");
 
-                    b.HasIndex("TransferNo")
-                        .IsUnique();
+                    b.HasIndex("TransferNo");
 
                     b.HasIndex("TenantId", "StoreId");
+
+                    b.HasIndex("TenantId", "StoreId", "TransferNo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_StockTransfers_Tenant_Store_TransferNo");
 
                     b.ToTable("StockTransfers", "bms_store");
 
@@ -4519,19 +4689,13 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.HasAnnotation("IsTenantEntity", true);
                 });
 
-            modelBuilder.Entity("Bms.Store.Domain.Entities.StoreTenantSetting", b =>
+            modelBuilder.Entity("Bms.Store.Domain.Entities.StoreReminderSetting", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<bool>("AllowCrossStoreVerify")
-                        .HasColumnType("boolean");
-
-                    b.Property<List<long>>("BirthdayReminderRoleIds")
-                        .HasColumnType("jsonb");
 
                     b.Property<long?>("CreatedBy")
                         .HasColumnType("bigint");
@@ -4541,6 +4705,20 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ReminderType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<List<long>>("RoleIds")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("StoreCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("StoreId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("TenantCode")
                         .IsRequired()
@@ -4557,9 +4735,61 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId")
+                    b.HasIndex("TenantId", "StoreId", "ReminderType")
                         .IsUnique()
-                        .HasDatabaseName("UX_StoreTenantSettings_Tenant")
+                        .HasDatabaseName("UX_StoreReminderSettings_Tenant_Store_Type")
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.ToTable("StoreReminderSettings", "bms_store");
+
+                    b.HasAnnotation("IsTenantEntity", true);
+                });
+
+            modelBuilder.Entity("Bms.Store.Domain.Entities.StoreTenantSetting", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("AllowCrossStoreVerify")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("StoreCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("StoreId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TenantCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("TenantId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "StoreId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_StoreTenantSettings_Tenant_Store")
                         .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("StoreTenantSettings", "bms_store");
@@ -4574,6 +4804,9 @@ namespace Bms.Store.Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AwardedPoints")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("Balance")
                         .HasPrecision(18, 2)
@@ -5135,11 +5368,6 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<long?>("CreatedBy")
                         .HasColumnType("bigint");
 
@@ -5197,8 +5425,6 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code");
-
                     b.HasIndex("TenantId", "StoreId");
 
                     b.ToTable("TreatmentCards", "bms_store");
@@ -5218,8 +5444,22 @@ namespace Bms.Store.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<int>("AwardedPoints")
+                        .HasColumnType("integer");
+
                     b.Property<long>("CardId")
                         .HasColumnType("bigint");
+
+                    b.Property<decimal?>("CashAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("CashPayMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CheckoutSessionNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<long?>("CreatedBy")
                         .HasColumnType("bigint");
@@ -5236,6 +5476,13 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("PayMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("PointsAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTime>("PurchaseDate")
                         .HasColumnType("timestamp without time zone");
 
@@ -5246,6 +5493,10 @@ namespace Bms.Store.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("SaleNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -5255,6 +5506,10 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.Property<long>("StoreId")
                         .HasColumnType("bigint");
+
+                    b.Property<decimal?>("StoredValueAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<string>("TenantCode")
                         .IsRequired()
@@ -5277,11 +5532,17 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasIndex("CardId");
 
+                    b.HasIndex("CheckoutSessionNo");
+
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("Status");
 
                     b.HasIndex("TenantId", "StoreId");
+
+                    b.HasIndex("TenantId", "StoreId", "SaleNo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TreatmentCardSales_Tenant_Store_SaleNo");
 
                     b.ToTable("TreatmentCardSales", "bms_store");
 
@@ -5451,6 +5712,10 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Property<long>("CardSaleId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("CheckoutSessionNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<long?>("CreatedBy")
                         .HasColumnType("bigint");
 
@@ -5511,6 +5776,8 @@ namespace Bms.Store.Infrastructure.Migrations
 
                     b.HasIndex("CardSaleId");
 
+                    b.HasIndex("CheckoutSessionNo");
+
                     b.HasIndex("OrderId");
 
                     b.HasIndex("VerifyTime");
@@ -5540,8 +5807,23 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedTime")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<long?>("EquipmentId")
+                        .HasColumnType("bigint");
+
                     b.Property<long>("ProductId")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Remark")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("RoomId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ServiceEndTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ServiceStartTime")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("StoreCode")
                         .IsRequired()
@@ -5553,6 +5835,12 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Property<decimal>("SubAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<long?>("TechnicianId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("TechnicianSource")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TenantCode")
                         .IsRequired()
@@ -5825,6 +6113,16 @@ namespace Bms.Store.Infrastructure.Migrations
                     b.Navigation("Equipment");
                 });
 
+            modelBuilder.Entity("Bms.Store.Domain.Entities.EquipmentType", b =>
+                {
+                    b.HasOne("Bms.Store.Domain.Entities.EquipmentType", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
+                });
+
             modelBuilder.Entity("Bms.Store.Domain.Entities.Inventory", b =>
                 {
                     b.HasOne("Bms.Store.Domain.Entities.Product", "Product")
@@ -5867,6 +6165,25 @@ namespace Bms.Store.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Bms.Store.Domain.Entities.InventoryCheckBatch", b =>
+                {
+                    b.HasOne("Bms.Store.Domain.Entities.InventoryBatch", "Batch")
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Bms.Store.Domain.Entities.InventoryCheck", "Check")
+                        .WithMany()
+                        .HasForeignKey("CheckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("Check");
                 });
 
             modelBuilder.Entity("Bms.Store.Domain.Entities.InventoryLog", b =>

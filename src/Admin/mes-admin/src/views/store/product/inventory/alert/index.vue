@@ -42,7 +42,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="warning" :loading="scanning" @click="handleScan">
+        <el-button v-if="hasPermission('store:purchase-inventory:alert:scan')" type="warning" :loading="scanning" @click="handleScan">
           <el-icon><Search /></el-icon>
           立即扫描
         </el-button>
@@ -137,9 +137,13 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getInventoryAlerts, scanInventoryAlerts } from '@/api/inventory'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { InventoryAlert } from '@/api/inventory/types'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 预警类型文本映射：1-低库存 2-效期 3-积压
 const alertTypeText = (type: number): string => {
@@ -159,18 +163,6 @@ const alertValueText = (row: InventoryAlert): string => {
   return String(row.alertValue)
 }
 
-// 日期格式化
-const formatDate = (dateStr?: string): string => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 // 搜索表单：默认只看未处理预警
 const searchForm = reactive({

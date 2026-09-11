@@ -6,6 +6,7 @@ import type {
   Organization, OrganizationCreate, OrganizationUpdate,
   Tenant, TenantCreate, TenantUpdate,
   AuditLog,
+  DashboardStats,
   SystemConfig, SystemConfigCreate, SystemConfigUpdate,
   ApiResponse, PagedResponse,
   Subsystem, SubsystemQuery, SubsystemCreate, SubsystemUpdate,
@@ -23,6 +24,7 @@ export type {
   Organization, OrganizationCreate, OrganizationUpdate,
   Tenant, TenantCreate, TenantUpdate,
   AuditLog,
+  DashboardStats,
   SystemConfig, SystemConfigCreate, SystemConfigUpdate,
   ApiResponse, PagedResponse,
   Subsystem, SubsystemQuery, SubsystemCreate, SubsystemUpdate,
@@ -525,9 +527,10 @@ export async function getAuditLogById(id: number): Promise<AuditLog> {
   return request<AuditLog>(`${API_BASE}/audit-logs/${id}`)
 }
 
-// 清空过期审计日志（后端根据服务器时间计算删除日期）
-export async function clearExpiredAuditLogs(): Promise<number> {
-  return request<number>(`${API_BASE}/audit-logs/expired`, {
+// 清理过期审计日志（后端按保留天数计算删除日期，超管可指定租户，不传则清理全部租户）
+export async function clearExpiredAuditLogs(tenantId?: number | string): Promise<number> {
+  const query = tenantId !== undefined && tenantId !== null && tenantId !== '' ? `?tenantId=${tenantId}` : ''
+  return request<number>(`${API_BASE}/audit-logs/expired${query}`, {
     method: 'DELETE'
   })
 }
@@ -537,6 +540,16 @@ export async function deleteAuditLog(id: number): Promise<void> {
   return request<void>(`${API_BASE}/audit-logs/${id}`, {
     method: 'DELETE'
   })
+}
+
+// ==================== 系统首页统计 ====================
+
+/**
+ * 获取系统首页统计数据（用户/角色/租户/今日审计操作数，按租户隔离）
+ * @returns 统计数据（租户总数仅平台租户返回）
+ */
+export async function getDashboardStats(): Promise<DashboardStats> {
+  return request<DashboardStats>(`${API_BASE}/dashboard/stats`)
 }
 
 // ==================== 系统配置管理 ====================

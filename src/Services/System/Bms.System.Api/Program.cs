@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
 using Bms.BuildingBlocks.Core.Extensions;
 using Bms.BuildingBlocks.Core.IdGenerator;
 using Bms.BuildingBlocks.MultiTenant.Extensions;
@@ -7,6 +8,7 @@ using Bms.BuildingBlocks.Web.Security;
 using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.BuildingBlocks.Core.Context;
 using Bms.BuildingBlocks.Web.Converters;
+using Bms.BuildingBlocks.Web.Middleware;
 using Bms.System.Infrastructure;
 using Bms.System.Infrastructure.Extensions;
 using Bms.System.Infrastructure.SeedData;
@@ -129,24 +131,18 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "BMS System API", Version = "v1" });
     // 使用完整类型名作为schema ID，避免冲突
     c.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
-    // 添加JWT认证到Swagger
-    c.AddSecurityDefinition("Bearer", new()
+    // 添加JWT认证到Swagger（OpenApi v2 模型：SecurityRequirement 按文档解析为 SchemeReference）
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme",
         Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-    c.AddSecurityRequirement(new()
+    c.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
     {
-        {
-            new()
-            {
-                Reference = new() { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
+        [new OpenApiSecuritySchemeReference("Bearer", doc)] = []
     });
 });
 
@@ -155,6 +151,9 @@ builder.Services.AddSwaggerGen(c =>
 // ==========================================
 builder.Services.AddSystemServices(builder.Configuration);
 builder.Services.AddApplicationServices();
+
+// 审计日志选项提供者（从系统配置读取开关与排除路径）
+builder.Services.AddScoped<IAuditLogOptionsProvider, SystemAuditLogOptionsProvider>();
 
 // SignalR 实时推送
 builder.Services.AddSignalR();
@@ -235,6 +234,7 @@ using (var scope = app.Services.CreateScope())
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
 
         // 使用迁移而不是EnsureCreated，以保证版本控制
+        context.Database.EnsureDatabaseExists(logger);
         logger.LogInformation("正在应用数据库迁移...");
         context.Database.Migrate();
         logger.LogInformation("数据库迁移应用成功。");

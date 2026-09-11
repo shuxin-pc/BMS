@@ -1,12 +1,12 @@
 namespace Bms.Store.Domain.Entities;
 
 /// <summary>
-/// 疗程卡核销记录
+/// 项目卡核销记录
 /// </summary>
 public class TreatmentCardVerify : StoreBusinessEntityBase
 {
     /// <summary>
-    /// 疗程卡销售ID
+    /// 项目卡销售ID
     /// </summary>
     public long CardSaleId { get; set; }
 
@@ -58,7 +58,13 @@ public class TreatmentCardVerify : StoreBusinessEntityBase
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 导航属性：疗程卡销售
+    /// 购物车结算批次号（POS 购物车一次结算生成，用于订单/核销/开卡三单据聚合追溯）
+    /// 非购物车结算（独立核销）为空
+    /// </summary>
+    public string? CheckoutSessionNo { get; set; }
+
+    /// <summary>
+    /// 导航属性：项目卡销售
     /// </summary>
     public TreatmentCardSale? CardSale { get; set; }
 

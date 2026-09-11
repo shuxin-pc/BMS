@@ -168,6 +168,9 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
             await _dbContext.SaveChangesAsync();
 
             // 联动库存：为每个明细创建批次、更新汇总、记录流水
+            // 同一采购单内同一商品分多行明细（如不同过期日期）时，FirstOrDefaultAsync 只查数据库，
+            // 看不到内存中已 Add 未落库的 Inventory，需用内存字典缓存避免重复 Add 撞唯一索引 IX_Inventories_TenantId_StoreId_ProductId
+            var inventoryCache = new Dictionary<long, Inventory>();
             foreach (var item in entity.OrderItems)
             {
                 var batch = new InventoryBatch
@@ -188,27 +191,28 @@ public class PurchaseOrderAppService : IPurchaseOrderAppService
                 };
                 _dbContext.InventoryBatches.Add(batch);
 
-                var inventory = await _dbContext.Inventories
-                    .FirstOrDefaultAsync(inv => inv.ProductId == item.ProductId && inv.TenantId == tenantId && inv.StoreId == storeId);
-                var beforeQty = inventory?.Quantity ?? 0;
-                if (inventory == null)
+                if (!inventoryCache.TryGetValue(item.ProductId, out var inventory))
                 {
-                    inventory = new Inventory
+                    inventory = await _dbContext.Inventories
+                        .FirstOrDefaultAsync(inv => inv.ProductId == item.ProductId && inv.TenantId == tenantId && inv.StoreId == storeId);
+                    if (inventory == null)
                     {
-                        ProductId = item.ProductId,
-                        Quantity = item.Quantity,
-                        TenantId = tenantId,
-                        TenantCode = tenantCode,
-                        StoreId = storeId,
-                        CreatedTime = now
-                    };
-                    _dbContext.Inventories.Add(inventory);
+                        inventory = new Inventory
+                        {
+                            ProductId = item.ProductId,
+                            Quantity = 0,
+                            TenantId = tenantId,
+                            TenantCode = tenantCode,
+                            StoreId = storeId,
+                            CreatedTime = now
+                        };
+                        _dbContext.Inventories.Add(inventory);
+                    }
+                    inventoryCache[item.ProductId] = inventory;
                 }
-                else
-                {
-                    inventory.Quantity += item.Quantity;
-                    inventory.UpdatedTime = now;
-                }
+                var beforeQty = inventory.Quantity;
+                inventory.Quantity += item.Quantity;
+                inventory.UpdatedTime = now;
 
                 var log = new InventoryLog
                 {

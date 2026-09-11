@@ -30,9 +30,11 @@ public interface IDailySettlementAppService
     Task<ApiResponseDto<DailySettlementDto>> SummarizeAsync(ManualSummarizeRequestDto request);
 
     /// <summary>
-    /// 确认日结（待确认 -> 已确认）
+    /// 确认日结（待确认 -> 已确认），确认时可修改备注
     /// </summary>
-    Task<ApiResponseDto<DailySettlementDto>> ConfirmAsync(long id);
+    /// <param name="id">日结记录ID</param>
+    /// <param name="remark">新备注：null 保持原值，空字符串清空，非空则覆盖</param>
+    Task<ApiResponseDto<DailySettlementDto>> ConfirmAsync(long id, string? remark = null);
 
     /// <summary>
     /// 反日结（已确认 -> 待确认）

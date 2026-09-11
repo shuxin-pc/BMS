@@ -173,6 +173,7 @@ import {
 } from '@/api/inventory-ops'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { InventoryLog, InboundSourceType } from '@/api/inventory-ops/types'
+import { formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -248,16 +249,6 @@ const formatNumber = (num: number) => {
   return num.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

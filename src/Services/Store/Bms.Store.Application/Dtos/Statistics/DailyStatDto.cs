@@ -26,7 +26,7 @@ public class DailyStatDto
     public int AppointmentCount { get; set; }
     public int InventoryAlertCount { get; set; }
     /// <summary>
-    /// 疗程卡核销折算金额
+    /// 项目卡核销折算金额
     /// </summary>
     public decimal TreatmentCardVerifyAmount { get; set; }
     public DateTime CreatedAt { get; set; }

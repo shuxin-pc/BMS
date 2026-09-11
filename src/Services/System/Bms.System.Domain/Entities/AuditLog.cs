@@ -11,6 +11,16 @@ public class AuditLog : EntityBase
     public long? TenantId { get; set; }
 
     /// <summary>
+    /// 门店ID（仅 Store 服务产生的日志有值）
+    /// </summary>
+    public long? StoreId { get; set; }
+
+    /// <summary>
+    /// 门店名称（写入时的快照，门店改名不影响历史日志）
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
     /// 用户ID
     /// </summary>
     public long? UserId { get; set; }
@@ -34,6 +44,11 @@ public class AuditLog : EntityBase
     /// 操作内容
     /// </summary>
     public string? OperationContent { get; set; }
+
+    /// <summary>
+    /// 被操作对象的ID（业务实体变更时填充，自定义操作如登录/日结确认为空）
+    /// </summary>
+    public long? EntityId { get; set; }
 
     /// <summary>
     /// 请求路径

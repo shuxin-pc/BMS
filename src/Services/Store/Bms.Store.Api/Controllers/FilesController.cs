@@ -33,7 +33,7 @@ public class FilesController : ControllerBase
     /// <param name="file">图片文件</param>
     /// <param name="bizType">业务类型，需命中服务端配置的白名单</param>
     [HttpPost]
-    public async Task<ApiResponseDto<FileUploadResult>> Upload([FromForm] IFormFile file, [FromForm] string bizType)
+    public async Task<ApiResponseDto<FileUploadResult>> Upload(IFormFile file, [FromForm] string bizType)
     {
         await using var stream = file.OpenReadStream();
         var outcome = await _fileUploadService.UploadAsync(new FileUploadRequest

@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 更新疗程卡配置 DTO
+/// 更新项目卡配置 DTO
 /// </summary>
 public class TreatmentCardUpdateDto : TreatmentCardCreateDto
 {

@@ -1,12 +1,12 @@
 namespace Bms.Store.Domain.Entities;
 
 /// <summary>
-/// 疗程卡销售项目明细（购买时按实际售价分摊计算折算单价并锁定）
+/// 项目卡销售项目明细（购买时按实际售价分摊计算折算单价并锁定）
 /// </summary>
 public class TreatmentCardSaleItem : StoreBusinessEntityBase
 {
     /// <summary>
-    /// 疗程卡销售记录ID
+    /// 项目卡销售记录ID
     /// </summary>
     public long SaleId { get; set; }
 
@@ -16,7 +16,7 @@ public class TreatmentCardSaleItem : StoreBusinessEntityBase
     public long ProductId { get; set; }
 
     /// <summary>
-    /// 该项目在疗程卡中的次数
+    /// 该项目在项目卡中的次数
     /// </summary>
     public int Quantity { get; set; }
 
@@ -26,7 +26,7 @@ public class TreatmentCardSaleItem : StoreBusinessEntityBase
     public decimal OriginalPrice { get; set; }
 
     /// <summary>
-    /// 折算单价（购买时按疗程卡实际售价比例分摊并锁定，核销时按此单价计入营收）
+    /// 折算单价（购买时按项目卡实际售价比例分摊并锁定，核销时按此单价计入营收）
     /// </summary>
     public decimal AllocatedUnitPrice { get; set; }
 
@@ -36,7 +36,7 @@ public class TreatmentCardSaleItem : StoreBusinessEntityBase
     public decimal AllocatedTotalPrice { get; set; }
 
     /// <summary>
-    /// 导航属性：疗程卡销售记录
+    /// 导航属性：项目卡销售记录
     /// </summary>
     public TreatmentCardSale? Sale { get; set; }
 

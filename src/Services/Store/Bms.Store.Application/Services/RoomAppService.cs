@@ -4,6 +4,7 @@ using FluentValidation;
 using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.Store.Application.Dtos;
 using Bms.Store.Application.Dtos.Rooms;
+using Bms.Store.Domain.Entities;
 using RoomEntity = Bms.Store.Domain.Entities.Room;
 using Bms.Store.Infrastructure;
 
@@ -37,8 +38,9 @@ public class RoomAppService : IRoomAppService
             return ApiResponseDto<PagedResponseDto<RoomDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.Rooms
-            .Where(r => !r.IsDeleted && r.TenantId == tenantId);
+            .Where(r => !r.IsDeleted && r.TenantId == tenantId && r.StoreId == storeId);
 
         if (!string.IsNullOrWhiteSpace(query.Name))
             queryable = queryable.Where(r => r.Name.Contains(query.Name));
@@ -72,7 +74,8 @@ public class RoomAppService : IRoomAppService
             return ApiResponseDto<RoomDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var room = await _dbContext.Rooms
-            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value
+                && r.StoreId == (_currentUser.StoreId ?? 0));
         if (room == null)
             return ApiResponseDto<RoomDto?>.Fail("房间不存在", 404);
         return ApiResponseDto<RoomDto?>.Ok(room.Adapt<RoomDto>());
@@ -88,14 +91,18 @@ public class RoomAppService : IRoomAppService
             return ApiResponseDto<RoomDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var codeExists = await _dbContext.Rooms
-            .AnyAsync(r => r.Code == dto.Code && r.TenantId == tenantId && !r.IsDeleted);
+            .AnyAsync(r => r.Code == dto.Code && r.TenantId == tenantId && r.StoreId == storeId && !r.IsDeleted);
         if (codeExists)
             return ApiResponseDto<RoomDto>.Fail($"编码 {dto.Code} 已存在", 400);
 
         var room = dto.Adapt<RoomEntity>();
         room.TenantId = tenantId;
         room.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        // 房间为门店级数据，记录门店归属（按 StoreId 隔离）
+        room.StoreId = storeId;
+        room.StoreCode = _currentUser.StoreCode ?? string.Empty;
         room.CreatedTime = DateTime.Now;
 
         _dbContext.Rooms.Add(room);
@@ -115,14 +122,16 @@ public class RoomAppService : IRoomAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var room = await _dbContext.Rooms
-            .FirstOrDefaultAsync(r => r.Id == dto.Id && !r.IsDeleted && r.TenantId == tenantId);
+            .FirstOrDefaultAsync(r => r.Id == dto.Id && !r.IsDeleted && r.TenantId == tenantId
+                && r.StoreId == (_currentUser.StoreId ?? 0));
         if (room == null)
             return ApiResponseDto<RoomDto>.Fail("房间不存在", 404);
 
         if (room.Code != dto.Code)
         {
             var codeExists = await _dbContext.Rooms
-                .AnyAsync(r => r.Code == dto.Code && r.TenantId == tenantId && !r.IsDeleted && r.Id != dto.Id);
+                .AnyAsync(r => r.Code == dto.Code && r.TenantId == tenantId && r.StoreId == (_currentUser.StoreId ?? 0)
+                    && !r.IsDeleted && r.Id != dto.Id);
             if (codeExists)
                 return ApiResponseDto<RoomDto>.Fail($"编码 {dto.Code} 已存在", 400);
         }
@@ -145,7 +154,8 @@ public class RoomAppService : IRoomAppService
             return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var room = await _dbContext.Rooms
-            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value
+                && r.StoreId == (_currentUser.StoreId ?? 0));
         if (room == null)
             return ApiResponseDto.Fail("房间不存在", 404);
 
@@ -163,7 +173,8 @@ public class RoomAppService : IRoomAppService
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var rooms = await _dbContext.Rooms
-            .Where(r => ids.Contains(r.Id) && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value)
+            .Where(r => ids.Contains(r.Id) && !r.IsDeleted && r.TenantId == _currentUser.TenantId.Value
+                && r.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         foreach (var room in rooms)
@@ -201,28 +212,30 @@ public class RoomAppService : IRoomAppService
                                     select sp).FirstOrDefaultAsync();
         var requiredRoomType = serviceProduct?.RequiredRoomType;
 
-        // 查询本租户启用房间（按 RequiredRoomType 过滤，null=不限制）
+        // 查询本门店启用房间（按 RequiredRoomType 过滤，null=不限制）
         var rooms = await _dbContext.Rooms
-            .Where(r => !r.IsDeleted && r.TenantId == tenantId && r.Status == 1)
+            .Where(r => !r.IsDeleted && r.TenantId == tenantId && r.StoreId == (_currentUser.StoreId ?? 0) && r.Status == 1)
             .Where(r => requiredRoomType == null || r.RoomType == requiredRoomType)
             .ToListAsync();
 
-        // 排除时段冲突的房间（预约表：状态非已完成/已取消，时段重叠）
+        // 排除时段冲突的房间（预约表：状态非已完成/已取消/爽约，时段重叠）
         // 先按日期范围过滤（缩小查询集），再在内存中精确判断时段重叠
         var startDate = startTime.Date;
         var endDate = endTime.Date;
         var conflictCandidates = await _dbContext.Appointments
-            .Where(a => a.TenantId == tenantId
-                && a.Status != 4 && a.Status != 5
+            .Where(a => a.TenantId == tenantId && a.StoreId == (_currentUser.StoreId ?? 0)
+                && a.Status != AppointmentStatus.Completed
+                && a.Status != AppointmentStatus.Cancelled
+                && a.Status != AppointmentStatus.NoShow
                 && a.RoomId.HasValue
                 && (excludeAppointmentId == null || a.Id != excludeAppointmentId.Value)
-                && a.AppointmentDate >= startDate && a.AppointmentDate <= endDate)
-            .Select(a => new { a.RoomId, a.AppointmentDate, a.AppointmentTime, a.EndTime })
+                && a.StartTime.Date >= startDate && a.StartTime.Date <= endDate)
+            .Select(a => new { a.RoomId, a.StartTime, a.EndTime })
             .ToListAsync();
 
         var conflictRoomIds = conflictCandidates
             .Where(a => a.EndTime.HasValue
-                && a.AppointmentDate.Date.Add(a.AppointmentTime) < endTime
+                && a.StartTime < endTime
                 && a.EndTime.Value > startTime)
             .Select(a => a.RoomId!.Value)
             .Distinct()

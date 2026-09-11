@@ -1,14 +1,14 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 疗程卡退卡请求 DTO
+/// 项目卡退卡请求 DTO
 /// 退卡时全额冲减发卡门店销售业绩，已发生的核销业绩不冲回（规则6）
 /// 退卡金额 = 售价 - 已核销金额（未消费部分退还客户）
 /// </summary>
 public class TreatmentCardSaleRefundDto
 {
     /// <summary>
-    /// 疗程卡销售记录ID
+    /// 项目卡销售记录ID
     /// </summary>
     public long Id { get; set; }
 

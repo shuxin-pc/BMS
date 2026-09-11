@@ -4,20 +4,12 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="客户名称">
+          <el-form-item label="客户名称/手机号">
             <el-input
-              v-model="searchForm.customerName"
-              placeholder="请输入客户名称"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 180px"
-            />
-          </el-form-item>
-          <el-form-item label="手机号">
-            <el-input
-              v-model="searchForm.phone"
-              placeholder="请输入手机号"
-              clearable
-              style="width: 160px"
             />
           </el-form-item>
           <el-form-item label="消费时间">
@@ -61,24 +53,34 @@
         :data="tableData"
         style="width: 100%"
       >
-        <el-table-column prop="customerName" label="客户名称" width="120" />
-        <el-table-column prop="phone" label="手机号" width="140" />
-        <el-table-column prop="orderNo" label="订单号" width="160" />
-        <el-table-column label="消费金额" width="110" align="right">
+        <el-table-column prop="customerName" label="客户名称" min-width="110" />
+        <el-table-column prop="phone" label="手机号" min-width="130" />
+        <el-table-column prop="orderNo" label="订单号" min-width="200" />
+        <el-table-column label="消费金额" min-width="100" align="right">
           <template #default="{ row }">
             <span class="price-text">¥{{ formatPrice(row.amount) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="projectName" label="消费项目" min-width="200" show-overflow-tooltip />
-        <el-table-column label="支付方式" width="100" align="center">
+        <el-table-column prop="projectName" label="消费项目" min-width="220" show-overflow-tooltip />
+        <el-table-column label="订单状态" min-width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.status)" size="small" effect="dark">
+              {{ statusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="支付方式" min-width="110" align="center">
           <template #default="{ row }">
             <el-tag :type="paymentMethodTagType(row.paymentMethod)" size="small" effect="plain">
               {{ paymentMethodText(row.paymentMethod) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="consumeTime" label="消费时间" width="170" />
-        <el-table-column prop="storeName" label="门店" width="120" />
+        <el-table-column label="消费时间" min-width="160">
+          <template #default="{ row }">
+            {{ formatDateTime(row.consumeTime) }}
+          </template>
+        </el-table-column>
       </el-table>
 
       <!-- 分页 -->
@@ -102,6 +104,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getConsumeRecords } from '@/api/customer'
+import { formatDateTime } from '@/utils/date'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { ConsumeRecord } from '@/api/customer/types'
 
@@ -109,8 +112,7 @@ const systemConfigStore = useSystemConfigStore()
 
 // 搜索表单
 const searchForm = reactive({
-  customerName: '',
-  phone: '',
+  keyword: '',
   dateRange: [] as string[]
 })
 
@@ -130,8 +132,7 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getConsumeRecords({
-      customerName: searchForm.customerName || undefined,
-      phone: searchForm.phone || undefined,
+      keyword: searchForm.keyword || undefined,
       startDate: searchForm.dateRange?.[0],
       endDate: searchForm.dateRange?.[1],
       pageIndex: pagination.pageIndex,
@@ -154,8 +155,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.customerName = ''
-  searchForm.phone = ''
+  searchForm.keyword = ''
   searchForm.dateRange = []
   handleSearch()
 }
@@ -178,6 +178,18 @@ const paymentMethodText = (method: number) => {
 const paymentMethodTagType = (method: number) => {
   const map: Record<number, string> = { 1: '', 2: 'success', 3: 'warning', 4: 'info', 5: 'danger', 6: 'info', 7: 'danger' }
   return map[method] || ''
+}
+
+/** 订单状态文本 */
+const statusText = (status: number) => {
+  const map: Record<number, string> = { 2: '已完成', 3: '已退款', 4: '已取消' }
+  return map[status] || '未知'
+}
+
+/** 订单状态标签类型 */
+const statusTagType = (status: number) => {
+  const map: Record<number, string> = { 2: 'success', 3: 'info', 4: 'danger' }
+  return map[status] || ''
 }
 
 onMounted(async () => {

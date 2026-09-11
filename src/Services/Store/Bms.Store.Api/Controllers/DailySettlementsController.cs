@@ -58,11 +58,11 @@ public class DailySettlementsController : ControllerBase
         => await _appService.ValidateBeforeConfirmAsync(id);
 
     /// <summary>
-    /// 确认日结（待确认 -> 已确认）
+    /// 确认日结（待确认 -> 已确认），确认时可修改备注
     /// </summary>
     [HttpPost("{id:long}/confirm")]
-    public async Task<ApiResponseDto<DailySettlementDto>> Confirm(long id)
-        => await _appService.ConfirmAsync(id);
+    public async Task<ApiResponseDto<DailySettlementDto>> Confirm(long id, [FromBody] ConfirmRequestDto? request)
+        => await _appService.ConfirmAsync(id, request?.Remark);
 
     /// <summary>
     /// 反日结（已确认 -> 待确认）

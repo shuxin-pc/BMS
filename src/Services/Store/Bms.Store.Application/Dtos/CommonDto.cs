@@ -117,3 +117,22 @@ public class AssignUsersRequest
     /// </summary>
     public List<long> UserIds { get; set; } = new();
 }
+
+/// <summary>
+/// 服务项目绑定耗材的效期选择输入（快速开单加购服务项目时店员选择的耗材效期）
+/// 服务项目订单（OrderItemCreateDto.ConsumableExpiries）与项目卡核销项（TreatmentCardVerifyItemInput.ConsumableExpiries）共用
+/// </summary>
+public class ConsumableExpiryInput
+{
+    /// <summary>
+    /// 耗材商品ID（对应 ServiceBom.ConsumableProductId）
+    /// </summary>
+    public long ProductId { get; set; }
+
+    /// <summary>
+    /// 店员选择的耗材效期列表（按扣减顺序）。
+    /// 空表示系统自动按近效期扣减（FEFO）；
+    /// 非空时按顺序依次扣减，元素为 null 表示"无效期限制"批次。
+    /// </summary>
+    public List<DateTime?> ExpirationDates { get; set; } = new();
+}

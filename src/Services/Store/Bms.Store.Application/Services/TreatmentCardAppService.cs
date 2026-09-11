@@ -10,7 +10,7 @@ using Bms.Store.Infrastructure;
 namespace Bms.Store.Application.Services;
 
 /// <summary>
-/// 疗程卡配置应用服务实现
+/// 项目卡配置应用服务实现
 /// 主表 TreatmentCard + 子表 CourseCardItem 联动管理：
 /// - 创建/更新时按项目原价比例分摊卡价（Price），计算并锁定折算单价（AllocatedUnitPrice）
 /// - 核销时按锁定的折算单价计入营收
@@ -35,7 +35,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     }
 
     /// <summary>
-    /// 获取疗程卡配置分页列表（含项目明细）
+    /// 获取项目卡配置分页列表（含项目明细）
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<TreatmentCardDto>>> GetPagedListAsync(TreatmentCardQueryDto query)
     {
@@ -49,8 +49,6 @@ public class TreatmentCardAppService : ITreatmentCardAppService
 
         if (!string.IsNullOrWhiteSpace(query.Name))
             queryable = queryable.Where(t => t.Name.Contains(query.Name));
-        if (!string.IsNullOrWhiteSpace(query.Code))
-            queryable = queryable.Where(t => t.Code.Contains(query.Code));
         if (query.IsEnabled.HasValue)
             queryable = queryable.Where(t => t.IsEnabled == query.IsEnabled.Value);
 
@@ -63,6 +61,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
 
         var dtoList = items.Select(ToDto).ToList();
         await FillItemsAsync(dtoList, tenantId);
+        await FillHasSalesAsync(dtoList, tenantId);
 
         var result = new PagedResponseDto<TreatmentCardDto>
         {
@@ -75,7 +74,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     }
 
     /// <summary>
-    /// 根据ID获取疗程卡配置详情（含项目明细）
+    /// 根据ID获取项目卡配置详情（含项目明细）
     /// </summary>
     public async Task<ApiResponseDto<TreatmentCardDto?>> GetByIdAsync(long id)
     {
@@ -87,15 +86,16 @@ public class TreatmentCardAppService : ITreatmentCardAppService
         var entity = await _dbContext.TreatmentCards
             .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
         if (entity == null)
-            return ApiResponseDto<TreatmentCardDto?>.Fail("疗程卡配置不存在", 404);
+            return ApiResponseDto<TreatmentCardDto?>.Fail("项目卡配置不存在", 404);
 
         var dto = ToDto(entity);
         await FillItemsForCardAsync(dto, tenantId);
+        dto.HasSales = await HasSalesAsync(id, tenantId);
         return ApiResponseDto<TreatmentCardDto?>.Ok(dto);
     }
 
     /// <summary>
-    /// 创建疗程卡配置（同时创建项目明细子表，计算折算单价）
+    /// 创建项目卡配置（同时创建项目明细子表，计算折算单价）
     /// </summary>
     public async Task<ApiResponseDto<TreatmentCardDto>> CreateAsync(TreatmentCardCreateDto dto)
     {
@@ -108,15 +108,16 @@ public class TreatmentCardAppService : ITreatmentCardAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
-        var codeExists = await _dbContext.TreatmentCards
-            .AnyAsync(t => t.Code == dto.Code && t.TenantId == tenantId && t.StoreId == storeId && !t.IsDeleted);
-        if (codeExists)
-            return ApiResponseDto<TreatmentCardDto>.Fail($"编码 {dto.Code} 已存在", 400);
+        var nameExists = await _dbContext.TreatmentCards
+            .AnyAsync(t => t.Name == dto.Name && t.TenantId == tenantId && t.StoreId == storeId && !t.IsDeleted);
+        if (nameExists)
+            return ApiResponseDto<TreatmentCardDto>.Fail($"卡名称 {dto.Name} 已存在", 400);
 
         var entity = dto.Adapt<TreatmentCard>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
         entity.StoreId = storeId;
+        entity.StoreCode = _currentUser.StoreCode ?? dto.StoreCode ?? string.Empty;
         entity.CreatedTime = DateTime.Now;
 
         _dbContext.TreatmentCards.Add(entity);
@@ -131,7 +132,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     }
 
     /// <summary>
-    /// 更新疗程卡配置（同时更新项目明细子表）
+    /// 更新项目卡配置（同时更新项目明细子表）
     /// </summary>
     public async Task<ApiResponseDto<TreatmentCardDto>> UpdateAsync(TreatmentCardUpdateDto dto)
     {
@@ -147,19 +148,29 @@ public class TreatmentCardAppService : ITreatmentCardAppService
         var entity = await _dbContext.TreatmentCards
             .FirstOrDefaultAsync(t => t.Id == dto.Id && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
         if (entity == null)
-            return ApiResponseDto<TreatmentCardDto>.Fail("疗程卡配置不存在", 404);
+            return ApiResponseDto<TreatmentCardDto>.Fail("项目卡配置不存在", 404);
 
-        if (entity.Code != dto.Code)
+        // 已有销售数据的卡仅允许修改启用状态，其余字段保持原值（避免影响已售卡的折算单价锁定）
+        var hasSales = await HasSalesAsync(dto.Id, tenantId);
+        if (hasSales)
         {
-            var codeExists = await _dbContext.TreatmentCards
-                .AnyAsync(t => t.Code == dto.Code && t.TenantId == tenantId && t.StoreId == storeId && !t.IsDeleted && t.Id != dto.Id);
-            if (codeExists)
-                return ApiResponseDto<TreatmentCardDto>.Fail($"编码 {dto.Code} 已存在", 400);
+            entity.IsEnabled = dto.IsEnabled;
+            entity.UpdatedTime = DateTime.Now;
+            await _dbContext.SaveChangesAsync();
+
+            var saleResult = ToDto(entity);
+            saleResult.HasSales = true;
+            await FillItemsForCardAsync(saleResult, tenantId);
+            return ApiResponseDto<TreatmentCardDto>.Ok(saleResult, "更新成功");
         }
+
+        var nameExists = await _dbContext.TreatmentCards
+            .AnyAsync(t => t.Name == dto.Name && t.TenantId == tenantId && t.StoreId == storeId && !t.IsDeleted && t.Id != dto.Id);
+        if (nameExists)
+            return ApiResponseDto<TreatmentCardDto>.Fail($"卡名称 {dto.Name} 已存在", 400);
 
         // StoreId/StoreCode 为归属门店永久归属，禁止修改（文档 5.4 节）
         entity.Name = dto.Name;
-        entity.Code = dto.Code;
         entity.ServiceItems = dto.ServiceItems;
         entity.TotalTimes = dto.TotalTimes;
         entity.Price = dto.Price;
@@ -180,7 +191,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     }
 
     /// <summary>
-    /// 删除疗程卡配置（软删除，同时软删除项目明细）
+    /// 删除项目卡配置（软删除，同时软删除项目明细）
     /// </summary>
     public async Task<ApiResponseDto> DeleteAsync(long id)
     {
@@ -192,7 +203,10 @@ public class TreatmentCardAppService : ITreatmentCardAppService
         var entity = await _dbContext.TreatmentCards
             .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId);
         if (entity == null)
-            return ApiResponseDto.Fail("疗程卡配置不存在", 404);
+            return ApiResponseDto.Fail("项目卡配置不存在", 404);
+
+        if (await HasSalesAsync(id, tenantId))
+            return ApiResponseDto.Fail("该项目卡已有销售数据，禁止删除", 400);
 
         entity.IsDeleted = true;
         entity.UpdatedTime = DateTime.Now;
@@ -203,7 +217,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
     }
 
     /// <summary>
-    /// 批量删除疗程卡配置（软删除，同时软删除项目明细）
+    /// 批量删除项目卡配置（软删除，同时软删除项目明细）
     /// </summary>
     public async Task<ApiResponseDto> BatchDeleteAsync(List<long> ids)
     {
@@ -218,6 +232,15 @@ public class TreatmentCardAppService : ITreatmentCardAppService
             .Where(t => ids.Contains(t.Id) && !t.IsDeleted && t.TenantId == tenantId && t.StoreId == storeId)
             .ToListAsync();
 
+        // 校验所选数据中是否存在已有销售数据的项目卡，存在则整体拒绝
+        var soldCardIds = await _dbContext.TreatmentCardSales
+            .Where(s => ids.Contains(s.CardId) && !s.IsDeleted)
+            .Select(s => s.CardId)
+            .Distinct()
+            .ToListAsync();
+        if (soldCardIds.Any())
+            return ApiResponseDto.Fail("所选数据中包含已有销售数据的项目卡，禁止删除", 400);
+
         foreach (var entity in entities)
         {
             entity.IsDeleted = true;
@@ -227,6 +250,34 @@ public class TreatmentCardAppService : ITreatmentCardAppService
         await _dbContext.SaveChangesAsync();
         return ApiResponseDto.Success(null, $"成功删除 {entities.Count} 条数据");
     }
+
+    // ========== 销售数据判定辅助方法 ==========
+
+    /// <summary>
+    /// 批量填充项目卡是否已有销售数据（有销售数据的卡禁止修改除启用状态外的配置，亦禁止删除）
+    /// </summary>
+    private async Task FillHasSalesAsync(List<TreatmentCardDto> dtos, long tenantId)
+    {
+        if (!dtos.Any()) return;
+
+        var cardIds = dtos.Select(d => d.Id).ToList();
+        var soldCardIds = await _dbContext.TreatmentCardSales
+            .Where(s => cardIds.Contains(s.CardId) && !s.IsDeleted)
+            .Select(s => s.CardId)
+            .Distinct()
+            .ToListAsync();
+        var soldSet = soldCardIds.ToHashSet();
+        foreach (var dto in dtos)
+        {
+            dto.HasSales = soldSet.Contains(dto.Id);
+        }
+    }
+
+    /// <summary>
+    /// 查询项目卡是否已有销售数据（有销售数据的卡禁止修改除启用状态外的配置，亦禁止删除）
+    /// </summary>
+    private Task<bool> HasSalesAsync(long cardId, long tenantId)
+        => _dbContext.TreatmentCardSales.AnyAsync(s => s.CardId == cardId && s.TenantId == tenantId && !s.IsDeleted);
 
     // ========== 子表辅助方法 ==========
 
@@ -242,29 +293,19 @@ public class TreatmentCardAppService : ITreatmentCardAppService
             .Where(i => cardIds.Contains(i.CourseCardId) && !i.IsDeleted)
             .ToListAsync();
 
+        var productMap = await BuildProductMapAsync(tenantId);
         var itemsByCard = items.GroupBy(i => i.CourseCardId).ToDictionary(g => g.Key, g => g.ToList());
         foreach (var dto in dtos)
         {
             if (itemsByCard.TryGetValue(dto.Id, out var cardItems))
             {
-                dto.Items = cardItems.Select(i => new CourseCardItemDto
-                {
-                    Id = i.Id,
-                    CourseCardId = i.CourseCardId,
-                    ProductId = i.ProductId,
-                    Quantity = i.Quantity,
-                    OriginalPrice = i.OriginalPrice,
-                    AllocatedUnitPrice = i.AllocatedUnitPrice,
-                    AllocatedTotalPrice = i.AllocatedTotalPrice,
-                    CreatedAt = i.CreatedTime,
-                    UpdatedAt = i.UpdatedTime
-                }).ToList();
+                dto.Items = cardItems.Select(i => ToItemDto(i, productMap)).ToList();
             }
         }
     }
 
     /// <summary>
-    /// 填充单个疗程卡的项目明细
+    /// 填充单个项目卡的项目明细
     /// </summary>
     private async Task FillItemsForCardAsync(TreatmentCardDto dto, long tenantId)
     {
@@ -272,18 +313,45 @@ public class TreatmentCardAppService : ITreatmentCardAppService
             .Where(i => i.CourseCardId == dto.Id && !i.IsDeleted)
             .ToListAsync();
 
-        dto.Items = items.Select(i => new CourseCardItemDto
+        var productMap = await BuildProductMapAsync(tenantId);
+        dto.Items = items.Select(i => ToItemDto(i, productMap)).ToList();
+    }
+
+    /// <summary>
+    /// 项目明细实体转 DTO，填充商品编码与名称（关联商品主档）
+    /// </summary>
+    private static CourseCardItemDto ToItemDto(CourseCardItem item, Dictionary<long, (string Code, string Name)?> productMap)
+    {
+        var product = productMap.GetValueOrDefault(item.ProductId);
+        return new CourseCardItemDto
         {
-            Id = i.Id,
-            CourseCardId = i.CourseCardId,
-            ProductId = i.ProductId,
-            Quantity = i.Quantity,
-            OriginalPrice = i.OriginalPrice,
-            AllocatedUnitPrice = i.AllocatedUnitPrice,
-            AllocatedTotalPrice = i.AllocatedTotalPrice,
-            CreatedAt = i.CreatedTime,
-            UpdatedAt = i.UpdatedTime
-        }).ToList();
+            Id = item.Id,
+            CourseCardId = item.CourseCardId,
+            ProductId = item.ProductId,
+            ProductCode = product?.Code,
+            ProductName = product?.Name,
+            Quantity = item.Quantity,
+            OriginalPrice = item.OriginalPrice,
+            AllocatedUnitPrice = item.AllocatedUnitPrice,
+            AllocatedTotalPrice = item.AllocatedTotalPrice,
+            CreatedAt = item.CreatedTime,
+            UpdatedAt = item.UpdatedTime
+        };
+    }
+
+    /// <summary>
+    /// 批量查询商品主档编码/名称，构建 商品ID → (编码, 名称) 映射
+    /// </summary>
+    private async Task<Dictionary<long, (string Code, string Name)?>> BuildProductMapAsync(long tenantId)
+    {
+        var productInfos = await _dbContext.Products
+            .Where(p => p.TenantId == tenantId && !p.IsDeleted)
+            .Join(_dbContext.ProductMasters,
+                  p => p.MasterId,
+                  m => m.Id,
+                  (p, m) => new { ProductId = p.Id, m.Code, m.Name })
+            .ToListAsync();
+        return productInfos.ToDictionary(x => x.ProductId, x => ((string Code, string Name)?)(x.Code, x.Name));
     }
 
     /// <summary>
@@ -295,6 +363,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
         if (items == null || !items.Any()) return;
 
         var tenantCode = _currentUser.TenantCode ?? string.Empty;
+        var storeCode = _currentUser.StoreCode ?? string.Empty;
         var totalOriginal = items.Sum(i => i.OriginalPrice * i.Quantity);
 
         foreach (var item in items)
@@ -319,6 +388,7 @@ public class TreatmentCardAppService : ITreatmentCardAppService
                 TenantId = tenantId,
                 TenantCode = tenantCode,
                 StoreId = storeId,
+                StoreCode = storeCode,
                 CreatedTime = DateTime.Now
             });
         }

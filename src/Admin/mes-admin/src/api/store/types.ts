@@ -139,19 +139,21 @@ export interface AvailableUser extends TenantUser {
 }
 
 // ==========================================
-// 租户门店设置类型定义
+// 门店设置类型定义
 // ==========================================
 
 /**
- * 租户门店设置（每租户至多一条记录，不存在时后端返回默认值）
+ * 门店设置（每门店一条记录，不存在时后端返回默认值）
+ * 跨店核销为租户级语义（后端按租户取第一条记录）
+ * 各类型提醒接收角色已拆分至子表 StoreReminderSetting（通过 reminder-settings 接口读写）
  */
 export interface StoreTenantSetting {
   /** 记录ID（不存在记录时后端返回 0） */
   id: string
-  /** 是否允许跨店核销：true-允许（默认），false-仅限发卡门店核销 */
+  /** 门店ID（当前门店上下文） */
+  storeId: string
+  /** 是否允许跨店核销（租户级）：true-允许（默认），false-仅限发卡门店核销 */
   allowCrossStoreVerify: boolean
-  /** 接收生日提醒站内信的角色ID列表（空数组表示不发送；long 经 LongToStringConverter 序列化为字符串） */
-  birthdayReminderRoleIds: string[]
   /** 创建时间 */
   createdAt: string
   /** 更新时间 */
@@ -159,11 +161,20 @@ export interface StoreTenantSetting {
 }
 
 /**
- * 更新租户门店设置请求
+ * 更新门店设置请求
  */
 export interface StoreTenantSettingUpdate {
   /** 是否允许跨店核销 */
   allowCrossStoreVerify: boolean
-  /** 接收生日提醒站内信的角色ID列表（空数组表示不发送） */
-  birthdayReminderRoleIds: string[]
+}
+
+/**
+ * 门店提醒配置（对应子表 StoreReminderSetting）
+ * 每门店 + 每业务类型一行，通用化承载各类提醒的接收角色
+ */
+export interface StoreReminderSetting {
+  /** 提醒业务类型编码（Birthday=生日、Appointment=预约、TreatmentExpiry=项目卡到期） */
+  reminderType: string
+  /** 接收该类型提醒站内信的角色ID列表（空数组表示不发送；long 经 LongToStringConverter 序列化为字符串） */
+  roleIds: string[]
 }

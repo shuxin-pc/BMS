@@ -12,8 +12,7 @@ export type { Technician, TechnicianQuery, PagedResponse }
  */
 export async function getTechnicians(query?: TechnicianQuery): Promise<PagedResponse<Technician>> {
   const qs = buildQuery({
-    name: query?.name,
-    phone: query?.phone,
+    keyword: query?.keyword,
     status: query?.status,
     source: query?.source,
     pageIndex: query?.pageIndex,

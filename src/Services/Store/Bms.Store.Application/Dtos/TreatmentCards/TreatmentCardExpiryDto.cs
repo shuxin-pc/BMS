@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 疗程卡到期提醒信息
+/// 项目卡到期提醒信息
 /// </summary>
 public class TreatmentCardExpiryDto
 {

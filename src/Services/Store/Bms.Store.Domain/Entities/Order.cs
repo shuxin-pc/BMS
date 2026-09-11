@@ -2,15 +2,15 @@ namespace Bms.Store.Domain.Entities;
 
 /// <summary>
 /// 订单类型常量定义
-/// OrderType 仅允许 1(零售)、2(服务)、3(疗程卡核销) 三种，
+/// OrderType 仅允许 1(零售)、2(服务)、3(项目卡核销) 三种，
 /// 储值消费不作为订单类型，而是通过 PayMethod=5(储值卡) 作为支付方式。
-/// 疗程卡核销订单（Type=3）禁止通过订单接口创建，必须走 TreatmentCardVerifyAppService.CreateAsync。
+/// 项目卡核销订单（Type=3）禁止通过订单接口创建，必须走 TreatmentCardVerifyAppService.CreateAsync。
 /// </summary>
 public static class OrderTypes
 {
     public const int Retail = 1;                  // 零售
     public const int Service = 2;                 // 服务
-    public const int TreatmentCardVerify = 3;     // 疗程卡核销
+    public const int TreatmentCardVerify = 3;     // 项目卡核销
 
     /// <summary>
     /// 校验订单类型是否合法
@@ -34,15 +34,15 @@ public class Order : StoreBusinessEntityBase
     public long? CustomerId { get; set; }
 
     /// <summary>
-    /// 订单类型（1:零售 2:服务 3:疗程卡核销）
+    /// 订单类型（1:零售 2:服务 3:项目卡核销）
     /// 储值消费不作为订单类型，而是通过 PayMethod=5(储值卡) 作为支付方式
     /// </summary>
     public int OrderType { get; set; } = 1;
 
     /// <summary>
-    /// 订单状态（1:进行中 2:已完成 3:已退款 4:已取消）
+    /// 订单状态（2:已完成 3:已退款 4:已取消）
     /// </summary>
-    public int Status { get; set; } = 1;
+    public int Status { get; set; } = 2;
 
     /// <summary>
     /// 补录状态（0:正常 1:补录）
@@ -139,6 +139,12 @@ public class Order : StoreBusinessEntityBase
     /// 备注
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 购物车结算批次号（POS 购物车一次结算生成，用于订单/核销/开卡三单据聚合追溯）
+    /// 非购物车结算（独立下单/独立核销）为空
+    /// </summary>
+    public string? CheckoutSessionNo { get; set; }
 
     /// <summary>
     /// 导航属性：客户

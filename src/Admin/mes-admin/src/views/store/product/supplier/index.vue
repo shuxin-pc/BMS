@@ -41,11 +41,12 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button v-if="hasPermission('store:product:supplier:add')" type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
           新增供应商
         </el-button>
         <el-button
+          v-if="hasPermission('store:product:supplier:batchDelete')"
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
@@ -92,15 +93,15 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleViewProducts(row)">
+            <el-button v-if="hasPermission('store:product:supplier:manageProduct')" link type="primary" size="small" @click="handleViewProducts(row)">
               <el-icon><View /></el-icon>
               管理品项
             </el-button>
-            <el-button v-if="canEditSupplier(row)" link type="primary" size="small" @click="handleEdit(row)">
+            <el-button v-if="hasPermission('store:product:supplier:edit')" link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button v-if="canEditSupplier(row)" link type="danger" size="small" @click="handleDelete(row)">
+            <el-button v-if="hasPermission('store:product:supplier:delete')" link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -165,7 +166,7 @@
         <el-form-item label="地址" prop="address">
           <el-input v-model="formData.address" placeholder="请输入供应商地址" />
         </el-form-item>
-        <el-form-item v-if="canCreatePublic" label="数据范围" prop="scope">
+        <el-form-item label="数据范围" prop="scope">
           <el-radio-group v-model="formData.scope">
             <el-radio :value="2">本门店</el-radio>
             <el-radio :value="1">门店通用</el-radio>
@@ -318,13 +319,7 @@ import { useUserStore } from '@/stores/user'
 
 const systemConfigStore = useSystemConfigStore()
 const userStore = useUserStore()
-
-// 是否可创建公用供应商（前端按权限码控制显隐，后端不额外校验）
-const canCreatePublic = computed(() => userStore.hasPermission('store:product:supplier:create:public'))
-// 是否可编辑公用供应商
-const canEditPublic = computed(() => userStore.hasPermission('store:product:supplier:edit:public'))
-// 公用供应商的编辑/删除需要 edit:public 权限；私用供应商有 edit 权限即可
-const canEditSupplier = (row: Supplier) => row.scope !== 1 || canEditPublic.value
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({

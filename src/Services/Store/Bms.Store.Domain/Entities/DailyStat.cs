@@ -33,7 +33,7 @@ public class DailyStat : StoreBusinessEntityBase
 
     /// <summary>
     /// 商品成本（主营成本 = SalesOutboundCost + TreatmentCardOutboundCost）
-    /// 仅包含销售出库与疗程卡核销出库，其他出库类型独立计入对应维度字段
+    /// 仅包含销售出库与项目卡核销出库，其他出库类型独立计入对应维度字段
     /// </summary>
     public decimal Cost { get; set; }
 
@@ -43,7 +43,7 @@ public class DailyStat : StoreBusinessEntityBase
     public decimal SalesOutboundCost { get; set; }
 
     /// <summary>
-    /// 疗程卡核销出库成本（核销时扣减的零售商品/BOM 耗材，SourceType=TreatmentCardOutbound）
+    /// 项目卡核销出库成本（核销时扣减的零售商品/BOM 耗材，SourceType=TreatmentCardOutbound）
     /// </summary>
     public decimal TreatmentCardOutboundCost { get; set; }
 
@@ -123,7 +123,7 @@ public class DailyStat : StoreBusinessEntityBase
     public int InventoryAlertCount { get; set; }
 
     /// <summary>
-    /// 疗程卡核销折算金额（权责发生制：核销时将负债转营收，非售卖时一次性计入）
+    /// 项目卡核销折算金额（权责发生制：核销时将负债转营收，非售卖时一次性计入）
     /// </summary>
     public decimal TreatmentCardVerifyAmount { get; set; }
 }

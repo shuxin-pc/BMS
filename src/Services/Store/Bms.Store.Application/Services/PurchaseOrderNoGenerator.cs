@@ -12,11 +12,19 @@ public static class PurchaseOrderNoGenerator
     /// <summary>
     /// 构造采购流程的事务级顾问锁键
     /// 按 (租户, 门店, 采购日期) 维度串行化并发请求，确保 OrderNo/BatchNo 的"查max/count+1"生成模式在并发下不产生重复值
+    /// 必须用确定性哈希：HashCode.Combine 内部使用随机种子，相同输入每次调用值不同，会使顾问锁形同虚设
     /// </summary>
     public static long BuildLockKey(long tenantId, long storeId, DateTime orderDate)
     {
         var dateInt = int.Parse(orderDate.ToString("yyyyMMdd"));
-        return (long)HashCode.Combine(tenantId, storeId, dateInt);
+        unchecked
+        {
+            var key = tenantId;
+            key = key * 31 + storeId;
+            key = key * 31 + dateInt;
+            // 去除符号位保证非负（unchecked 允许乘法溢出按 long 截断，确定性不受影响）
+            return key & long.MaxValue;
+        }
     }
 
     /// <summary>

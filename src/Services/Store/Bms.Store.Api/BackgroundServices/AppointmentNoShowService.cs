@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Bms.BuildingBlocks.Core.Context;
 using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
 
@@ -9,7 +10,7 @@ namespace Bms.Store.Api.BackgroundServices;
 
 /// <summary>
 /// 预约爽约自动判断定时任务
-/// 扫描超过预约时段且状态为"已预约"(2)的预约,自动改为"爽约"(6)
+/// 扫描超过预约时段且状态为"已预约"(1)的预约,自动改为"爽约"(5)
 /// </summary>
 public class AppointmentNoShowService : BackgroundService
 {
@@ -66,7 +67,7 @@ public class AppointmentNoShowService : BackgroundService
 
     /// <summary>
     /// 扫描过期未到店的预约并标记为爽约
-    /// 条件:状态为已预约(2) 且 预约日期在近 7 天内 且 预约结束时间已过
+    /// 条件:状态为已预约(1) 且 预约日期在近 7 天内 且 预约结束时间已过
     /// 结束时间优先取 EndTime(由 AppointmentAppService 根据 ServiceProduct.Duration 自动计算)
     /// </summary>
     private async Task ScanAndMarkNoShowAsync(CancellationToken cancellationToken)
@@ -74,15 +75,18 @@ public class AppointmentNoShowService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<StoreDbContext>();
 
+        // 审计日志豁免：后台定时任务无用户操作语义，关闭审计避免脏日志
+        scope.ServiceProvider.GetRequiredService<IAuditLogContext>().IsEnabled = false;
+
         var today = DateTime.Today;
         var now = DateTime.Now;
         var scanStart = today.AddDays(-ScanWindowDays);
 
         // 数据库层面追加时间窗口过滤（近 7 天）+ EndTime 已过，避免全表扫描与内存过滤
         var candidates = await dbContext.Appointments
-            .Where(a => a.Status == 2
-                && a.AppointmentDate >= scanStart
-                && a.AppointmentDate <= today
+            .Where(a => a.Status == AppointmentStatus.Confirmed
+                && a.StartTime.Date >= scanStart
+                && a.StartTime.Date <= today
                 && a.EndTime != null && a.EndTime.Value < now)
             .ToListAsync(cancellationToken);
 
@@ -102,7 +106,7 @@ public class AppointmentNoShowService : BackgroundService
             var batch = new List<Appointment>(BatchSize);
             foreach (var appointment in tenantGroup)
             {
-                appointment.Status = 6; // 爽约
+                appointment.Status = AppointmentStatus.NoShow;
                 appointment.UpdatedTime = now;
                 batch.Add(appointment);
 

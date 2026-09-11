@@ -1,14 +1,14 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 疗程卡配置 DTO
+/// 项目卡配置 DTO
 /// </summary>
 public class TreatmentCardDto
 {
     public long Id { get; set; }
 
     /// <summary>
-    /// 归属门店ID（可空，疗程卡在租户内跨店通用）
+    /// 归属门店ID（可空，项目卡在租户内跨店通用）
     /// </summary>
     public long? StoreId { get; set; }
 
@@ -21,11 +21,6 @@ public class TreatmentCardDto
     /// 卡名称
     /// </summary>
     public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 卡编码
-    /// </summary>
-    public string Code { get; set; } = string.Empty;
 
     /// <summary>
     /// 包含项目描述
@@ -51,6 +46,11 @@ public class TreatmentCardDto
     /// 是否启用
     /// </summary>
     public bool IsEnabled { get; set; }
+
+    /// <summary>
+    /// 是否已有销售数据（有销售数据的卡禁止修改除启用状态外的配置，亦禁止删除）
+    /// </summary>
+    public bool HasSales { get; set; }
 
     /// <summary>
     /// 备注

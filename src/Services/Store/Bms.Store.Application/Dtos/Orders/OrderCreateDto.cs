@@ -45,12 +45,18 @@ public class OrderCreateDto
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 订单明细列表（级联创建，CreateAsync 中按 OrderType 联动库存/疗程卡/储值）
+    /// 购物车结算批次号（POS 购物车一次结算生成，用于订单/核销/开卡三单据聚合追溯）
+    /// 非购物车结算（独立下单）不传
+    /// </summary>
+    public string? CheckoutSessionNo { get; set; }
+
+    /// <summary>
+    /// 订单明细列表（级联创建，CreateAsync 中按 OrderType 联动库存/项目卡/储值）
     /// </summary>
     public List<OrderItemCreateDto> Items { get; set; } = new();
 
     /// <summary>
-    /// 疗程卡销售ID（仅 OrderType=3 疗程卡核销时需要，用于关联疗程卡销售记录）
+    /// 项目卡销售ID（仅 OrderType=3 项目卡核销时需要，用于关联项目卡销售记录）
     /// </summary>
     public long? CardSaleId { get; set; }
 

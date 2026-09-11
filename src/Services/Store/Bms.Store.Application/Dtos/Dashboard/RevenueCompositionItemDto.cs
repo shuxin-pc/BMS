@@ -6,7 +6,7 @@ namespace Bms.Store.Application.Dtos.Dashboard;
 public class RevenueCompositionItemDto
 {
     /// <summary>
-    /// 分类名称（零售/服务/疗程卡等）
+    /// 分类名称（零售/服务/项目卡等）
     /// </summary>
     public string Name { get; set; } = string.Empty;
 

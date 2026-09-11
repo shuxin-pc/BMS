@@ -49,7 +49,7 @@ export interface ProductCategory {
 /**
  * 商品信息（主表+子表字段合并输出）
  * 商品多态模型：主表区分类型，仅服务项目（type=2）有子表字段
- * - type=2 服务项目：duration、requiredRoomType、equipmentIds、equipmentNames、applicableSkills
+ * - type=2 服务项目：duration、requiredRoomType、equipmentTypeIds、equipmentTypeNames、skillCategoryIds、skillCategoryNames
  * Master 字段（name/code/type/spec/unit/brand 等）来自 ProductMaster，只读展示
  * Store 字段（price/costPrice/status 等）门店独立
  */
@@ -108,12 +108,14 @@ export interface Product {
   duration?: number
   /** 所需房间/床位类型（1:房间 2:床位，undefined=不限，服务项目） */
   requiredRoomType?: RequiredRoomType
-  /** 所需仪器 ID 列表（服务项目） */
-  equipmentIds?: number[]
-  /** 所需仪器名称列表（服务项目，后端返回用于展示） */
-  equipmentNames?: string[]
-  /** 适用技师技能标签（服务项目） */
-  applicableSkills?: string
+  /** 所需设备类型 ID 列表（服务项目） */
+  equipmentTypeIds?: number[]
+  /** 所需设备类型名称列表（服务项目，后端返回用于展示） */
+  equipmentTypeNames?: string[]
+  /** 适用技师技能分类 ID 列表（服务项目） */
+  skillCategoryIds?: number[]
+  /** 适用技师技能分类名称列表（服务项目，后端返回用于展示） */
+  skillCategoryNames?: string[]
 }
 
 /**

@@ -36,11 +36,12 @@ public class InventoryChecksController : ControllerBase
         => await _appService.GetProductOptionsForCheckAsync();
 
     /// <summary>
-    /// 盘盈批次号查询：校验批次号在当前商品/门店的存在性，找到返回批次详情（含生产日期/保质期/过期日期），找不到返回 null
+    /// 盘盈批次选项查询：按商品+门店列出可累加的目标批次（含已用完/已过期），供盘盈弹窗选择
+    /// expirationDate 有值 -> 精确匹配该过期日期的批次（无论是否已过期/已用完）；noExpiry=true -> 匹配无效期（未录入过期日期）批次
     /// </summary>
-    [HttpGet("batch-lookup")]
-    public async Task<ApiResponseDto<InventoryCheckBatchLookupDto?>> GetBatchLookup([FromQuery] long productId, [FromQuery] string batchNo)
-        => await _appService.GetBatchLookupForCheckAsync(productId, batchNo);
+    [HttpGet("batch-options")]
+    public async Task<ApiResponseDto<List<InventoryCheckBatchLookupDto>>> GetBatchOptions([FromQuery] long productId, [FromQuery] DateTime? expirationDate, [FromQuery] bool noExpiry)
+        => await _appService.GetBatchOptionsForCheckAsync(productId, expirationDate, noExpiry);
 
     /// <summary>
     /// 查询当日该商品是否已有非取消状态的盘点记录（用于前端软约束提示）

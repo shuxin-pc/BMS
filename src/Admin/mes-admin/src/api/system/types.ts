@@ -719,8 +719,12 @@ export interface AuditLog {
   userId?: number
   userName?: string
   realName?: string
+  /** 所属门店名称（操作发生时的门店快照，平台级操作为空） */
+  storeName?: string
   operationType: string
   operationContent?: string
+  /** 被操作对象的ID（业务实体变更时填充，自定义操作为空） */
+  entityId?: number
   requestPath?: string
   requestMethod?: string
   requestIp?: string
@@ -731,6 +735,22 @@ export interface AuditLog {
   /** 实体变更内容 */
   entityChanges?: string
   createdTime: string
+}
+
+/**
+ * 系统首页统计数据
+ */
+export interface DashboardStats {
+  /** 用户总数（非平台租户仅统计本租户） */
+  userCount: number
+  /** 角色总数（非平台租户仅统计本租户） */
+  roleCount: number
+  /** 租户总数（仅平台租户返回，其余为 null） */
+  tenantCount?: number | null
+  /** 今日审计操作数（非平台租户仅统计本租户） */
+  todayAuditCount: number
+  /** 当前登录用户是否平台租户，控制租户模块显隐 */
+  isPlatformTenant: boolean
 }
 
 // 系统配置相关

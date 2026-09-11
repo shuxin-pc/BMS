@@ -30,7 +30,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:customer:archive:bodyData:add')">
           <el-icon><Plus /></el-icon>
           新增记录
         </el-button>
@@ -220,6 +220,8 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, View } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
+import { formatDate } from '@/utils/date'
 import { getBodyDataRecords, createBodyDataRecord } from '@/api/customer-profile'
 import type { BodyDataRecord, BodyDataCreate } from '@/api/customer-profile/types'
 
@@ -231,6 +233,10 @@ const props = defineProps<{
 }>()
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -296,7 +302,7 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const bodyForm = reactive<Omit<BodyDataCreate, 'customerId'>>({
-  recordDate: new Date().toISOString().substring(0, 10),
+  recordDate: formatDate(new Date()),
   weight: undefined,
   bodyFat: undefined,
   bust: undefined,
@@ -319,7 +325,7 @@ const handleAdd = () => {
 // 弹窗关闭后重置
 const handleDialogClosed = () => {
   formRef.value?.resetFields()
-  bodyForm.recordDate = new Date().toISOString().substring(0, 10)
+  bodyForm.recordDate = formatDate(new Date())
   bodyForm.weight = undefined
   bodyForm.bodyFat = undefined
   bodyForm.bust = undefined

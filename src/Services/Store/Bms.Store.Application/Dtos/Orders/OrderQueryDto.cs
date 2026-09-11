@@ -18,22 +18,17 @@ public class OrderQueryDto : PagedRequestDto
     public long? CustomerId { get; set; }
 
     /// <summary>
-    /// 客户姓名（模糊匹配，散客订单不匹配）
+    /// 客户名称或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足）
     /// </summary>
-    public string? CustomerName { get; set; }
+    public string? Keyword { get; set; }
 
     /// <summary>
-    /// 客户手机号（模糊匹配）
-    /// </summary>
-    public string? Phone { get; set; }
-
-    /// <summary>
-    /// 订单类型（1:零售 2:服务 3:疗程卡核销 4:储值消费）
+    /// 订单类型（1:零售 2:服务 3:项目卡核销 4:储值消费）
     /// </summary>
     public int? OrderType { get; set; }
 
     /// <summary>
-    /// 订单状态（1:进行中 2:已完成 3:已退款 4:已取消）
+    /// 订单状态（2:已完成 3:已退款 4:已取消）
     /// </summary>
     public int? Status { get; set; }
 

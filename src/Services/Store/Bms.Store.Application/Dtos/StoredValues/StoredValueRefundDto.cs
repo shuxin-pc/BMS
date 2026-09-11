@@ -3,7 +3,7 @@ namespace Bms.Store.Application.Dtos.StoredValues;
 /// <summary>
 /// 储值退款请求 DTO
 /// 退款冲减原充值门店充值业绩，门店关店则冲减当前操作门店（规则8）
-/// 退款金额冲减实收余额(RealBalance)，不足冲减赠送余额(GiftBalance)
+/// 退款只退实收余额(RealBalance)，赠送余额(GiftBalance)一律不退（文档 G7），退款上限为剩余实收余额
 /// </summary>
 public class StoredValueRefundDto
 {

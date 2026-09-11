@@ -14,7 +14,7 @@
       <el-form-item label="关联订单">
         <el-select
           v-model="photoForm.orderId"
-          placeholder="选填，可关联服务/疗程卡核销订单"
+          placeholder="选填，可关联服务/项目卡核销订单"
           filterable
           clearable
           :loading="orderOptionsLoading"
@@ -23,7 +23,7 @@
           <el-option
             v-for="order in orderOptions"
             :key="order.id"
-            :label="`${order.orderNo}（${order.orderType === 2 ? '服务' : '疗程卡核销'} · ${order.orderTime ? order.orderTime.substring(0, 10) : ''}）`"
+            :label="`${order.orderNo}（${order.orderType === 2 ? '服务' : '项目卡核销'} · ${order.orderTime ? order.orderTime.substring(0, 10) : ''}）`"
             :value="order.id"
           />
         </el-select>
@@ -144,6 +144,7 @@ import {
   deleteComparisonPhoto
 } from '@/api/customer-profile'
 import { uploadImage } from '@/api/shared/fileUpload'
+import { formatDate } from '@/utils/date'
 import { getOrders } from '@/api/order'
 import { getProducts } from '@/api/product'
 import type {
@@ -202,7 +203,7 @@ const handleVisibleChange = (val: boolean) => {
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
-// 客户可选订单（仅服务/疗程卡核销类型，orderType=2/3）
+// 客户可选订单（仅服务/项目卡核销类型，orderType=2/3）
 const orderOptions = ref<Order[]>([])
 const orderOptionsLoading = ref(false)
 // 可选服务项目（仅服务类上架商品）
@@ -211,7 +212,7 @@ const serviceProductOptions = ref<Product[]>([])
 const photoForm = reactive({
   orderId: undefined as number | undefined,
   productId: undefined as number | undefined,
-  photoDate: new Date().toISOString().substring(0, 10)
+  photoDate: formatDate(new Date())
 })
 
 const beforeSection = reactive<PhotoSectionState>({
@@ -304,7 +305,7 @@ const handleRemovePhoto = (state: PhotoSectionState, index: number) => {
   state.items.splice(index, 1)
 }
 
-// 加载客户对应的服务/疗程卡核销订单
+// 加载客户对应的服务/项目卡核销订单
 const loadOrderOptions = async (customerId: number | undefined) => {
   if (!customerId) {
     orderOptions.value = []
@@ -313,7 +314,7 @@ const loadOrderOptions = async (customerId: number | undefined) => {
   orderOptionsLoading.value = true
   try {
     const res = await getOrders({ customerId, pageIndex: 1, pageSize: 9999 })
-    // 前端过滤仅显示 orderType=2(服务) 或 3(疗程卡核销)
+    // 前端过滤仅显示 orderType=2(服务) 或 3(项目卡核销)
     orderOptions.value = res.list.filter(o => o.orderType === 2 || o.orderType === 3)
   } catch {
     ElMessage.error('加载订单列表失败')
@@ -351,7 +352,7 @@ const initForm = () => {
   const base = props.beforeRecord || props.afterRecord
   photoForm.orderId = base?.orderId
   photoForm.productId = base?.productId
-  photoForm.photoDate = base?.photoDate || new Date().toISOString().substring(0, 10)
+  photoForm.photoDate = base?.photoDate || formatDate(new Date())
   fillSection(beforeSection, props.beforeRecord)
   fillSection(afterSection, props.afterRecord)
 }
@@ -382,7 +383,7 @@ const handleDialogClosed = () => {
   formRef.value?.clearValidate()
   photoForm.orderId = undefined
   photoForm.productId = undefined
-  photoForm.photoDate = new Date().toISOString().substring(0, 10)
+  photoForm.photoDate = formatDate(new Date())
   fillSection(beforeSection, null)
   fillSection(afterSection, null)
 }
@@ -479,8 +480,9 @@ onUnmounted(() => {
 }
 
 .section-title.before {
-  background: var(--bg-secondary);
-  color: var(--text-tertiary);
+  /* 服务前用暖橙系，与服务后的主题青形成冷暖对比，且保证文字与底色对比清晰 */
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
 }
 
 .section-title.after {

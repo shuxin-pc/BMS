@@ -43,7 +43,8 @@
         </el-table-column>
         <el-table-column prop="type" label="类型" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="getMenuTypeTag(row.type)" size="small">
+            <el-tag v-if="row.isVirtualSubsystem" type="info" size="small">子系统</el-tag>
+            <el-tag v-else :type="getMenuTypeTag(row.type)" size="small">
               {{ getMenuTypeName(row.type) }}
             </el-tag>
           </template>
@@ -54,14 +55,16 @@
         <el-table-column prop="sort" label="排序" width="80" align="center" />
         <el-table-column prop="isVisible" label="显示" width="60" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.isVisible ? 'success' : 'info'" size="small">
+            <span v-if="row.isVirtualSubsystem" class="text-tertiary">-</span>
+            <el-tag v-else :type="row.isVisible ? 'success' : 'info'" size="small">
               {{ row.isVisible ? '是' : '否' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="isCache" label="缓存" width="60" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.isCache ? 'success' : 'info'" size="small">
+            <span v-if="row.isVirtualSubsystem" class="text-tertiary">-</span>
+            <el-tag v-else :type="row.isCache ? 'success' : 'info'" size="small">
               {{ row.isCache ? '是' : '否' }}
             </el-tag>
           </template>
@@ -72,14 +75,16 @@
               <el-icon><Plus /></el-icon>
               新增
             </el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
-              <el-icon><Edit /></el-icon>
-              编辑
-            </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
-              <el-icon><Delete /></el-icon>
-              删除
-            </el-button>
+            <template v-if="!row.isVirtualSubsystem">
+              <el-button link type="primary" size="small" @click="handleEdit(row)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              <el-button link type="danger" size="small" @click="handleDelete(row)">
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -202,13 +207,13 @@ import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Refresh, Edit, Delete, Menu, FolderOpened, Link, Close } from '@element-plus/icons-vue'
 import IconPicker from '@/components/IconPicker/index.vue'
-import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/system'
+import { getMenuTree, getSubsystemsAll, getSubsystemMenus, createMenu, updateMenu, deleteMenu } from '@/api/system'
 import { useSortAutoFill } from '@/composables/useSortAutoFill'
-import type { Menu as MenuData, MenuCreate, MenuUpdate } from '@/api/system/types'
+import type { Menu as MenuData, Subsystem, MenuCreate, MenuUpdate } from '@/api/system/types'
 
-// 兼容旧代码：MenuType 在此处实际指 MenuData 接口（包含 children）
- 
-type MenuType = MenuData
+// 兼容旧代码：MenuType 在此处实际指 MenuData 接口（包含 children）；
+// isVirtualSubsystem 标记树顶层的子系统虚拟行（id 为负数，非真实菜单）
+type MenuType = MenuData & { isVirtualSubsystem?: boolean }
 
 // 表格数据
 const tableLoading = ref(false)
@@ -264,7 +269,18 @@ interface MenuTreeOption {
   children: MenuTreeOption[]
 }
 const menuTreeOptions = computed(() => {
-  const processMenu = (menu: MenuType, level: number): MenuTreeOption => {
+  // 编辑时剔除自身及其后代，防止把自身/下级选为上级形成循环引用
+  const excludedIds = new Set<string>()
+  if (isEdit.value) {
+    const current = findNode(tableData.value, formData.id)
+    const collect = (menu: MenuType) => {
+      excludedIds.add(String(menu.id))
+      menu.children?.forEach(collect)
+    }
+    if (current) collect(current)
+  }
+  const processMenu = (menu: MenuType, level: number): MenuTreeOption | null => {
+    if (excludedIds.has(String(menu.id))) return null
     // 第3级及以上禁用（只能选到第2级作为父级）
     const disabled = level >= 2
     return {
@@ -272,13 +288,15 @@ const menuTreeOptions = computed(() => {
       name: menu.name,
       disabled,
       children: menu.children && menu.children.length > 0
-        ? menu.children.map(child => processMenu(child, level + 1))
+        ? menu.children.map(child => processMenu(child, level + 1)).filter((opt): opt is MenuTreeOption => opt !== null)
         : []
     }
   }
   return [
     { id: 0, name: '顶级菜单', children: [], disabled: false } as MenuTreeOption,
-    ...tableData.value.map(menu => processMenu(menu, 0))
+    // 跳过子系统虚拟层，级联选项从真实顶级菜单开始
+    ...tableData.value.flatMap(group => (group.children || []).map(menu => processMenu(menu, 0)))
+      .filter((opt): opt is MenuTreeOption => opt !== null)
   ]
 })
 
@@ -301,12 +319,43 @@ const getMenuTypeTag = (type: number) => {
   return map[type] || 'info'
 }
 
-// 加载数据
+// 加载数据（顶级为子系统虚拟行，真实菜单按归属挂载在对应子系统下）
 const loadData = async () => {
   tableLoading.value = true
   try {
-    const res = await getMenuTree()
-    tableData.value = res
+    const [tree, subsystems] = await Promise.all([getMenuTree(), getSubsystemsAll()])
+    const assignLists = await Promise.all(subsystems.map(s => getSubsystemMenus(s.id)))
+    // 菜单归属映射（同一菜单关联多个子系统时取首个归属，避免重复展示）
+    const ownerByMenuId = new Map<number, Subsystem>()
+    subsystems.forEach((s, i) => {
+      assignLists[i].forEach(menuId => {
+        if (!ownerByMenuId.has(menuId)) ownerByMenuId.set(menuId, s)
+      })
+    })
+    // 顶级菜单按所属子系统分桶；未归属任何子系统的菜单进入"未分配"组，保证新建菜单可见
+    const topsBySubsystem = new Map<number, MenuType[]>()
+    const unassigned: MenuType[] = []
+    tree.forEach(top => {
+      const owner = ownerByMenuId.get(top.id)
+      if (owner) {
+        if (!topsBySubsystem.has(owner.id)) topsBySubsystem.set(owner.id, [])
+        topsBySubsystem.get(owner.id)!.push(top)
+      } else {
+        unassigned.push(top)
+      }
+    })
+    const grouped: MenuType[] = []
+    let virtualId = 0
+    subsystems.forEach(s => {
+      const children = topsBySubsystem.get(s.id)
+      if (children && children.length > 0) {
+        grouped.push({ id: --virtualId, name: s.name, code: '', type: 0, isVirtualSubsystem: true, children })
+      }
+    })
+    if (unassigned.length > 0) {
+      grouped.push({ id: --virtualId, name: '未分配', code: '', type: 0, isVirtualSubsystem: true, children: unassigned })
+    }
+    tableData.value = grouped
   } catch {
     ElMessage.error('加载数据失败')
   } finally {
@@ -319,7 +368,7 @@ const openIconPicker = () => {
   iconPickerVisible.value = true
 }
 
-// 获取当前行的实际层级（从根节点计算）
+// 获取当前行的实际层级（从根节点计算，跳过子系统虚拟层）
 const getRowLevel = (row: MenuType): number => {
   // 通过查找 row 在树中的位置来计算层级
   const findLevel = (menus: MenuType[], target: MenuType, currentLevel: number): number => {
@@ -332,11 +381,19 @@ const getRowLevel = (row: MenuType): number => {
     }
     return -1
   }
-  return findLevel(tableData.value, row, 0)
+  for (const group of tableData.value) {
+    if (group.children && group.children.length > 0) {
+      const found = findLevel(group.children, row, 0)
+      if (found >= 0) return found
+    }
+  }
+  return -1
 }
 
 // 新增
 const handleAdd = async (parent: MenuType | null) => {
+  // 子系统行为虚拟节点，其"新增"等价于新增顶级菜单
+  if (parent?.isVirtualSubsystem) parent = null
   // 检查父级菜单层级，第3级（索引2）及以上不允许新增
   if (parent) {
     const parentLevel = getRowLevel(parent)

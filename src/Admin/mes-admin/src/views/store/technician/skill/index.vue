@@ -29,7 +29,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:technician:skill:add')">
           <el-icon><Plus /></el-icon>
           新增分类
         </el-button>
@@ -57,15 +57,15 @@
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleAdd(row)">
+            <el-button link type="primary" size="small" @click="handleAdd(row)" v-if="hasPermission('store:technician:skill:add')">
               <el-icon><Plus /></el-icon>
               新增子级
             </el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:technician:skill:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:technician:skill:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -125,6 +125,11 @@ import {
   deleteSkillCategory
 } from '@/api/skill'
 import type { SkillCategory } from '@/api/skill/types'
+import { formatDateTimeSeconds as formatDateTime } from '@/utils/date'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -169,17 +174,6 @@ const categoryOptions = computed<SkillCategory[]>(() => {
     ...tableData.value
   ]
 })
-
-/**
- * 格式化日期时间（标准 ISO 字符串转 YYYY-MM-DD HH:mm:ss）
- */
-const formatDateTime = (dateStr?: string): string => {
-  if (!dateStr) return '-'
-  const dt = new Date(dateStr)
-  if (Number.isNaN(dt.getTime())) return dateStr
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
-}
 
 // 加载数据
 const loadData = async () => {
@@ -238,7 +232,7 @@ const handleEdit = (row: SkillCategory) => {
 const handleDelete = async (row: SkillCategory) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除分类 "${row.name}" 吗？如果包含子分类将一并删除，此操作不可恢复！`,
+      `确定要删除分类 "${row.name}" 吗？将连带删除其全部子分类，以及技师/服务项目中已关联的技能标签，此操作不可恢复！`,
       '警告',
       {
         type: 'warning',

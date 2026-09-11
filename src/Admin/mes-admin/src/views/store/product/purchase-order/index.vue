@@ -78,7 +78,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button v-if="hasPermission('store:purchase-inventory:purchase-order:add')" type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新增采购订单
         </el-button>
@@ -314,7 +314,7 @@
           </el-table-column>
           <el-table-column label="保质期(天)" width="100">
             <template #default="{ row }">
-              <el-input-number v-model="row.shelfLifeDays" :min="1" :step="1" size="small" style="width: 100%" />
+              <el-input-number v-model="row.shelfLifeDays" :min="1" :step="1" :precision="0" size="small" style="width: 100%" />
             </template>
           </el-table-column>
           <el-table-column label="过期日期" width="140">
@@ -387,6 +387,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, View, DataAnalysis, Plus } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import {
   getPurchaseOrders,
   getPurchaseOrder,
@@ -397,8 +398,11 @@ import { getSuppliers, getProductsBySupplier } from '@/api/supplier'
 import { getProductOptions } from '@/api/inventory-ops'
 import type { PurchaseOrder, PurchaseType, SupplierPurchaseSummary } from '@/api/purchase/types'
 import type { Supplier } from '@/api/supplier/types'
+import { formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 供应商和商品下拉选项
 const supplierOptions = ref<Supplier[]>([])
@@ -576,7 +580,7 @@ const createDialogVisible = ref(false)
 const createLoading = ref(false)
 
 const createForm = reactive({
-  orderDate: new Date().toISOString().split('T')[0],
+  orderDate: formatDate(new Date()),
   purchaseType: 1 as PurchaseType,
   remark: '',
   items: [] as CreateFormItem[]
@@ -602,7 +606,7 @@ watch(
       if (item.productionDate && item.shelfLifeDays && item.shelfLifeDays > 0) {
         const date = new Date(item.productionDate)
         date.setDate(date.getDate() + item.shelfLifeDays)
-        item.expirationDate = date.toISOString().split('T')[0]
+        item.expirationDate = formatDate(date)
       }
     })
   },
@@ -617,7 +621,7 @@ watch(
       if (item.expirationDate && item.shelfLifeDays && item.shelfLifeDays > 0) {
         const date = new Date(item.expirationDate)
         date.setDate(date.getDate() - item.shelfLifeDays)
-        item.productionDate = date.toISOString().split('T')[0]
+        item.productionDate = formatDate(date)
       }
     })
   },
@@ -657,7 +661,7 @@ const removeCreateItem = (index: number) => {
 
 // 打开新增弹窗
 const handleAdd = () => {
-  createForm.orderDate = new Date().toISOString().split('T')[0]
+  createForm.orderDate = formatDate(new Date())
   createForm.purchaseType = 1
   createForm.remark = ''
   createForm.items = []
@@ -782,11 +786,6 @@ const getProductsDisplay = (order: PurchaseOrder): string => {
   return `${getProductName(productIds[0])} 等${productIds.length}种`
 }
 
-// 格式化日期（仅日期部分）
-const formatDate = (dateStr: string): string => {
-  if (!dateStr) return '-'
-  return dateStr.split('T')[0]
-}
 
 // 获取状态文本
 const getStatusText = (status: number): string => {

@@ -47,6 +47,17 @@ public class OrderItem : StoreBusinessEntityBase
     public long? EquipmentId { get; set; }
 
     /// <summary>
+    /// 服务开始时间（服务内容弹窗/核销项目录入的真实服务开始时间，可空）
+    /// 用于资源占用检测与技师统计归集（StatDate=ServiceStartTime.Date），为空时回退 OrderTime + Duration 推算
+    /// </summary>
+    public DateTime? ServiceStartTime { get; set; }
+
+    /// <summary>
+    /// 服务结束时间（服务开始时间 + 服务时长自动计算，可空）
+    /// </summary>
+    public DateTime? ServiceEndTime { get; set; }
+
+    /// <summary>
     /// 数量
     /// </summary>
     public decimal Quantity { get; set; }

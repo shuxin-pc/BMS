@@ -10,6 +10,12 @@ public class OrderItemDto
     public long ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string ProductCode { get; set; } = string.Empty;
+    /// <summary>
+    /// 商品类型（1:实物商品 2:服务商品 3:耗材 4:样品 5:赠品，来自商品主档 ProductMaster.Type）
+    /// 用于前端按商品类型展示不同明细列
+    /// </summary>
+    public int ProductType { get; set; }
+
     public long? TechnicianId { get; set; }
     public int? TechnicianSource { get; set; }
 
@@ -37,6 +43,16 @@ public class OrderItemDto
     /// 设备名称（关联查询填充，用于前端展示）
     /// </summary>
     public string? EquipmentName { get; set; }
+
+    /// <summary>
+    /// 服务开始时间（服务内容弹窗/核销项目录入的真实服务开始时间，可空）
+    /// </summary>
+    public DateTime? ServiceStartTime { get; set; }
+
+    /// <summary>
+    /// 服务结束时间（开始时间 + 服务时长自动计算，可空）
+    /// </summary>
+    public DateTime? ServiceEndTime { get; set; }
 
     public decimal Quantity { get; set; }
     public decimal Price { get; set; }

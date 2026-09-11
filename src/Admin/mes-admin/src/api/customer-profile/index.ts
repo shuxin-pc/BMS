@@ -68,8 +68,7 @@ export async function getCustomerOptions(): Promise<CustomerOption[]> {
 export async function getBeautyProfiles(query?: BeautyProfileQuery): Promise<PagedResponse<CustomerBeautyProfile>> {
   const params = buildQuery({
     customerId: query?.customerId,
-    customerName: query?.customerName,
-    customerPhone: query?.customerPhone,
+    keyword: query?.keyword,
     skinType: query?.skinType,
     pageIndex: query?.pageIndex || 1,
     pageSize: query?.pageSize || 20
@@ -137,8 +136,7 @@ export async function batchDeleteBeautyProfiles(ids: number[]): Promise<void> {
 export async function getServiceReactions(query?: ServiceReactionQuery): Promise<PagedResponse<ServiceReaction>> {
   const params = buildQuery({
     customerId: query?.customerId,
-    customerName: query?.customerName,
-    customerPhone: query?.customerPhone,
+    keyword: query?.keyword,
     startDate: query?.startDate,
     endDate: query?.endDate,
     severity: query?.severity,
@@ -179,8 +177,7 @@ export async function createServiceReaction(data: ServiceReactionCreate): Promis
 export async function getComparisonPhotos(query?: ComparisonPhotoQuery): Promise<PagedResponse<ServiceComparisonPhoto>> {
   const params = buildQuery({
     customerId: query?.customerId,
-    customerName: query?.customerName,
-    customerPhone: query?.customerPhone,
+    keyword: query?.keyword,
     serviceItem: query?.serviceItem,
     pageIndex: query?.pageIndex || 1,
     pageSize: query?.pageSize || 20
@@ -255,8 +252,7 @@ export async function batchDeleteComparisonPhotos(ids: number[]): Promise<void> 
 export async function getBodyDataRecords(query?: BodyDataQuery): Promise<PagedResponse<BodyDataRecord>> {
   const params = buildQuery({
     customerId: query?.customerId,
-    customerName: query?.customerName,
-    customerPhone: query?.customerPhone,
+    keyword: query?.keyword,
     startDate: query?.startDate,
     endDate: query?.endDate,
     pageIndex: query?.pageIndex || 1,

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Bms.BuildingBlocks.Core.Context;
 using Bms.Store.Application.Services;
 using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
@@ -92,6 +93,9 @@ public class DailySettlementSummaryService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<StoreDbContext>();
         var appService = scope.ServiceProvider.GetRequiredService<DailySettlementAppService>();
+
+        // 审计日志豁免：后台定时任务无用户操作语义，关闭审计避免脏日志
+        scope.ServiceProvider.GetRequiredService<IAuditLogContext>().IsEnabled = false;
 
         var today = DateTime.Today;
 

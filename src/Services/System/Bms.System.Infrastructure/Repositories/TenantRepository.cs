@@ -22,4 +22,11 @@ public class TenantRepository : ITenantRepository
             .Where(t => !t.IsDeleted)
             .ToListAsync();
     }
+
+    public async Task<int> GetCountAsync()
+    {
+        return await _context.Tenants
+            .Where(t => !t.IsDeleted)
+            .CountAsync();
+    }
 }

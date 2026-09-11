@@ -42,6 +42,11 @@ public class CustomerCareLog : StoreBusinessEntityBase
     public int? Method { get; set; }
 
     /// <summary>
+    /// 操作人姓名（冗余展示，来自 ICurrentUser.RealName/UserName，列表展示识别谁完成的关怀/感谢）
+    /// </summary>
+    public string? OperatorName { get; set; }
+
+    /// <summary>
     /// 关怀/感谢时间
     /// </summary>
     public DateTime CareTime { get; set; }

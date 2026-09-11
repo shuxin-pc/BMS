@@ -53,7 +53,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button v-if="hasPermission('store:purchase-inventory:transfer:add')" type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
           新增调拨
         </el-button>
@@ -106,14 +106,14 @@
               详情
             </el-button>
             <el-button
-              v-if="row.status === 1 && row.fromStoreId === userStore.currentStoreId"
+              v-if="row.status === 1 && row.fromStoreId === userStore.currentStoreId && hasPermission('store:purchase-inventory:transfer:execute')"
               link type="success" size="small"
               @click="handleExecute(row)"
             >
               执行调拨
             </el-button>
             <el-button
-              v-if="row.status === 1"
+              v-if="row.status === 1 && hasPermission('store:purchase-inventory:transfer:cancel')"
               link type="danger" size="small"
               @click="handleCancel(row)"
             >
@@ -338,9 +338,11 @@ import {
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { useUserStore } from '@/stores/user'
 import type { StockTransfer, StockTransferItem, TransferStatus, StockTransferProductOption, StockTransferBatchOption } from '@/api/stock-transfer/types'
+import { formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
 const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -433,7 +435,7 @@ interface FormItem {
 const formData = reactive({
   fromStoreId: undefined as string | undefined,
   toStoreId: undefined as string | undefined,
-  transferDate: new Date().toISOString().slice(0, 10),
+  transferDate: formatDate(new Date()),
   remark: '',
   items: [] as FormItem[]
 })
@@ -518,7 +520,7 @@ const handleDeductModeChange = (val: DeductMode) => {
 const resetFormData = () => {
   formData.fromStoreId = undefined
   formData.toStoreId = undefined
-  formData.transferDate = new Date().toISOString().slice(0, 10)
+  formData.transferDate = formatDate(new Date())
   formData.remark = ''
   formData.items = []
   deductMode.value = 'fefo'
@@ -701,16 +703,6 @@ const formatNumber = (num: number) => {
   return num.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

@@ -128,7 +128,8 @@ export async function updateSkillCategory(data: SkillCategoryUpdate): Promise<vo
 }
 
 /**
- * 删除技能分类（后端为软删除，子分类需调用方自行处理或后端级联）
+ * 删除技能分类
+ * 后端级联处理：软删该分类及其全部子分类，并物理清理技师技能标签、服务项目适用技能关联数据
  * @param id 分类ID
  */
 export async function deleteSkillCategory(id: number): Promise<void> {

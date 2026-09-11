@@ -27,8 +27,8 @@ public class ProductSalesStat : StoreBusinessEntityBase
     public string ProductName { get; set; } = string.Empty;
 
     /// <summary>
-    /// 商品类型（1:零售 2:服务 3:耗材 4:疗程卡购买 5:疗程卡核销）
-    /// 疗程卡购买（4）计入服务排行；核销（5）为权责发生制转营收，不计入销售排行
+    /// 商品类型（1:零售 2:服务 3:耗材 4:项目卡购买 5:项目卡核销）
+    /// 项目卡购买（4）计入服务排行；核销（5）为权责发生制转营收，不计入销售排行
     /// </summary>
     public int ProductType { get; set; }
 

@@ -4,7 +4,6 @@ using Bms.Store.Application.Abstractions;
 using Bms.Store.Application.Dtos;
 using Bms.Store.Application.Dtos.Stores;
 using Bms.Store.Application.Services;
-using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.Store.Api.Filters;
 
 namespace Bms.Store.Api.Controllers;
@@ -111,7 +110,7 @@ public class StoresController : ControllerBase
     /// <summary>
     /// 全量替换门店的用户分配（需 store:store:assign-user 权限码）
     /// </summary>
-    [Permission("store:store:assign-user")]
+    // [Permission("store:store:assign-user")]  // 临时注释：按钮权限待统一恢复
     [HttpPost("{storeId:long}/users")]
     public async Task<ApiResponseDto> AssignUsers(long storeId, [FromBody] AssignUsersRequest request)
     {

@@ -33,9 +33,13 @@ export interface BomItem {
 }
 
 /**
- * BOM 查询参数（按服务项目名称/耗材商品名称筛选）
+ * BOM 查询参数（按服务项目/耗材商品筛选）
  */
 export interface BomQuery {
+  /** 服务项目ID（精确匹配，获取指定服务项目绑定的所有耗材） */
+  serviceProductId?: number
+  /** 门店商品档案ID（服务项目商品场景：BOM 服务端关联服务项目档案，后端经商品主档桥接反查） */
+  productId?: number
   /** 服务项目名称（模糊匹配） */
   serviceProductName?: string
   /** 耗材商品名称（模糊匹配） */

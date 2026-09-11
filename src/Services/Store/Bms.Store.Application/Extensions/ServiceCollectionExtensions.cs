@@ -49,6 +49,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOrderAppService, OrderAppService>();
         services.AddScoped<IOrderItemAppService, OrderItemAppService>();
         services.AddScoped<IAppointmentAppService, AppointmentAppService>();
+        services.AddScoped<IParkedOrderAppService, ParkedOrderAppService>();
+        services.AddScoped<IPosCheckoutAppService, PosCheckoutAppService>();
         services.AddScoped<IPriceChangeLogAppService, PriceChangeLogAppService>();
 
         // 库存与采购退货模块
@@ -59,14 +61,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOutboundAppService, OutboundAppService>();
         services.AddScoped<IPurchaseReturnAppService, PurchaseReturnAppService>();
 
-        // 储值、积分与疗程卡模块
+        // 储值、积分与项目卡模块
         services.AddScoped<IStoredValueAccountAppService, StoredValueAccountAppService>();
         services.AddScoped<IStoredValueLogAppService, StoredValueLogAppService>();
         services.AddScoped<IStoredValueRuleAppService, StoredValueRuleAppService>();
         services.AddScoped<IPointsExchangeAppService, PointsExchangeAppService>();
         services.AddScoped<ITreatmentCardAppService, TreatmentCardAppService>();
 
-        // 疗程卡销售核销、供应商与技师模块
+        // 项目卡销售核销、供应商与技师模块
         services.AddScoped<ITreatmentCardSaleAppService, TreatmentCardSaleAppService>();
         services.AddScoped<ITreatmentCardVerifyAppService, TreatmentCardVerifyAppService>();
         services.AddScoped<ICourseCardItemAppService, CourseCardItemAppService>();
@@ -86,6 +88,9 @@ public static class ServiceCollectionExtensions
 
         // 积分规则领域服务：统一封装生效规则查询与积分计算（含生日当天双倍），供积分发放场景共用
         services.AddScoped<IPointsRuleService, PointsRuleService>();
+
+        // 积分抵扣领域服务：统一封装积分扣减与兑换/流水记录，供订单组合支付、项目卡开卡组合支付共用
+        services.AddScoped<IPointsDeductionService, PointsDeductionService>();
 
         // 储值赠送规则领域服务：统一封装充值赠送金额计算，供实际充值与前端试算共用
         services.AddScoped<IStoredValueGiftRuleService, StoredValueGiftRuleService>();

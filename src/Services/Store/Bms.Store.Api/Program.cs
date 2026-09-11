@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi;
 using Bms.BuildingBlocks.Core.Extensions;
 using Bms.BuildingBlocks.Core.IdGenerator;
 using Bms.BuildingBlocks.MultiTenant.Abstractions;
@@ -10,6 +11,7 @@ using Bms.BuildingBlocks.Web.Security;
 using Bms.BuildingBlocks.Abstractions.Security;
 using Bms.BuildingBlocks.Core.Context;
 using Bms.BuildingBlocks.Web.Converters;
+using Bms.BuildingBlocks.Web.Middleware;
 using Bms.Store.Infrastructure;
 using Bms.Store.Infrastructure.Extensions;
 using Bms.Store.Infrastructure.Stores;
@@ -101,23 +103,18 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "BMS Store API", Version = "v1" });
     c.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
-    c.AddSecurityDefinition("Bearer", new()
+    // JWT认证到Swagger（OpenApi v2 模型：SecurityRequirement 按文档解析为 SchemeReference）
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme",
         Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-    c.AddSecurityRequirement(new()
+    c.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
     {
-        {
-            new()
-            {
-                Reference = new() { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
+        [new OpenApiSecuritySchemeReference("Bearer", doc)] = []
     });
 });
 
@@ -126,6 +123,9 @@ builder.Services.AddSwaggerGen(c =>
 // ==========================================
 builder.Services.AddStoreServices(builder.Configuration);
 builder.Services.AddApplicationServices();
+
+// 审计日志选项提供者（默认始终启用 + 默认排除路径）
+builder.Services.AddScoped<IAuditLogOptionsProvider, DefaultAuditLogOptionsProvider>();
 
 // 跨服务用户查询（直查 bms_system.Users 表，供门店授权分配使用）
 builder.Services.AddScoped<Bms.Store.Application.Abstractions.IUserQueryService, Bms.Store.Api.Services.UserQueryService>();
@@ -143,7 +143,7 @@ builder.Services.AddHttpClient("SystemApi", client =>
 // 注册菜单自注册服务（后台运行）
 builder.Services.AddHostedService<StoreMenuRegistrationService>();
 
-// 注册预约爽约自动判断定时任务（后台运行,每5分钟扫描）
+// 注册预约爽约自动判断定时任务（后台运行,每30分钟扫描）
 builder.Services.AddHostedService<AppointmentNoShowService>();
 
 // 注册日结自动汇总兜底定时任务（后台运行,每日02:00执行）
@@ -163,6 +163,12 @@ builder.Services.AddHostedService<PointsExpiryService>();
 
 // 注册客户生日提醒站内信自动发送定时任务（后台运行,每日07:00执行）
 builder.Services.AddHostedService<BirthdayReminderService>();
+
+// 注册今日预约提醒站内信自动发送定时任务（后台运行,每日08:00执行，门店上班前送达当天预约安排）
+builder.Services.AddHostedService<AppointmentReminderService>();
+
+// 注册项目卡到期提醒站内信自动发送定时任务（后台运行,每日08:30执行，扫描30天内到期/已过期项目卡）
+builder.Services.AddHostedService<TreatmentCardExpiryReminderService>();
 
 // 注册孤儿对象清理定时任务（后台运行,每日04:00执行，图片对象存储改造阶段4）
 builder.Services.AddHostedService<OrphanObjectCleanupService>();
@@ -200,6 +206,9 @@ app.UseMiddleware<Bms.Store.Api.Middleware.StoreAccessMiddleware>();
 // 权限码校验中间件（M8 修复：通过 UI 配置的菜单按钮权限码校验，替代业务层硬编码角色判断）
 app.UseMiddleware<Bms.Store.Api.Middleware.StorePermissionMiddleware>();
 
+// 审计日志中间件（必须在认证授权、多租户与门店上下文之后，读取用户/租户/门店信息）
+app.UseAuditLog();
+
 app.MapControllers();
 
 // ==========================================
@@ -212,6 +221,8 @@ using (var scope = app.Services.CreateScope())
     {
         var context = scope.ServiceProvider.GetRequiredService<StoreDbContext>();
         var idGenerator = scope.ServiceProvider.GetRequiredService<ISnowflakeIdGenerator>();
+
+        context.Database.EnsureDatabaseExists(logger);
 
         logger.LogInformation("正在应用数据库迁移...");
         context.Database.Migrate();

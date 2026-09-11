@@ -41,10 +41,8 @@ export interface MemberAccount {
 export interface MemberAccountQuery {
   /** 客户ID */
   customerId?: number
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 手机号（模糊匹配） */
-  phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */
@@ -75,6 +73,21 @@ export interface RechargeGiftPreview {
   amount: number
   /** 按储值规则计算出的赠送金额 */
   giftAmount: number
+}
+
+/**
+ * 储值退款请求
+ * 对齐后端 StoredValueRefundDto。退款金额上限为当前总余额，扣减时先实收后赠送
+ */
+export interface StoredValueRefundRequest {
+  /** 客户ID */
+  customerId: number
+  /** 退款金额（必须 > 0，且不超过当前总余额） */
+  amount: number
+  /** 退款支付方式：1-现金，2-支付宝，3-微信，4-银行卡 */
+  payMethod?: number
+  /** 备注（退款原因，必填便于审计追溯） */
+  remark?: string
 }
 
 /**
@@ -235,10 +248,8 @@ export interface MemberTransactionQuery {
   customerId?: number
   /** 流水类型 */
   type?: TransactionType
-  /** 客户姓名（模糊匹配） */
-  customerName?: string
-  /** 客户手机号（模糊匹配） */
-  phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 开始日期 */
   startDate?: string
   /** 结束日期（含当日） */

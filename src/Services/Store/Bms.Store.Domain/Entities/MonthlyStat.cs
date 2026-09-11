@@ -62,7 +62,7 @@ public class MonthlyStat : StoreBusinessEntityBase
     public decimal StoredValueConsume { get; set; }
 
     /// <summary>
-    /// 疗程卡核销折算金额（权责发生制：核销时将负债转营收，非售卖时一次性计入）
+    /// 项目卡核销折算金额（权责发生制：核销时将负债转营收，非售卖时一次性计入）
     /// </summary>
     public decimal TreatmentCardVerifyAmount { get; set; }
 

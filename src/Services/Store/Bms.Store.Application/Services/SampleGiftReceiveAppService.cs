@@ -59,6 +59,15 @@ public class SampleGiftReceiveAppService : ISampleGiftReceiveAppService
         if (query.ActivityId.HasValue)
             queryable = queryable.Where(r => r.ActivityId == query.ActivityId.Value);
 
+        // 按客户名称或手机号关键字模糊匹配（子查询 join Customer 表，OR 语义）
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+        {
+            var matchedCustomerIds = _dbContext.Customers
+                .Where(c => c.Name.Contains(query.Keyword) || c.Phone.Contains(query.Keyword))
+                .Select(c => c.Id);
+            queryable = queryable.Where(r => r.CustomerId.HasValue && matchedCustomerIds.Contains(r.CustomerId.Value));
+        }
+
         var total = await queryable.CountAsync();
         var items = await queryable
             .OrderByDescending(r => r.CreatedTime)

@@ -16,14 +16,14 @@
             <span class="alert-title">当前门店尚未配置积分规则，下方为建议默认值，尚未保存生效</span>
           </template>
           <div class="alert-content">
-            未点击「保存配置」前，<strong>消费下单、储值充值、疗程卡购买均不会发放任何积分</strong>。积分规则按门店独立配置，每个门店需各自保存一次。
+            未点击「保存配置」前，<strong>消费下单、储值充值、项目卡购买均不会发放任何积分</strong>。积分规则按门店独立配置，每个门店需各自保存一次。
           </div>
         </el-alert>
 
         <!-- 操作栏 -->
         <div class="table-toolbar">
           <div class="toolbar-left">
-            <el-button type="primary" @click="handleSaveRule" :loading="ruleSaving">
+            <el-button type="primary" @click="handleSaveRule" :loading="ruleSaving" v-if="hasPermission('store:customer:points:saveRule')">
               <el-icon><Check /></el-icon>
               保存配置
             </el-button>
@@ -62,6 +62,12 @@
               />
               <span class="form-tip-suffix">积分</span>
               <div class="form-tip">消费/录入 {{ ruleForm.deductPointsPerYuan }} 积分可抵扣 1 元</div>
+              <div class="form-tip return-rate-tip" :class="returnRateTipClass">
+                返利比例 {{ returnRateText }}（每消费1元返 {{ ruleForm.pointsRate }} 积分）
+                <template v-if="returnRate >= 1">：已达 100% 失衡线，消费返利可抵扣回全部金额，门店倒贴，保存将被阻止</template>
+                <template v-else-if="returnRate > 0.1">：偏高，存在会员「消费返利 + 积分抵扣」套利风险，建议调低</template>
+                <template v-else>：健康</template>
+              </div>
             </el-form-item>
             <el-form-item label="单笔最高抵扣金额" prop="maxDeductAmount">
               <el-input-number
@@ -85,7 +91,7 @@
                 style="width: 200px"
               />
               <span class="form-tip-suffix">元</span>
-              <div class="form-tip">单笔金额低于此值不发放积分，0 表示无门槛；对消费下单、储值充值、疗程卡购买均生效</div>
+              <div class="form-tip">单笔金额低于此值不发放积分，0 表示无门槛；对消费下单、储值充值、项目卡购买均生效</div>
             </el-form-item>
             <el-form-item label="积分有效期" prop="pointsValidityDays">
               <el-input-number
@@ -122,18 +128,10 @@
         <div class="card mb-20">
           <div class="search-form">
             <el-form :inline="true" :model="recordSearchForm" class="search-form-inline">
-              <el-form-item label="客户名称">
+              <el-form-item label="客户名称/手机号">
                 <el-input
-                  v-model="recordSearchForm.customerName"
-                  placeholder="请输入客户名称"
-                  clearable
-                  style="width: 180px"
-                />
-              </el-form-item>
-              <el-form-item label="手机号">
-                <el-input
-                  v-model="recordSearchForm.phone"
-                  placeholder="请输入手机号"
+                  v-model="recordSearchForm.keyword"
+                  placeholder="姓名或手机号"
                   clearable
                   style="width: 180px"
                 />
@@ -143,8 +141,9 @@
                   <el-option label="消费获取" :value="1" />
                   <el-option label="积分抵扣" :value="2" />
                   <el-option label="退款扣减" :value="3" />
+                  <el-option label="退款退还" :value="9" />
                   <el-option label="充值获得" :value="5" />
-                  <el-option label="疗程卡购买" :value="6" />
+                  <el-option label="项目卡购买" :value="6" />
                   <el-option label="过期清零" :value="7" />
                   <el-option label="手动调整" :value="8" />
                 </el-select>
@@ -235,14 +234,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Check } from '@element-plus/icons-vue'
 import { getPointsRule, savePointsRule, getPointsRecords } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { PointsRecord, PointsChangeType } from '@/api/customer/types'
+import { formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 const activeTab = ref('rule')
 
@@ -273,6 +278,30 @@ const ruleFormRules: FormRules = {
     { type: 'number', min: 1, message: '不能小于1', trigger: 'blur' }
   ]
 }
+
+/**
+ * 返利率 c = 消费1元获得积分 / 抵扣1元所需积分（积分/元 ÷ 积分/元，无量纲）
+ * 语义：花 1 元返的积分折算成金额的比例，即"返利比例"
+ * - c ≤ 0.1（10%）：健康区间
+ * - 0.1 < c < 1：返利率偏高，提示「消费返利 + 积分抵扣」套利风险，允许保存
+ * - c ≥ 1（100%+）：绝对失衡，消费 1 元返的积分至少可抵扣 1 元，门店倒贴，阻止保存
+ */
+const returnRate = computed(() => {
+  const deduct = ruleForm.deductPointsPerYuan
+  return deduct > 0 ? ruleForm.pointsRate / deduct : 0
+})
+
+/** 返利率展示文本（如 12.5%），抵扣积分未配置时为 — */
+const returnRateText = computed(() =>
+  ruleForm.deductPointsPerYuan > 0 ? `${(returnRate.value * 100).toFixed(1)}%` : '—'
+)
+
+/** 返利率提示状态色：健康绿 / 偏高橙 / 失衡红 */
+const returnRateTipClass = computed(() => {
+  if (returnRate.value >= 1) return 'return-rate-tip--imbalanced'
+  if (returnRate.value > 0.1) return 'return-rate-tip--warn'
+  return 'return-rate-tip--healthy'
+})
 
 const loadRule = async () => {
   ruleLoading.value = true
@@ -306,6 +335,19 @@ const handleSaveRule = async () => {
   if (!ruleFormRef.value) return
   await ruleFormRef.value.validate(async (valid) => {
     if (valid) {
+      // 返利率失衡校验：c ≥ 1 阻止保存，0.1 < c < 1 警告后放行（与后端 PointsRuleValidators 兜底一致）
+      if (returnRate.value >= 1) {
+        ElMessage.error(
+          `配置失衡：返利比例已达 ${returnRateText.value}，消费1元返的积分可抵扣 ≥1 元，门店将倒贴。` +
+            '请调低「消费1元获得积分」或提高「积分抵扣1元所需积分」后再保存'
+        )
+        return
+      }
+      if (returnRate.value > 0.1) {
+        ElMessage.warning(
+          `返利比例 ${returnRateText.value} 偏高，存在会员「消费返利 + 积分抵扣」套利风险，建议调低后再保存`
+        )
+      }
       ruleSaving.value = true
       try {
         // 前端整数 X -> 后端 deductRate = 1/X（保留 6 位小数）
@@ -339,8 +381,7 @@ const handleSaveRule = async () => {
 const recordLoading = ref(false)
 const recordData = ref<PointsRecord[]>([])
 const recordSearchForm = reactive({
-  customerName: '',
-  phone: '',
+  keyword: '',
   changeType: undefined as PointsChangeType | undefined
 })
 const recordPagination = reactive({
@@ -353,8 +394,7 @@ const loadRecords = async () => {
   recordLoading.value = true
   try {
     const res = await getPointsRecords({
-      customerName: recordSearchForm.customerName || undefined,
-      phone: recordSearchForm.phone || undefined,
+      keyword: recordSearchForm.keyword || undefined,
       changeType: recordSearchForm.changeType,
       pageIndex: recordPagination.pageIndex,
       pageSize: recordPagination.pageSize
@@ -374,8 +414,7 @@ const handleRecordSearch = () => {
 }
 
 const handleRecordReset = () => {
-  recordSearchForm.customerName = ''
-  recordSearchForm.phone = ''
+  recordSearchForm.keyword = ''
   recordSearchForm.changeType = undefined
   handleRecordSearch()
 }
@@ -388,8 +427,9 @@ const changeTypeText = (type: number) => {
     1: '消费获取',
     2: '积分抵扣',
     3: '退款扣减',
+    9: '退款退还',
     5: '充值获得',
-    6: '疗程卡购买',
+    6: '项目卡购买',
     7: '过期清零',
     8: '手动调整'
   }
@@ -402,6 +442,7 @@ const changeTypeTagType = (type: number) => {
     1: 'success',
     2: 'warning',
     3: 'danger',
+    9: 'success',
     5: 'success',
     6: 'success',
     7: 'info',
@@ -410,18 +451,6 @@ const changeTypeTagType = (type: number) => {
   return map[type] || ''
 }
 
-/** 格式化日期时间 */
-const formatDateTime = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {
@@ -574,6 +603,11 @@ onMounted(async () => {
   color: var(--text-tertiary);
   font-size: 13px;
 }
+
+/* 返利率提示状态色：健康绿 / 偏高橙 / 失衡红 */
+.return-rate-tip--healthy { color: var(--el-color-success); }
+.return-rate-tip--warn { color: var(--el-color-warning); }
+.return-rate-tip--imbalanced { color: var(--el-color-danger); font-weight: 600; }
 
 /* 分页 */
 .pagination-container {

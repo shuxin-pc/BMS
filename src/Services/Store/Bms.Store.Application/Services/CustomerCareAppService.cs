@@ -71,24 +71,26 @@ public class CustomerCareAppService : ICustomerCareAppService
                 && l.CareYear == currentYear
                 && l.TenantId == tenantId && l.StoreId == storeId
                 && customerIds.Contains(l.CustomerId))
-            .Select(l => new { l.CustomerId, l.CareTime })
+            .Select(l => new { l.CustomerId, l.CareTime, l.OperatorName })
             .ToListAsync();
 
-        var careLogMap = careLogs.ToDictionary(l => l.CustomerId, l => l.CareTime);
+        var careLogMap = careLogs.ToDictionary(l => l.CustomerId);
         foreach (var reminder in reminders)
         {
-            if (careLogMap.TryGetValue(reminder.CustomerId, out var careTime))
+            if (careLogMap.TryGetValue(reminder.CustomerId, out var log))
             {
                 reminder.CareStatus = 2;
-                reminder.CareTime = careTime;
+                reminder.CareTime = log.CareTime;
+                reminder.OperatorName = log.OperatorName;
             }
         }
 
         // 4. 按条件过滤
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            reminders = reminders.Where(r => r.CustomerName.Contains(query.CustomerName)).ToList();
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            reminders = reminders.Where(r => r.Phone.Contains(query.Phone)).ToList();
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            reminders = reminders
+                .Where(r => (r.CustomerName?.Contains(query.Keyword) ?? false)
+                    || (r.Phone?.Contains(query.Keyword) ?? false))
+                .ToList();
         if (query.CareStatus.HasValue)
             reminders = reminders.Where(r => r.CareStatus == query.CareStatus.Value).ToList();
 
@@ -123,6 +125,7 @@ public class CustomerCareAppService : ICustomerCareAppService
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
         var currentYear = DateTime.Today.Year;
+        var operatorName = string.IsNullOrWhiteSpace(_currentUser.RealName) ? _currentUser.UserName : _currentUser.RealName;
 
         // 校验客户存在且属于本租户本门店
         var customerExists = await _dbContext.Customers
@@ -140,6 +143,7 @@ public class CustomerCareAppService : ICustomerCareAppService
         if (existing != null)
         {
             existing.CareTime = DateTime.Now;
+            existing.OperatorName = operatorName;
             existing.UpdatedTime = DateTime.Now;
             existing.UpdatedBy = _currentUser.UserId;
         }
@@ -151,6 +155,7 @@ public class CustomerCareAppService : ICustomerCareAppService
                 Type = CustomerCareLogTypes.BirthdayCare,
                 CareYear = currentYear,
                 CareTime = DateTime.Now,
+                OperatorName = operatorName,
                 TenantId = tenantId,
                 TenantCode = _currentUser.TenantCode ?? string.Empty,
                 StoreId = storeId,
@@ -173,7 +178,7 @@ public class CustomerCareAppService : ICustomerCareAppService
 
     /// <summary>
     /// 获取消费感谢分页列表
-    /// 范围：近 7 天有已完成订单（Status=2）的客户，每客户取最近一笔订单
+    /// 范围：近 7 天有已完成订单（Status=2）的客户，按客户聚合出累计消费金额与订单笔数，最近一笔订单作为感谢锚点
     /// </summary>
     public async Task<ApiResponseDto<PagedResponseDto<ConsumeThankRecordDto>>> GetConsumeThanksAsync(ConsumeThankQueryDto query)
     {
@@ -201,32 +206,47 @@ public class CustomerCareAppService : ICustomerCareAppService
             })
             .ToListAsync();
 
-        // 2. 内存 GroupBy(CustomerId) 取每组第一笔（最近）
-        var latestOrders = recentOrders
+        // 2. 内存按客户分组聚合：近7天累计金额、订单笔数，以及最近一笔订单
+        // 最近一笔订单的 ID 作为列表项业务ID，供标记感谢时回传（感谢记录按订单锚定）
+        var groupedCustomers = recentOrders
             .GroupBy(o => o.CustomerId!.Value)
-            .Select(g => g.First())
+            .Select(g =>
+            {
+                var latest = g.OrderByDescending(o => o.OrderTime).First();
+                return new
+                {
+                    latest.Id,
+                    CustomerId = g.Key,
+                    latest.CustomerName,
+                    latest.Phone,
+                    TotalAmount = g.Sum(o => o.PaidAmount),
+                    OrderCount = g.Count(),
+                    LatestOrderTime = latest.OrderTime
+                };
+            })
             .ToList();
 
         // 3. 批量查 Type=2 的感谢记录
-        var orderIds = latestOrders.Select(o => o.Id).ToList();
+        var orderIds = groupedCustomers.Select(o => o.Id).ToList();
         var thankLogs = await _dbContext.CustomerCareLogs
             .Where(l => l.Type == CustomerCareLogTypes.ConsumeThank
                 && l.TenantId == tenantId && l.StoreId == storeId
                 && orderIds.Contains(l.RefOrderId!.Value))
-            .Select(l => new { l.RefOrderId, l.Method, l.CareTime })
+            .Select(l => new { l.RefOrderId, l.Method, l.CareTime, l.OperatorName })
             .ToListAsync();
 
         var thankLogMap = thankLogs.ToDictionary(l => l.RefOrderId!.Value, l => l);
-        var records = latestOrders.Select(o =>
+        var records = groupedCustomers.Select(o =>
         {
             var dto = new ConsumeThankRecordDto
             {
                 Id = o.Id,
-                CustomerId = o.CustomerId!.Value,
+                CustomerId = o.CustomerId,
                 CustomerName = o.CustomerName,
                 Phone = o.Phone,
-                LastAmount = o.PaidAmount,
-                LastConsumeTime = o.OrderTime,
+                TotalAmount = o.TotalAmount,
+                OrderCount = o.OrderCount,
+                LastConsumeTime = o.LatestOrderTime,
                 ThankStatus = 1
             };
             if (thankLogMap.TryGetValue(o.Id, out var log))
@@ -234,15 +254,17 @@ public class CustomerCareAppService : ICustomerCareAppService
                 dto.ThankStatus = 2;
                 dto.ThankMethod = log.Method;
                 dto.ThankTime = log.CareTime;
+                dto.OperatorName = log.OperatorName;
             }
             return dto;
         }).ToList();
 
         // 4. 按条件过滤
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            records = records.Where(r => r.CustomerName.Contains(query.CustomerName)).ToList();
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            records = records.Where(r => r.Phone.Contains(query.Phone)).ToList();
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            records = records
+                .Where(r => (r.CustomerName?.Contains(query.Keyword) ?? false)
+                    || (r.Phone?.Contains(query.Keyword) ?? false))
+                .ToList();
         if (query.ThankStatus.HasValue)
             records = records.Where(r => r.ThankStatus == query.ThankStatus.Value).ToList();
 
@@ -279,6 +301,7 @@ public class CustomerCareAppService : ICustomerCareAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var storeId = _currentUser.StoreId ?? 0;
+        var operatorName = string.IsNullOrWhiteSpace(_currentUser.RealName) ? _currentUser.UserName : _currentUser.RealName;
 
         // 校验订单存在且属于本租户本门店，且为已完成状态
         var order = await _dbContext.Orders
@@ -299,6 +322,7 @@ public class CustomerCareAppService : ICustomerCareAppService
         {
             existing.Method = method;
             existing.CareTime = DateTime.Now;
+            existing.OperatorName = operatorName;
             existing.UpdatedTime = DateTime.Now;
             existing.UpdatedBy = _currentUser.UserId;
         }
@@ -311,6 +335,7 @@ public class CustomerCareAppService : ICustomerCareAppService
                 RefOrderId = orderId,
                 Method = method,
                 CareTime = DateTime.Now,
+                OperatorName = operatorName,
                 TenantId = tenantId,
                 TenantCode = _currentUser.TenantCode ?? string.Empty,
                 StoreId = storeId,

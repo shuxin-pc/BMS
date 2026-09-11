@@ -1,8 +1,8 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 创建疗程卡销售项目明细请求 DTO
-/// 前端只传入商品、次数、原价；折算单价由后端按疗程卡实际售价比例分摊计算
+/// 创建项目卡销售项目明细请求 DTO
+/// 前端只传入商品、次数、原价；折算单价由后端按项目卡实际售价比例分摊计算
 /// </summary>
 public class TreatmentCardSaleItemCreateDto
 {
@@ -12,7 +12,7 @@ public class TreatmentCardSaleItemCreateDto
     public long ProductId { get; set; }
 
     /// <summary>
-    /// 该项目在疗程卡中的次数
+    /// 该项目在项目卡中的次数
     /// </summary>
     public int Quantity { get; set; }
 

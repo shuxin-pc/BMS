@@ -47,7 +47,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// 创建门店商品档案（需先存在 Master，按 MasterId 创建）
     /// </summary>
-    [Permission("store:product:profile:edit")]
+    // [Permission("store:product:profile:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost]
     public async Task<ApiResponseDto<ProductDto>> Create([FromBody] ProductCreateDto dto)
     {
@@ -57,7 +57,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// 更新门店商品档案（仅 Store 字段，Master 字段通过主档接口修改）
     /// </summary>
-    [Permission("store:product:profile:edit")]
+    // [Permission("store:product:profile:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPut("{id:long}")]
     public async Task<ApiResponseDto<ProductDto>> Update(long id, [FromBody] ProductUpdateDto dto)
     {
@@ -69,7 +69,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// 删除门店商品档案（库存为 0 才允许删除，对应设计文档 8.3 节）
     /// </summary>
-    [Permission("store:product:profile:edit")]
+    // [Permission("store:product:profile:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpDelete("{id:long}")]
     public async Task<ApiResponseDto> Delete(long id)
     {
@@ -79,7 +79,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// 批量删除门店商品档案（有库存的项自动跳过）
     /// </summary>
-    [Permission("store:product:profile:edit")]
+    // [Permission("store:product:profile:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
     {

@@ -10,9 +10,9 @@ public class OrderCreateDtoValidator : AbstractValidator<OrderCreateDto>
 {
     public OrderCreateDtoValidator()
     {
-        RuleFor(x => x.OrderNo).NotEmpty().WithMessage("订单号不能为空").MaximumLength(50).WithMessage("订单号最多50个字符");
-        RuleFor(x => x.OrderType).Must(t => t == 1 || t == 2 || t == 3).WithMessage("订单类型只能为1(零售)、2(服务)或3(疗程卡核销)");
-        RuleFor(x => x.Status).Must(s => s == 1 || s == 2 || s == 3 || s == 4).WithMessage("订单状态只能为1(进行中)、2(已完成)、3(已退款)或4(已取消)");
+        // OrderNo 不再由前端传入，后端在 CreateAsync 中通过 OrderNoGenerator 生成（SO{yyyyMMdd}{序号}）
+        RuleFor(x => x.OrderType).Must(t => t == 1 || t == 2 || t == 3).WithMessage("订单类型只能为1(零售)、2(服务)或3(项目卡核销)");
+        RuleFor(x => x.Status).Must(s => s == 2 || s == 3 || s == 4).WithMessage("订单状态只能为2(已完成)、3(已退款)或4(已取消)");
         RuleFor(x => x.PayMethod).NotNull().WithMessage("支付方式不能为空")
             .Must(p => p == 1 || p == 2 || p == 3 || p == 4 || p == 5 || p == 6 || p == 7)
             .WithMessage("支付方式只能为1(现金)、2(支付宝)、3(微信)、4(银行卡)、5(储值卡)、6(积分抵扣)或7(组合支付)");
@@ -63,8 +63,14 @@ public class RefundRequestDtoValidator : AbstractValidator<RefundRequestDto>
     public RefundRequestDtoValidator()
     {
         RuleFor(x => x.OrderId).GreaterThan(0).WithMessage("订单ID无效");
-        // 允许 RefundAmount=0（OrderType=3 疗程卡核销订单退款时为0），具体业务校验由 RefundAsync 按 OrderType 区分
+        // 允许 RefundAmount=0（OrderType=3 项目卡核销订单退款时为0），具体业务校验由 RefundAsync 按 OrderType 区分
         RuleFor(x => x.RefundAmount).GreaterThanOrEqualTo(0).WithMessage("退款金额不能小于0");
         RuleFor(x => x.Reason).NotEmpty().WithMessage("退款原因不能为空").MaximumLength(500).WithMessage("退款原因最多500个字符");
+
+        // 退库明细（可选）：每项退库数量必须大于0
+        // 批次归属订单、可退数量上限等依赖订单数据的校验在 RefundAsync 事务内执行（此处避免事务外重复查询）
+        RuleFor(x => x.RefundItems)
+            .Must(items => items == null || items.All(i => i.Quantity > 0))
+            .WithMessage("退库明细数量必须大于0");
     }
 }

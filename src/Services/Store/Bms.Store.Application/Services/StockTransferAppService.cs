@@ -148,7 +148,6 @@ public class StockTransferAppService : IStockTransferAppService
         entity.StoreCode = fromStore.Code;
         entity.Status = StockTransferStatus.Draft; // 待调出（草稿）
         entity.CreatedTime = now;
-        entity.TransferNo = await StockTransferNoGenerator.GenerateAsync(_dbContext, tenantId, storeId, dto.TransferDate);
         entity.FromStoreCode = fromStore.Code;
         entity.FromStoreName = fromStore.Name;
         entity.ToStoreCode = toStore.Code;
@@ -171,6 +170,14 @@ public class StockTransferAppService : IStockTransferAppService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
+            // 事务级顾问锁：按 (租户, 门店, 调拨日期) 串行化并发请求
+            // TransferNo 采用"查max+1"生成模式，并发下需串行化避免唯一约束冲突
+            var lockKey = StockTransferNoGenerator.BuildLockKey(tenantId, storeId, dto.TransferDate);
+            await _dbContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0})", lockKey);
+
+            // 在锁保护下生成调拨单号（TF{yyyyMMdd}{序号}，同租户+门店+调拨日期递增）
+            entity.TransferNo = await StockTransferNoGenerator.GenerateAsync(_dbContext, tenantId, storeId, dto.TransferDate);
+
             _dbContext.StockTransfers.Add(entity);
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -311,6 +318,11 @@ public class StockTransferAppService : IStockTransferAppService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
+            // 事务级顾问锁：按 (租户, 调入门店, 入库日期) 串行化并发调拨执行
+            // 调入门店批次号采用 BatchNoGenerator"查count+1"生成（同门店当天批次前缀相同），并发调拨（即使不同商品）会生成相同批次号，需串行化避免撞 UX_InventoryBatches_Tenant_Store_BatchNo
+            var lockKey = BatchNoGenerator.BuildLockKey(tenantId, transfer.ToStoreId, now);
+            await _dbContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0})", lockKey);
+
             // === P3.3: 按 MasterId 在调入门店查/建 Product 档案，构建 fromProductId -> toProductId 映射 ===
             // 设计文档 6.3 节：调入门店无档案 -> 自动克隆一份 Product（仅 Store 字段，MasterId 指向同一 Master）
             // 库存三件套的 ProductId 需替换为调入门店的 Product.Id，消除"B 门店看不到调拨入库商品"问题
@@ -367,6 +379,9 @@ public class StockTransferAppService : IStockTransferAppService
 
             // 跨 items 累计调入门店已生成批次数，避免事务内 CountAsync 漏算未落库批次导致批次号序号重复
             var batchCountGenerated = 0;
+            // 同一调拨单内同一商品分多行明细（不同批次）时，FirstOrDefaultAsync 只查数据库，
+            // 看不到内存中已 Add 未落库的调入门店 Inventory，需用内存字典缓存避免重复 Add 撞唯一索引 IX_Inventories_TenantId_StoreId_ProductId
+            var toInventoryCache = new Dictionary<long, Inventory>();
             foreach (var item in items)
             {
                 // 调入门店对应的 Product.Id（按 MasterId 映射）
@@ -415,10 +430,16 @@ public class StockTransferAppService : IStockTransferAppService
                 batchCountGenerated += received.Count;
 
                 // 读取/新建调入门店 Inventory 汇总（用于流水 BeforeQuantity/AfterQuantity 递推）
-                var toInventory = await _dbContext.Inventories
-                    .FirstOrDefaultAsync(inv => inv.ProductId == toProductId
-                        && inv.TenantId == tenantId
-                        && inv.StoreId == transfer.ToStoreId);
+                // 已存在或本请求内已新建的汇总从缓存取，避免同商品多行明细重复 Add 撞唯一索引
+                if (!toInventoryCache.TryGetValue(toProductId, out var toInventory))
+                {
+                    toInventory = await _dbContext.Inventories
+                        .FirstOrDefaultAsync(inv => inv.ProductId == toProductId
+                            && inv.TenantId == tenantId
+                            && inv.StoreId == transfer.ToStoreId);
+                    if (toInventory != null)
+                        toInventoryCache[toProductId] = toInventory;
+                }
                 var toRunningQty = toInventory?.Quantity ?? 0;
 
                 // === 4. 写入库流水（按收货批次，使用调入门店新生成的批次号） ===
@@ -446,6 +467,7 @@ public class StockTransferAppService : IStockTransferAppService
                         CreatedTime = now
                     };
                     _dbContext.Inventories.Add(toInventory);
+                    toInventoryCache[toProductId] = toInventory;
                 }
                 else
                 {

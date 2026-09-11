@@ -1,7 +1,7 @@
 namespace Bms.Store.Domain.Entities;
 
 /// <summary>
-/// 疗程卡配置
+/// 项目卡配置
 /// </summary>
 public class TreatmentCard : StoreEntity
 {
@@ -9,11 +9,6 @@ public class TreatmentCard : StoreEntity
     /// 卡名称
     /// </summary>
     public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 卡编码
-    /// </summary>
-    public string Code { get; set; } = string.Empty;
 
     /// <summary>
     /// 包含项目描述

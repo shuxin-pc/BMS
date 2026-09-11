@@ -3,7 +3,7 @@ using Bms.Store.Application.Dtos;
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 疗程卡配置分页查询 DTO
+/// 项目卡配置分页查询 DTO
 /// </summary>
 public class TreatmentCardQueryDto : PagedRequestDto
 {
@@ -11,11 +11,6 @@ public class TreatmentCardQueryDto : PagedRequestDto
     /// 卡名称（模糊搜索）
     /// </summary>
     public string? Name { get; set; }
-
-    /// <summary>
-    /// 卡编码
-    /// </summary>
-    public string? Code { get; set; }
 
     /// <summary>
     /// 是否启用

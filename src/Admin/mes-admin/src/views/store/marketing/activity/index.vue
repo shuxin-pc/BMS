@@ -52,7 +52,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:marketing:activity:add')">
           <el-icon><Plus /></el-icon>
           新增活动
         </el-button>
@@ -92,11 +92,11 @@
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:marketing:activity:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:marketing:activity:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -178,8 +178,12 @@ import {
 } from '@/api/activity'
 import type { Activity, ActivityStatus } from '@/api/activity/types'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
+import { formatDate as formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -219,11 +223,6 @@ const getStatusType = (row: Activity): 'info' | 'success' | 'warning' => {
   return status === 'notStarted' ? 'info' : status === 'ongoing' ? 'success' : 'warning'
 }
 
-// 列表仅展示日期，不展示时分秒
-const formatDateTime = (dt: string): string => {
-  if (!dt) return '-'
-  return dt.slice(0, 10)
-}
 
 // 加载数据
 const loadData = async () => {

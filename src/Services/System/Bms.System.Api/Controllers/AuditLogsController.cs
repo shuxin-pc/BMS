@@ -41,7 +41,18 @@ public class AuditLogsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ApiResponseDto<AuditLogDto?>> GetById(long id)
     {
-        return await _auditLogService.GetByIdAsync(id);
+        var result = await _auditLogService.GetByIdAsync(id);
+
+        // 租户隔离：仅超级管理员可查看其他租户日志详情，越权访问返回不存在
+        if (result.Code == 200 && result.Data != null && !_currentUser.IsSuperAdmin)
+        {
+            if (result.Data.TenantId != _currentUser.TenantId)
+            {
+                return ApiResponseDto<AuditLogDto?>.Fail("审计日志不存在", 404);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -50,6 +61,12 @@ public class AuditLogsController : ControllerBase
     [HttpGet]
     public async Task<ApiResponseDto<PagedResponseDto<AuditLogDto>>> GetPagedList([FromQuery] AuditLogQueryDto query)
     {
+        // 租户隔离：仅超级管理员可查看其他租户日志，其余用户强制限定本租户
+        if (!_currentUser.IsSuperAdmin)
+        {
+            query.TenantId = _currentUser.TenantId;
+        }
+
         return await _auditLogService.GetPagedListAsync(query);
     }
 
@@ -121,15 +138,21 @@ public class AuditLogsController : ControllerBase
     }
 
     /// <summary>
-    /// 清理过期审计日志（后端根据系统配置计算删除日期）
+    /// 清理过期审计日志（后端根据系统配置计算删除日期，仅清理租户范围内的过期日志）
     /// </summary>
     [HttpDelete("expired")]
-    public async Task<ApiResponseDto> DeleteExpired()
+    public async Task<ApiResponseDto> DeleteExpired([FromQuery] long? tenantId)
     {
-        // 通过配置服务获取审计日志保留天数，支持缓存，默认30天
-        var daysToKeep = await _systemConfigService.GetIntAsync("AuditLogRetentionDays", DefaultRetentionDays);
+        // 租户隔离：仅超级管理员可清理其他租户日志，其余用户强制限定本租户
+        if (!_currentUser.IsSuperAdmin)
+        {
+            tenantId = _currentUser.TenantId;
+        }
+
+        // 通过配置服务获取审计日志保留天数，支持缓存，默认30天（按目标租户优先读取私有配置，其次公开配置）
+        var daysToKeep = await _systemConfigService.GetIntAsync("AuditLogRetentionDays", DefaultRetentionDays, tenantId);
 
         var beforeDate = DateTime.Now.AddDays(-daysToKeep).Date;
-        return await _auditLogService.DeleteExpiredAsync(beforeDate);
+        return await _auditLogService.DeleteExpiredAsync(beforeDate, tenantId);
     }
 }

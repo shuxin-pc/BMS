@@ -43,7 +43,7 @@ public class ProductMastersController : ControllerBase
     /// <summary>
     /// 创建商品主档（服务商品同时创建 ServiceProduct 子表）
     /// </summary>
-    [Permission("store:product:master:edit")]
+    // [Permission("store:product:master:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost]
     public async Task<ApiResponseDto<ProductMasterDto>> Create([FromBody] ProductMasterCreateDto dto)
         => await _appService.CreateAsync(dto);
@@ -51,7 +51,7 @@ public class ProductMastersController : ControllerBase
     /// <summary>
     /// 更新商品主档（Master 字段全租户生效，含子表处理）
     /// </summary>
-    [Permission("store:product:master:edit")]
+    // [Permission("store:product:master:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPut("{id:long}")]
     public async Task<ApiResponseDto<ProductMasterDto>> Update(long id, [FromBody] ProductMasterUpdateDto dto)
     {
@@ -63,7 +63,7 @@ public class ProductMastersController : ControllerBase
     /// <summary>
     /// 删除商品主档（库存检查 + 级联软删除，对应设计文档 8.1 节）
     /// </summary>
-    [Permission("store:product:master:edit")]
+    // [Permission("store:product:master:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpDelete("{id:long}")]
     public async Task<ApiResponseDto> Delete(long id)
         => await _appService.DeleteAsync(id);
@@ -72,7 +72,7 @@ public class ProductMastersController : ControllerBase
     /// 统一配置门店档案 Store 字段（对应设计文档 7.2/7.3 节）
     /// 将 Store 字段值应用到选中门店：已有 Product -> 覆盖；无 Product -> 自动创建
     /// </summary>
-    [Permission("store:product:master:edit")]
+    // [Permission("store:product:master:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost("{masterId:long}/store-config")]
     public async Task<ApiResponseDto> BatchConfigStoreFields(long masterId, [FromBody] ProductStoreBatchConfigDto dto)
     {

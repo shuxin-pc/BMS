@@ -30,6 +30,8 @@ public class IdentityDbContextFactory : IDesignTimeDbContextFactory<IdentityDbCo
         var connectionString = configuration.GetConnectionString("IdentityDb");
 
         optionsBuilder.UseNpgsql(connectionString);
+        // 与 Program.cs 运行时配置保持一致，确保设计时模型与运行时模型相同
+        optionsBuilder.UseOpenIddict();
 
         return new IdentityDbContext(optionsBuilder.Options);
     }

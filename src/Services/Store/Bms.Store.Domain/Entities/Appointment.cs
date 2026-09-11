@@ -26,25 +26,20 @@ public class Appointment : StoreBusinessEntityBase
     public string CustomerPhone { get; set; } = string.Empty;
 
     /// <summary>
-    /// 预约日期
+    /// 预约开始时间（一体格式，含日期与时刻；服务跨日结束时 EndTime 会落在次日）
     /// </summary>
-    public DateTime AppointmentDate { get; set; }
+    public DateTime StartTime { get; set; }
 
     /// <summary>
-    /// 预约时间
-    /// </summary>
-    public TimeSpan AppointmentTime { get; set; }
-
-    /// <summary>
-    /// 预计结束时间（用于防冲突判断，由后端根据 ProductId 关联的 ServiceProduct.Duration 自动计算）
+    /// 预计结束时间（用于防冲突判断，由后端根据 ProductId 关联的 ServiceProduct.Duration 自动计算，支持跨日）
     /// </summary>
     public DateTime? EndTime { get; set; }
 
     /// <summary>
-    /// 预约状态（1:待确认 2:已预约 3:已到店 4:已完成 5:已取消 6:爽约）
-    /// 已取消:门店人员手动点击取消;爽约:超过预约时段未到店,系统定时任务自动更改
+    /// 预约状态（1:已预约 2:已到店 3:已完成 4:已取消 5:爽约）
+    /// 创建即已预约;已取消:门店人员手动点击取消;爽约:超过预约时段未到店,系统定时任务自动更改
     /// </summary>
-    public int Status { get; set; } = 1;
+    public int Status { get; set; } = AppointmentStatus.Confirmed;
 
     /// <summary>
     /// 技师ID

@@ -22,6 +22,17 @@ public class OrderItemCreateDto
     /// 设备ID（服务订单占用设备资源，可空）
     /// </summary>
     public long? EquipmentId { get; set; }
+
+    /// <summary>
+    /// 服务开始时间（服务内容弹窗/核销项目录入的真实服务开始时间，可空）
+    /// 用于资源占用检测与技师统计归集，为空时后端回退 OrderTime + Duration 推算
+    /// </summary>
+    public DateTime? ServiceStartTime { get; set; }
+
+    /// <summary>
+    /// 服务结束时间（服务开始时间 + 服务时长自动计算，可空）
+    /// </summary>
+    public DateTime? ServiceEndTime { get; set; }
     public decimal Quantity { get; set; }
     public decimal Price { get; set; }
     public decimal DiscountRate { get; set; } = 1.0m;
@@ -50,4 +61,11 @@ public class OrderItemCreateDto
     /// 非必填，传入时后端校验活动存在且未删除，写入 InventoryLog.ActivityId。
     /// </summary>
     public long? ActivityId { get; set; }
+
+    /// <summary>
+    /// 服务项目绑定耗材的效期选择（仅服务项目 Type=2 有意义）。
+    /// 加购服务项目时店员选择绑定耗材的效期；空表示未绑定耗材或系统自动按 FEFO 扣减。
+    /// 后端 DeductServiceBomAsync 按指定效期扣减对应耗材库存。
+    /// </summary>
+    public List<ConsumableExpiryInput> ConsumableExpiries { get; set; } = new();
 }

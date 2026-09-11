@@ -4,11 +4,17 @@ public class AuditLogDto
 {
     public long Id { get; set; }
     public long? TenantId { get; set; }
+    public long? StoreId { get; set; }
+    public string? StoreName { get; set; }
     public long? UserId { get; set; }
     public string? UserName { get; set; }
     public string? RealName { get; set; }
     public string OperationType { get; set; } = string.Empty;
     public string? OperationContent { get; set; }
+    /// <summary>
+    /// 被操作对象的ID（业务实体变更时填充，自定义操作为空）
+    /// </summary>
+    public long? EntityId { get; set; }
     public string? RequestPath { get; set; }
     public string? RequestMethod { get; set; }
     public string? RequestIp { get; set; }
@@ -70,6 +76,16 @@ public class CreateAuditLogDto
     /// 租户ID
     /// </summary>
     public long? TenantId { get; set; }
+
+    /// <summary>
+    /// 门店ID（仅 Store 服务产生的日志有值）
+    /// </summary>
+    public long? StoreId { get; set; }
+
+    /// <summary>
+    /// 门店名称
+    /// </summary>
+    public string? StoreName { get; set; }
 
     /// <summary>
     /// 请求IP

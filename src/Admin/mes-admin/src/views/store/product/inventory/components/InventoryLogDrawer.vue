@@ -134,6 +134,7 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getInventoryLogList, inventoryLogSourceTypeMap, inventoryLogSourceTypeOptions } from '@/api/inventory-ops'
 import type { InventoryLog, InventoryLogSourceType } from '@/api/inventory-ops'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const props = defineProps<{
   visible: boolean
@@ -160,17 +161,6 @@ const pagination = reactive({
   total: 0
 })
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 const loadData = async () => {
   if (!props.productId) return

@@ -1,13 +1,13 @@
 namespace Bms.Store.Domain.Entities;
 
 /// <summary>
-/// 疗程卡转让记录
-/// 记录疗程卡在租户内的转让操作（MVP 支持租户内转让）
+/// 项目卡转让记录
+/// 记录项目卡在租户内的转让操作（MVP 支持租户内转让）
 /// </summary>
 public class TreatmentCardTransfer : StoreBusinessEntityBase
 {
     /// <summary>
-    /// 疗程卡销售记录ID
+    /// 项目卡销售记录ID
     /// </summary>
     public long CardSaleId { get; set; }
 
@@ -53,7 +53,7 @@ public class TreatmentCardTransfer : StoreBusinessEntityBase
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 导航属性：疗程卡销售记录
+    /// 导航属性：项目卡销售记录
     /// </summary>
     public TreatmentCardSale? CardSale { get; set; }
 

@@ -18,9 +18,14 @@ public class EquipmentTypeDto
     public string Code { get; set; } = string.Empty;
 
     /// <summary>
-    /// 分类（如"激光类"、"射频类"、"注射类"）
+    /// 父级类型ID（null=顶级分类/分组）
     /// </summary>
-    public string? Category { get; set; }
+    public long? ParentId { get; set; }
+
+    /// <summary>
+    /// 父级类型名称（冗余展示字段）
+    /// </summary>
+    public string? ParentName { get; set; }
 
     /// <summary>
     /// 规格/型号
@@ -41,6 +46,11 @@ public class EquipmentTypeDto
     /// 关联的设备实例数量（租户内，用于列表展示与删除提示）
     /// </summary>
     public int EquipmentCount { get; set; }
+
+    /// <summary>
+    /// 子级类型列表（树形结构，GetTree 使用）
+    /// </summary>
+    public List<EquipmentTypeDto>? Children { get; set; }
 
     public DateTime CreatedTime { get; set; }
 }

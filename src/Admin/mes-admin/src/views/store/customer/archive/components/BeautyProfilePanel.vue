@@ -3,11 +3,11 @@
     <!-- 一客户仅一份美容档案，因此为详情卡片形态而非列表 -->
     <template v-if="profile">
       <div class="panel-toolbar">
-        <el-button link type="primary" size="small" @click="handleEdit">
+        <el-button link type="primary" size="small" @click="handleEdit" v-if="hasPermission('store:customer:archive:beauty:edit')">
           <el-icon><Edit /></el-icon>
           编辑
         </el-button>
-        <el-button link type="danger" size="small" @click="handleDelete">
+        <el-button link type="danger" size="small" @click="handleDelete" v-if="hasPermission('store:customer:archive:beauty:delete')">
           <el-icon><Delete /></el-icon>
           删除
         </el-button>
@@ -56,7 +56,7 @@
     </template>
 
     <el-empty v-else description="该客户尚无美容档案">
-      <el-button type="primary" @click="handleAdd">
+      <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:customer:archive:beauty:add')">
         <el-icon><Plus /></el-icon>
         新建档案
       </el-button>
@@ -126,6 +126,8 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
+import { formatDateTime } from '@/utils/date'
 import {
   getBeautyProfiles,
   createBeautyProfile,
@@ -145,6 +147,10 @@ const props = defineProps<{
   /** 当前客户姓名，仅用于弹窗内只读展示 */
   customerName: string
 }>()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 const loading = ref(false)
 const profile = ref<CustomerBeautyProfile | null>(null)
@@ -189,18 +195,6 @@ const getSensitivityTagType = (level: SensitivityLevel): '' | 'success' | 'info'
   return map[level] || 'info'
 }
 
-// 格式化日期时间
-const formatDateTime = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 // 加载当前客户的美容档案（一客户一份，取首条即可）
 const loadData = async () => {

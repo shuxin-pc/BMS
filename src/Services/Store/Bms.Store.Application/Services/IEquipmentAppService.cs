@@ -26,14 +26,16 @@ public interface IEquipmentAppService
     /// 根据服务项目查询可用设备列表
     /// 按服务项目 ServiceProductEquipment 关联表查询允许的设备类型，并排除指定时段已冲突的设备
     /// </summary>
-    /// <param name="serviceProductId">服务项目子表ID（关联 ServiceProduct.Id）</param>
-    /// <param name="startTime">预约开始时间</param>
-    /// <param name="endTime">预约结束时间</param>
+    /// <param name="serviceProductId">服务项目子表ID（关联 ServiceProduct.Id，预约页语境）</param>
+    /// <param name="masterId">商品主档ID（服务项目页语境，自动反查租户内 ServiceProduct）</param>
+    /// <param name="startTime">预约开始时间；为 null 时仅按服务项目设备类型过滤，不排除冲突设备</param>
+    /// <param name="endTime">预约结束时间；为 null 时仅按服务项目设备类型过滤，不排除冲突设备</param>
     /// <param name="excludeAppointmentId">需排除的预约ID（更新场景，避免与自身冲突）</param>
     /// <returns>可用设备列表；服务项目未关联设备类型时返回空列表</returns>
     Task<ApiResponseDto<List<EquipmentDto>>> GetAvailableByServiceProductAsync(
-        long serviceProductId,
-        DateTime startTime,
-        DateTime endTime,
+        long? serviceProductId,
+        long? masterId,
+        DateTime? startTime,
+        DateTime? endTime,
         long? excludeAppointmentId = null);
 }

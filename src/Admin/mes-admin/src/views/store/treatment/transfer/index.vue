@@ -4,6 +4,14 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
+          <el-form-item label="客户名称/手机号">
+            <el-input
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
+              clearable
+              style="width: 180px"
+            />
+          </el-form-item>
           <el-form-item label="转让日期">
             <el-date-picker
               v-model="searchForm.dateRange"
@@ -13,14 +21,6 @@
               end-placeholder="结束日期"
               value-format="YYYY-MM-DD"
               style="width: 260px"
-            />
-          </el-form-item>
-          <el-form-item label="客户名称">
-            <el-input
-              v-model="searchForm.customerName"
-              placeholder="原客户/新客户"
-              clearable
-              style="width: 160px"
             />
           </el-form-item>
           <el-form-item>
@@ -40,13 +40,12 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <span class="toolbar-hint">疗程卡转让记录</span>
-      </div>
-      <div class="toolbar-right">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:treatment:transfer:add')">
           <el-icon><Plus /></el-icon>
           新增转让
         </el-button>
+      </div>
+      <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
         </el-button>
@@ -60,9 +59,10 @@
         :data="tableData"
         style="width: 100%"
       >
-        <el-table-column prop="transferDate" label="转让日期" width="120" />
-        <el-table-column prop="saleNo" label="销售单号" width="150" />
-        <el-table-column prop="cardName" label="疗程卡名称" min-width="140" show-overflow-tooltip />
+        <el-table-column label="转让日期" width="120">
+          <template #default="{ row }">{{ formatDate(row.transferDate) }}</template>
+        </el-table-column>
+        <el-table-column prop="cardName" label="项目卡名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="原客户" width="140">
           <template #default="{ row }">
             <div class="customer-cell">
@@ -116,17 +116,17 @@
     </div>
 
     <!-- 新增转让弹窗 -->
-    <el-dialog v-model="dialogVisible" title="新增疗程卡转让" width="560px" @closed="handleDialogClosed">
+    <el-dialog v-model="dialogVisible" title="新增项目卡转让" width="560px" @closed="handleDialogClosed">
       <el-form
         ref="formRef"
         :model="transferForm"
         :rules="formRules"
         label-width="100px"
       >
-        <el-form-item label="疗程卡" prop="cardSaleId">
+        <el-form-item label="项目卡" prop="cardSaleId">
           <el-select
             v-model="transferForm.cardSaleId"
-            placeholder="请选择疗程卡销售记录"
+            placeholder="请选择项目卡销售记录"
             filterable
             style="width: 100%"
             @change="handleCardSaleChange"
@@ -134,7 +134,7 @@
             <el-option
               v-for="item in cardSaleOptions"
               :key="item.id"
-              :label="`${item.saleNo} - ${item.cardName}（${item.customerName}）`"
+              :label="`${item.cardName}（${item.customerName}）`"
               :value="item.id"
             />
           </el-select>
@@ -144,7 +144,7 @@
           <el-input
             :model-value="fromCustomerDisplay"
             disabled
-            placeholder="选择疗程卡后自动带出"
+            placeholder="选择项目卡后自动带出"
           />
         </el-form-item>
 
@@ -181,15 +181,16 @@
           />
         </el-form-item>
 
-        <el-form-item label="转让手续费" prop="transferFee">
+        <el-form-item label="手续费" prop="transferFee">
           <el-input-number
             v-model="transferForm.transferFee"
             :min="0"
             :precision="2"
             :step="10"
-            style="width: 100%"
+            style="width: 40%"
           />
           <span class="form-hint">元</span>
+          <span class="form-tip">门店线下收取，仅作记录</span>
         </el-form-item>
 
         <el-form-item label="备注">
@@ -218,7 +219,9 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Right } from '@element-plus/icons-vue'
+import { formatDate } from '@/utils/date'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import {
   getTreatmentCardTransfers,
   getTransferableCardSales,
@@ -233,11 +236,13 @@ import type {
 } from '@/api/treatment-transfer/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
   dateRange: [] as string[],
-  customerName: ''
+  keyword: ''
 })
 
 // 表格数据
@@ -261,7 +266,7 @@ const loadData = async () => {
     const res = await getTreatmentCardTransfers({
       startDate: searchForm.dateRange?.[0] || undefined,
       endDate: searchForm.dateRange?.[1] || undefined,
-      customerName: searchForm.customerName || undefined,
+      keyword: searchForm.keyword || undefined,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
@@ -283,7 +288,7 @@ const handleSearch = () => {
 // 重置
 const handleReset = () => {
   searchForm.dateRange = []
-  searchForm.customerName = ''
+  searchForm.keyword = ''
   handleSearch()
 }
 
@@ -294,25 +299,25 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const transferForm = reactive<TreatmentCardTransferCreate>({
-  cardSaleId: 0,
-  toCustomerId: 0,
-  transferDate: new Date().toISOString().substring(0, 10),
+  cardSaleId: '',
+  fromCustomerId: '',
+  toCustomerId: '',
+  transferDate: formatDate(new Date()),
   transferFee: 0,
   remark: ''
 })
 
 const formRules: FormRules = {
-  cardSaleId: [{ required: true, message: '请选择疗程卡', trigger: 'change' }],
+  cardSaleId: [{ required: true, message: '请选择项目卡', trigger: 'change' }],
   toCustomerId: [{ required: true, message: '请选择新客户', trigger: 'change' }],
-  transferDate: [{ required: true, message: '请选择转让日期', trigger: 'change' }],
-  transferFee: [{ required: true, message: '请输入转让手续费', trigger: 'blur' }]
+  transferDate: [{ required: true, message: '请选择转让日期', trigger: 'change' }]
 }
 
-// 可选疗程卡列表
+// 可选项目卡列表
 const cardSaleOptions = ref<CardSaleOption[]>([])
 // 客户列表
 const customerOptions = ref<CustomerOption[]>([])
-// 当前选中的疗程卡销售记录
+// 当前选中的项目卡销售记录
 const selectedCardSale = ref<CardSaleOption | null>(null)
 
 // 原客户展示文本
@@ -324,7 +329,7 @@ const fromCustomerDisplay = computed(() => {
 // 剩余次数展示
 const remainingDisplay = computed(() => {
   if (!selectedCardSale.value) return ''
-  return `${selectedCardSale.value.remainingCount} / ${selectedCardSale.value.totalCount} 次`
+  return `${selectedCardSale.value.remainingTimes} / ${selectedCardSale.value.totalTimes} 次`
 })
 
 // 可选新客户列表（排除原客户）
@@ -333,12 +338,13 @@ const availableToCustomers = computed(() => {
   return customerOptions.value.filter(c => c.id !== fromId)
 })
 
-// 疗程卡选择变化
-const handleCardSaleChange = (id: number) => {
+// 项目卡选择变化
+const handleCardSaleChange = (id: string) => {
   selectedCardSale.value = cardSaleOptions.value.find(c => c.id === id) || null
-  // 切换疗程卡时清空新客户选择（如果新客户是原客户）
+  // 同步原客户ID，切换项目卡时清空新客户选择（如果新客户是原客户）
+  transferForm.fromCustomerId = selectedCardSale.value?.customerId ?? ''
   if (selectedCardSale.value && transferForm.toCustomerId === selectedCardSale.value.customerId) {
-    transferForm.toCustomerId = 0
+    transferForm.toCustomerId = ''
   }
 }
 
@@ -358,9 +364,10 @@ const handleAdd = async () => {
 const handleDialogClosed = () => {
   formRef.value?.resetFields()
   selectedCardSale.value = null
-  transferForm.cardSaleId = 0
-  transferForm.toCustomerId = 0
-  transferForm.transferDate = new Date().toISOString().substring(0, 10)
+  transferForm.cardSaleId = ''
+  transferForm.fromCustomerId = ''
+  transferForm.toCustomerId = ''
+  transferForm.transferDate = formatDate(new Date())
   transferForm.transferFee = 0
   transferForm.remark = ''
 }
@@ -374,12 +381,13 @@ const handleSubmit = async () => {
     try {
       await createTreatmentCardTransfer({
         cardSaleId: transferForm.cardSaleId,
+        fromCustomerId: transferForm.fromCustomerId,
         toCustomerId: transferForm.toCustomerId,
         transferDate: transferForm.transferDate,
         transferFee: transferForm.transferFee,
         remark: transferForm.remark || undefined
       })
-      ElMessage.success('疗程卡转让成功')
+      ElMessage.success('项目卡转让成功')
       dialogVisible.value = false
       // 刷新选项数据（因为转让后卡的客户信息已变化）
       cardSaleOptions.value = []
@@ -470,11 +478,6 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.toolbar-hint {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
 .customer-cell {
   display: flex;
   flex-direction: column;
@@ -505,6 +508,12 @@ onMounted(async () => {
   margin-left: 8px;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+.form-tip {
+  margin-left: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .pagination-container {

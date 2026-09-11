@@ -1,12 +1,12 @@
 namespace Bms.Store.Application.Dtos.TreatmentCardTransfers;
 
 /// <summary>
-/// 创建疗程卡转让请求 DTO
+/// 创建项目卡转让请求 DTO
 /// </summary>
 public class TreatmentCardTransferCreateDto
 {
     /// <summary>
-    /// 操作门店ID（可空，疗程卡跨店通用）
+    /// 操作门店ID（可空，项目卡跨店通用）
     /// </summary>
     public long? StoreId { get; set; }
 
@@ -16,7 +16,7 @@ public class TreatmentCardTransferCreateDto
     public string? StoreCode { get; set; }
 
     /// <summary>
-    /// 疗程卡销售记录ID
+    /// 项目卡销售记录ID
     /// </summary>
     public long CardSaleId { get; set; }
 

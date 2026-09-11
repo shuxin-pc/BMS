@@ -135,7 +135,7 @@ public class SystemDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ParentId).IsRequired(false);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Path).HasMaxLength(200);
             entity.Property(e => e.Component).HasMaxLength(200);
             entity.Property(e => e.Icon).HasMaxLength(50);
@@ -203,6 +203,7 @@ public class SystemDbContext : TenantDbContext
             entity.Property(e => e.RequestIp).HasMaxLength(50);
             entity.Property(e => e.UserAgent).HasMaxLength(500);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            entity.Property(e => e.StoreName).HasMaxLength(100);
             entity.Property(e => e.EntityChanges).HasColumnType("text");
 
             entity.HasIndex(e => e.UserId);

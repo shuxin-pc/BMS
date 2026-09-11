@@ -592,7 +592,8 @@ public static class EntityMappingConfig
         TypeAdapterConfig<OrderEntity, OrderDto>
             .NewConfig()
             .Map(d => d.CreatedAt, s => s.CreatedTime)
-            .Map(d => d.UpdatedAt, s => s.UpdatedTime);
+            .Map(d => d.UpdatedAt, s => s.UpdatedTime)
+            .Map(d => d.Items, s => s.OrderItems);
 
         // OrderCreateDto -> Order：忽略审计字段及导航属性
         TypeAdapterConfig<OrderCreateDto, OrderEntity>

@@ -37,7 +37,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:customer:archive:reaction:add')">
           <el-icon><Plus /></el-icon>
           新增记录
         </el-button>
@@ -105,7 +105,7 @@
         <el-form-item label="关联订单">
           <el-select
             v-model="reactionForm.orderId"
-            placeholder="选填，可关联服务/疗程卡核销订单"
+            placeholder="选填，可关联服务/项目卡核销订单"
             filterable
             clearable
             :loading="orderOptionsLoading"
@@ -114,7 +114,7 @@
             <el-option
               v-for="order in orderOptions"
               :key="order.id"
-              :label="`${order.orderNo}（${order.orderType === 2 ? '服务' : '疗程卡核销'} · ${order.orderTime ? order.orderTime.substring(0, 10) : ''}）`"
+              :label="`${order.orderNo}（${order.orderType === 2 ? '服务' : '项目卡核销'} · ${order.orderTime ? order.orderTime.substring(0, 10) : ''}）`"
               :value="order.id"
             />
           </el-select>
@@ -213,6 +213,8 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, View } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
+import { formatDate } from '@/utils/date'
 import { getServiceReactions, createServiceReaction } from '@/api/customer-profile'
 import { getOrders } from '@/api/order'
 import { getProducts } from '@/api/product'
@@ -228,6 +230,10 @@ const props = defineProps<{
 }>()
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -308,7 +314,7 @@ const serviceProductOptions = ref<Product[]>([])
 const reactionForm = reactive<Omit<ServiceReactionCreate, 'customerId'>>({
   orderId: undefined,
   productId: undefined,
-  reactionDate: new Date().toISOString().substring(0, 10),
+  reactionDate: formatDate(new Date()),
   reaction: '',
   severity: 1,
   remark: ''
@@ -322,7 +328,7 @@ const formRules: FormRules = {
 // 反应记录只能登记已发生的事实，故禁止选择当天之后的日期
 const disableFutureDate = (date: Date) => date.getTime() > Date.now()
 
-// 加载客户对应的服务/疗程卡核销订单
+// 加载客户对应的服务/项目卡核销订单
 const loadOrderOptions = async (customerId: number | undefined) => {
   if (!customerId) {
     orderOptions.value = []
@@ -331,7 +337,7 @@ const loadOrderOptions = async (customerId: number | undefined) => {
   orderOptionsLoading.value = true
   try {
     const res = await getOrders({ customerId, pageIndex: 1, pageSize: 9999 })
-    // 前端过滤仅显示 orderType=2(服务) 或 3(疗程卡核销)
+    // 前端过滤仅显示 orderType=2(服务) 或 3(项目卡核销)
     orderOptions.value = res.list.filter(o => o.orderType === 2 || o.orderType === 3)
   } catch {
     ElMessage.error('加载订单列表失败')
@@ -374,7 +380,7 @@ const handleDialogClosed = () => {
   formRef.value?.resetFields()
   reactionForm.orderId = undefined
   reactionForm.productId = undefined
-  reactionForm.reactionDate = new Date().toISOString().substring(0, 10)
+  reactionForm.reactionDate = formatDate(new Date())
   reactionForm.reaction = ''
   reactionForm.severity = 1
   reactionForm.remark = ''

@@ -64,9 +64,9 @@ public class AuditLogAppService : IAuditLogAppService
         return ApiResponseDto.Success(null, "删除成功");
     }
 
-    public async Task<ApiResponseDto> DeleteExpiredAsync(DateTime beforeDate)
+    public async Task<ApiResponseDto> DeleteExpiredAsync(DateTime beforeDate, long? tenantId = null)
     {
-        var deletedCount = await _auditLogRepository.DeleteExpiredAsync(beforeDate);
+        var deletedCount = await _auditLogRepository.DeleteExpiredAsync(beforeDate, tenantId);
         return ApiResponseDto.Success(deletedCount, $"已清理 {deletedCount} 条历史日志");
     }
 
@@ -75,6 +75,8 @@ public class AuditLogAppService : IAuditLogAppService
         var auditLog = new AuditLog
         {
             TenantId = dto.TenantId,
+            StoreId = dto.StoreId,
+            StoreName = dto.StoreName,
             UserId = dto.UserId,
             UserName = dto.UserName,
             RealName = dto.RealName,

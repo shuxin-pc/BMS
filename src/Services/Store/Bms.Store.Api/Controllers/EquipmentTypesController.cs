@@ -10,7 +10,9 @@ namespace Bms.Store.Api.Controllers;
 /// 设备类型管理控制器（租户级共享数据）
 /// </summary>
 [ApiController]
-[Route("api/store/[controller]")]
+// 使用显式 kebab-case 路由，与前端 /api/store/equipment-types 及项目内多词控制器约定保持一致
+// （参照 EquipmentMaintenancesController、DailySettlementsController）
+[Route("api/store/equipment-types")]
 [Authorize]
 public class EquipmentTypesController : ControllerBase
 {
@@ -26,11 +28,18 @@ public class EquipmentTypesController : ControllerBase
         => await _appService.GetPagedListAsync(query);
 
     /// <summary>
-    /// 获取全部启用设备类型（用于下拉选择）
+    /// 获取全部启用设备类型（用于下拉选择，仅叶子节点即具体型号）
     /// </summary>
     [HttpGet("options")]
     public async Task<ApiResponseDto<List<EquipmentTypeDto>>> GetOptions()
         => await _appService.GetAllAsync();
+
+    /// <summary>
+    /// 获取设备类型树（含父级分类节点，用于管理页树形展示）
+    /// </summary>
+    [HttpGet("tree")]
+    public async Task<ApiResponseDto<List<EquipmentTypeDto>>> GetTree()
+        => await _appService.GetTreeAsync();
 
     [HttpGet("{id:long}")]
     public async Task<ApiResponseDto<EquipmentTypeDto?>> GetById(long id)

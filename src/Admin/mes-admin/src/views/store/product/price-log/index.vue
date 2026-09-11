@@ -103,6 +103,7 @@ import { Search, Refresh } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { getPriceChangeLogs } from '@/api/price-log'
 import type { PriceChangeLog } from '@/api/price-log/types'
+import { formatDateTimeSeconds as formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -178,13 +179,6 @@ const getChangeClass = (oldPrice: number, newPrice: number): string => {
   return 'change-none'
 }
 
-// 格式化日期时间
-const formatDateTime = (dateStr: string): string => {
-  const dt = new Date(dateStr)
-  const date = dt.toISOString().split('T')[0]
-  const time = dt.toTimeString().split(' ')[0]
-  return `${date} ${time}`
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

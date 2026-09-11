@@ -26,7 +26,7 @@ public class RefundResultDto
     public decimal TotalRefundedAmount { get; set; }
 
     /// <summary>
-    /// 订单状态（1:进行中 2:已完成 3:已退款 4:已取消）
+    /// 订单状态（2:已完成 3:已退款 4:已取消）
     /// </summary>
     public int OrderStatus { get; set; }
 
@@ -36,7 +36,7 @@ public class RefundResultDto
     public DateTime RefundTime { get; set; }
 
     /// <summary>
-    /// 联动操作记录（描述本次退款触发的库存、积分、疗程卡、储值等联动操作）
+    /// 联动操作记录（描述本次退款触发的库存、积分、项目卡、储值等联动操作）
     /// </summary>
     public List<string> Actions { get; set; } = new();
 

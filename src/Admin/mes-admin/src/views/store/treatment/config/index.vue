@@ -35,9 +35,9 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:treatment:config:add')">
           <el-icon><Plus /></el-icon>
-          新增疗程卡
+          新增项目卡
         </el-button>
       </div>
       <div class="toolbar-right">
@@ -54,7 +54,6 @@
         :data="tableData"
         style="width: 100%"
       >
-        <el-table-column prop="code" label="卡编码" width="100" />
         <el-table-column prop="name" label="卡名称" min-width="140" />
         <el-table-column label="项目明细" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
@@ -79,7 +78,7 @@
         </el-table-column>
         <el-table-column label="有效期" width="100" align="center">
           <template #default="{ row }">
-            {{ row.validityDays }}天
+            {{ row.validityDays > 0 ? `${row.validityDays}天` : '不限' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
@@ -91,14 +90,18 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:treatment:config:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
-              <el-icon><Delete /></el-icon>
-              删除
-            </el-button>
+            <el-tooltip :disabled="!row.hasSales" content="已有销售数据，不可删除" placement="top">
+              <span>
+                <el-button link type="danger" size="small" :disabled="!!row.hasSales" @click="handleDelete(row)" v-if="hasPermission('store:treatment:config:delete')">
+                  <el-icon><Delete /></el-icon>
+                  删除
+                </el-button>
+              </span>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -120,7 +123,7 @@
     <!-- 新增/编辑弹窗 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="isEdit ? '编辑疗程卡' : '新增疗程卡'"
+      :title="isEdit ? '编辑项目卡' : '新增项目卡'"
       width="720px"
       :close-on-click-modal="false"
     >
@@ -133,16 +136,9 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="卡名称" prop="name">
-              <el-input v-model="formData.name" placeholder="请输入卡名称" />
+              <el-input v-model="formData.name" placeholder="请输入卡名称" :disabled="isLocked" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="卡编码" prop="code">
-              <el-input v-model="formData.code" placeholder="请输入卡编码" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="卡价" prop="price">
               <el-input-number
@@ -151,56 +147,69 @@
                 :precision="2"
                 :step="1"
                 controls-position="right"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="有效期(天)" prop="validityDays">
-              <el-input-number
-                v-model="formData.validityDays"
-                :min="1"
-                :step="1"
-                controls-position="right"
+                :disabled="isLocked"
                 style="width: 100%"
               />
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="状态" prop="isEnabled">
-          <el-radio-group v-model="formData.isEnabled">
-            <el-radio :value="true">启用</el-radio>
-            <el-radio :value="false">停用</el-radio>
-          </el-radio-group>
-        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="有效期(天)" prop="validityDays">
+              <div class="validity-input">
+                <el-input-number
+                  v-model="formData.validityDays"
+                  :min="0"
+                  :precision="0"
+                  :step="1"
+                  controls-position="right"
+                  :disabled="isLocked"
+                  style="flex: 1; min-width: 0"
+                />
+                <span class="form-item-tip">0 表示不限</span>
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="状态" prop="isEnabled">
+              <el-radio-group v-model="formData.isEnabled">
+                <el-radio :value="true">启用</el-radio>
+                <el-radio :value="false">停用</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <!-- 项目明细 -->
         <el-form-item label="项目明细" prop="items">
           <div class="items-editor">
             <el-table :data="formData.items" border size="small" style="width: 100%">
-              <el-table-column label="商品ID" width="120">
+              <el-table-column label="商品编码" min-width="220">
                 <template #default="{ row }">
-                  <el-input-number
+                  <el-select
                     v-model="row.productId"
-                    :min="1"
-                    :controls="false"
+                    filterable
+                    placeholder="请选择服务商品"
                     style="width: 100%"
-                    placeholder="商品ID"
-                  />
+                    :disabled="isLocked"
+                    @change="onItemProductChange(row)"
+                  >
+                    <el-option
+                      v-for="p in serviceProducts"
+                      :key="p.id"
+                      :label="`${p.name}（${p.code}）`"
+                      :value="p.id"
+                    />
+                  </el-select>
                 </template>
               </el-table-column>
-              <el-table-column label="商品名称" min-width="140">
-                <template #default="{ row }">
-                  <el-input v-model="row.productName" placeholder="商品名称（仅显示）" />
-                </template>
-              </el-table-column>
-              <el-table-column label="次数" width="100">
+              <el-table-column label="次数" width="120">
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.quantity"
                     :min="1"
                     :step="1"
-                    :controls="false"
+                    :disabled="isLocked"
                     style="width: 100%"
                   />
                 </template>
@@ -212,13 +221,14 @@
                     :min="0"
                     :precision="2"
                     :controls="false"
+                    :disabled="isLocked"
                     style="width: 100%"
                   />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="70" align="center">
                 <template #default="{ $index }">
-                  <el-button link type="danger" size="small" @click="removeItem($index)">
+                  <el-button link type="danger" size="small" :disabled="isLocked" @click="removeItem($index)">
                     <el-icon><Delete /></el-icon>
                   </el-button>
                 </template>
@@ -227,7 +237,7 @@
             <div class="items-summary">
               <span>总次数：{{ itemsTotalCount }} 次</span>
               <span>原价合计：¥{{ formatPrice(itemsTotalOriginal) }}</span>
-              <el-button link type="primary" size="small" @click="addItem">
+              <el-button link type="primary" size="small" :disabled="isLocked" @click="addItem">
                 <el-icon><Plus /></el-icon>
                 添加项目
               </el-button>
@@ -236,7 +246,7 @@
         </el-form-item>
 
         <el-form-item label="描述">
-          <el-input v-model="formData.description" type="textarea" :rows="2" placeholder="请输入描述" />
+          <el-input v-model="formData.description" type="textarea" :rows="2" placeholder="请输入描述" :disabled="isLocked" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -259,10 +269,15 @@ import {
   updateTreatmentCardConfig,
   deleteTreatmentCardConfig
 } from '@/api/treatment-card'
+import { getProducts } from '@/api/product'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { TreatmentCardConfig, CourseCardItemInput } from '@/api/treatment-card/types'
+import type { Product } from '@/api/product/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -344,21 +359,40 @@ const isEdit = ref(false)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
-// 表单中的项目明细行（含 productName 用于显示）
-interface ItemFormRow extends CourseCardItemInput {
+// 表单中的项目明细行（含商品编码/名称用于显示，productId 未选时为空）
+interface ItemFormRow {
+  productId?: number
+  quantity: number
+  originalPrice: number
   productName?: string
+  productCode?: string
 }
 
 const formData = reactive({
   id: 0,
   name: '',
-  code: '',
   price: 0,
-  validityDays: 30,
+  validityDays: 0,
   isEnabled: true,
+  hasSales: false,
   items: [] as ItemFormRow[],
   description: ''
 })
+
+// 编辑模式且已有销售数据时，仅允许修改“状态”，其余字段锁定
+const isLocked = computed(() => isEdit.value && formData.hasSales)
+
+// 当前门店有效服务商品（type=2 服务项目、status=1 上架）
+const serviceProducts = ref<Product[]>([])
+
+const loadServiceProducts = async () => {
+  try {
+    const res = await getProducts({ type: 2, status: 1, pageSize: 1000 })
+    serviceProducts.value = res.list
+  } catch {
+    ElMessage.error('加载服务商品失败')
+  }
+}
 
 // 表单中的计算属性
 const itemsTotalCount = computed(() => {
@@ -374,17 +408,9 @@ const formRules: FormRules = {
     { required: true, message: '卡名称不能为空', trigger: 'blur' },
     { max: 100, message: '卡名称最多100个字符', trigger: 'blur' }
   ],
-  code: [
-    { required: true, message: '卡编码不能为空', trigger: 'blur' },
-    { max: 50, message: '卡编码最多50个字符', trigger: 'blur' }
-  ],
   price: [
     { required: true, message: '卡价不能为空', trigger: 'blur' },
     { type: 'number', min: 0, message: '卡价必须大于等于0', trigger: 'blur' }
-  ],
-  validityDays: [
-    { required: true, message: '有效期不能为空', trigger: 'blur' },
-    { type: 'number', min: 1, message: '有效期必须大于0', trigger: 'blur' }
   ],
   isEnabled: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
@@ -392,11 +418,22 @@ const formRules: FormRules = {
 // 添加项目行
 const addItem = () => {
   formData.items.push({
-    productId: 0,
+    productId: undefined,
     quantity: 1,
     originalPrice: 0,
-    productName: ''
+    productName: '',
+    productCode: ''
   })
+}
+
+// 选中商品后自动带出名称、编码与原价
+const onItemProductChange = (row: ItemFormRow) => {
+  const product = serviceProducts.value.find(p => p.id === row.productId)
+  if (product) {
+    row.productName = product.name
+    row.productCode = product.code
+    row.originalPrice = product.price
+  }
 }
 
 // 删除项目行
@@ -408,10 +445,10 @@ const removeItem = (index: number) => {
 const resetForm = () => {
   formData.id = 0
   formData.name = ''
-  formData.code = ''
   formData.price = 0
-  formData.validityDays = 30
+  formData.validityDays = 0
   formData.isEnabled = true
+  formData.hasSales = false
   formData.items = []
   formData.description = ''
 }
@@ -429,15 +466,16 @@ const handleEdit = (row: TreatmentCardConfig) => {
   isEdit.value = true
   formData.id = row.id
   formData.name = row.name
-  formData.code = row.code
   formData.price = row.price
   formData.validityDays = row.validityDays
   formData.isEnabled = row.isEnabled
+  formData.hasSales = !!row.hasSales
   formData.items = row.items.map(item => ({
     productId: item.productId,
     quantity: item.quantity,
     originalPrice: item.originalPrice,
-    productName: item.productName
+    productName: item.productName,
+    productCode: item.productCode
   }))
   formData.description = row.description || row.remark || ''
   dialogVisible.value = true
@@ -446,7 +484,7 @@ const handleEdit = (row: TreatmentCardConfig) => {
 // 删除
 const handleDelete = async (row: TreatmentCardConfig) => {
   try {
-    await ElMessageBox.confirm(`确定要删除疗程卡 "${row.name}" 吗？此操作不可恢复！`, '警告', {
+    await ElMessageBox.confirm(`确定要删除项目卡 "${row.name}" 吗？此操作不可恢复！`, '警告', {
       type: 'warning',
       confirmButtonText: '确定删除',
       cancelButtonText: '取消'
@@ -471,7 +509,7 @@ const handleSubmit = async () => {
       }
       for (const item of formData.items) {
         if (!item.productId || item.productId <= 0) {
-          ElMessage.warning('项目明细中的商品ID必须大于0')
+          ElMessage.warning('请选择项目明细中的服务商品')
           return
         }
         if (!item.quantity || item.quantity <= 0) {
@@ -482,15 +520,14 @@ const handleSubmit = async () => {
 
       submitLoading.value = true
       try {
-        // 构造提交数据，移除 productName（仅用于显示）
+        // 构造提交数据，移除商品编码/名称（仅用于显示）
         const items: CourseCardItemInput[] = formData.items.map(item => ({
-          productId: item.productId,
+          productId: item.productId!,
           quantity: item.quantity,
           originalPrice: item.originalPrice
         }))
         const payload = {
           name: formData.name,
-          code: formData.code,
           totalTimes: itemsTotalCount.value,
           price: formData.price,
           validityDays: formData.validityDays,
@@ -522,6 +559,7 @@ onMounted(async () => {
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
   loadData()
+  loadServiceProducts()
 })
 </script>
 
@@ -595,6 +633,21 @@ onMounted(async () => {
 .toolbar-right {
   display: flex;
   gap: 8px;
+}
+
+/* 有效期输入（输入框与提示同行） */
+.validity-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* 表单提示文字 */
+.form-item-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 /* 项目明细编辑器 */

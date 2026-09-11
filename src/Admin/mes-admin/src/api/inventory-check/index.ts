@@ -7,9 +7,11 @@ import type {
   InventoryCheckProductOption,
   InventoryCheckBatchOption,
   InventoryCheckBatchLookup,
+  InventoryCheckBatch,
   SubmitCheckRequest,
   CreateAndSubmitRequest,
   BatchDeductItem,
+  GainBatchItem,
   PagedResponse
 } from './types'
 
@@ -21,9 +23,11 @@ export type {
   InventoryCheckProductOption,
   InventoryCheckBatchOption,
   InventoryCheckBatchLookup,
+  InventoryCheckBatch,
   SubmitCheckRequest,
   CreateAndSubmitRequest,
   BatchDeductItem,
+  GainBatchItem,
   PagedResponse
 }
 
@@ -42,6 +46,15 @@ export async function getInventoryCheckList(query?: InventoryCheckQuery): Promis
     pageSize: query?.pageSize
   })
   return await request<PagedResponse<InventoryCheck>>(`/inventoryChecks${qs}`)
+}
+
+/**
+ * 获取盘点记录详情（含商品名称/编码与批次明细）
+ * @param id 盘点记录ID
+ * @returns 盘点记录详情
+ */
+export async function getInventoryCheckById(id: number): Promise<InventoryCheck> {
+  return await request<InventoryCheck>(`/inventoryChecks/${id}`)
 }
 
 /**
@@ -78,14 +91,17 @@ export async function getProductOptionsForCheck(): Promise<InventoryCheckProduct
 }
 
 /**
- * 盘盈批次号查询：校验批次号在当前商品/门店的存在性，返回批次详情
+ * 盘盈批次选项查询：按商品+门店列出可累加的目标批次（含已用完/已过期），供盘盈弹窗选择
  * @param productId 商品ID
- * @param batchNo 批次号
- * @returns 找到返回批次详情（含生产日期/保质期/过期日期），找不到返回 null
+ * @param params expirationDate（按过期日期精确匹配）与 noExpiry（匹配无有效期批次）二选一
+ * @returns 批次列表（含生产日期/保质期/过期日期/状态）
  */
-export async function getBatchLookup(productId: number, batchNo: string): Promise<InventoryCheckBatchLookup | null> {
-  const qs = buildQuery({ productId, batchNo })
-  return await request<InventoryCheckBatchLookup | null>(`/inventoryChecks/batch-lookup${qs}`)
+export async function getBatchOptionsForCheck(
+  productId: number,
+  params: { expirationDate?: string; noExpiry?: boolean }
+): Promise<InventoryCheckBatchLookup[]> {
+  const qs = buildQuery({ productId, expirationDate: params.expirationDate, noExpiry: params.noExpiry })
+  return await request<InventoryCheckBatchLookup[]>(`/inventoryChecks/batch-options${qs}`)
 }
 
 /**

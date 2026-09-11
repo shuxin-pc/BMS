@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Bms.BuildingBlocks.Core.Context;
 using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
 
@@ -86,6 +87,9 @@ public class EquipmentMaintenanceReminderService : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<StoreDbContext>();
+
+        // 审计日志豁免：后台定时任务无用户操作语义，关闭审计避免脏日志
+        scope.ServiceProvider.GetRequiredService<IAuditLogContext>().IsEnabled = false;
 
         var today = DateTime.Today;
         var upcomingThreshold = today.AddDays(UpcomingDays);

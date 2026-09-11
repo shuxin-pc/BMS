@@ -7,18 +7,10 @@
         <div class="card mb-20">
           <div class="search-form">
             <el-form :inline="true" :model="birthdaySearchForm" class="search-form-inline">
-              <el-form-item label="客户名称">
+              <el-form-item label="客户名称/手机号">
                 <el-input
-                  v-model="birthdaySearchForm.customerName"
-                  placeholder="请输入客户名称"
-                  clearable
-                  style="width: 180px"
-                />
-              </el-form-item>
-              <el-form-item label="手机号">
-                <el-input
-                  v-model="birthdaySearchForm.phone"
-                  placeholder="请输入手机号"
+                  v-model="birthdaySearchForm.keyword"
+                  placeholder="姓名或手机号"
                   clearable
                   style="width: 180px"
                 />
@@ -59,8 +51,8 @@
             :data="birthdayData"
             style="width: 100%"
           >
-            <el-table-column prop="customerName" label="客户名称" width="120" />
-            <el-table-column prop="phone" label="手机号" width="140" />
+            <el-table-column prop="customerName" label="客户名称" min-width="120" />
+            <el-table-column prop="phone" label="手机号" min-width="140" />
             <el-table-column prop="birthday" label="生日" width="100" align="center" />
             <el-table-column label="距离生日" width="110" align="center">
               <template #default="{ row }">
@@ -80,16 +72,22 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="careTime" label="关怀时间" width="170">
+            <el-table-column prop="careTime" label="关怀时间" min-width="170">
               <template #default="{ row }">
-                <span v-if="row.careTime">{{ row.careTime }}</span>
+                <span v-if="row.careTime">{{ formatDateTime(row.careTime) }}</span>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作人" width="100" align="center">
+              <template #default="{ row }">
+                <span v-if="row.careStatus === 2 && row.operatorName">{{ row.operatorName }}</span>
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="120" fixed="right">
               <template #default="{ row }">
                 <el-button
-                  v-if="row.careStatus === 1"
+                  v-if="row.careStatus === 1 && hasPermission('store:customer:care:markCared')"
                   link
                   type="primary"
                   size="small"
@@ -124,18 +122,10 @@
         <div class="card mb-20">
           <div class="search-form">
             <el-form :inline="true" :model="thanksSearchForm" class="search-form-inline">
-              <el-form-item label="客户名称">
+              <el-form-item label="客户名称/手机号">
                 <el-input
-                  v-model="thanksSearchForm.customerName"
-                  placeholder="请输入客户名称"
-                  clearable
-                  style="width: 180px"
-                />
-              </el-form-item>
-              <el-form-item label="手机号">
-                <el-input
-                  v-model="thanksSearchForm.phone"
-                  placeholder="请输入手机号"
+                  v-model="thanksSearchForm.keyword"
+                  placeholder="姓名或手机号"
                   clearable
                   style="width: 180px"
                 />
@@ -176,14 +166,23 @@
             :data="thanksData"
             style="width: 100%"
           >
-            <el-table-column prop="customerName" label="客户名称" width="120" />
-            <el-table-column prop="phone" label="手机号" width="140" />
-            <el-table-column label="最近消费金额" width="130" align="right">
+            <el-table-column prop="customerName" label="客户名称" min-width="120" />
+            <el-table-column prop="phone" label="手机号" min-width="140" />
+            <el-table-column label="近7天累计" width="130" align="right">
               <template #default="{ row }">
-                <span class="price-text">¥{{ formatPrice(row.lastAmount) }}</span>
+                <span class="price-text">¥{{ formatPrice(row.totalAmount) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="lastConsumeTime" label="最近消费时间" width="170" />
+            <el-table-column label="消费频次" width="90" align="center">
+              <template #default="{ row }">
+                <span>{{ row.orderCount }} 次</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="lastConsumeTime" label="最近消费时间" min-width="170">
+              <template #default="{ row }">
+                <span>{{ formatDateTime(row.lastConsumeTime) }}</span>
+              </template>
+            </el-table-column>
             <el-table-column label="感谢状态" width="100" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.thankStatus === 2 ? 'success' : 'warning'" size="small" effect="plain">
@@ -197,16 +196,22 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="thankTime" label="感谢时间" width="170">
+            <el-table-column prop="thankTime" label="感谢时间" min-width="170">
               <template #default="{ row }">
-                <span v-if="row.thankTime">{{ row.thankTime }}</span>
+                <span v-if="row.thankTime">{{ formatDateTime(row.thankTime) }}</span>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作人" width="100" align="center">
+              <template #default="{ row }">
+                <span v-if="row.thankStatus === 2 && row.operatorName">{{ row.operatorName }}</span>
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
                 <el-button
-                  v-if="row.thankStatus === 1"
+                  v-if="row.thankStatus === 1 && hasPermission('store:customer:care:markThanked')"
                   link
                   type="primary"
                   size="small"
@@ -276,9 +281,15 @@ import {
   markConsumeThanked
 } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
+import { formatDateTime } from '@/utils/date'
 import type { BirthdayReminder, ConsumeThankRecord } from '@/api/customer/types'
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 const activeTab = ref('birthday')
 
@@ -286,8 +297,7 @@ const activeTab = ref('birthday')
 const birthdayLoading = ref(false)
 const birthdayData = ref<BirthdayReminder[]>([])
 const birthdaySearchForm = reactive({
-  customerName: '',
-  phone: '',
+  keyword: '',
   careStatus: undefined as number | undefined
 })
 const birthdayPagination = reactive({
@@ -300,8 +310,7 @@ const loadBirthdayData = async () => {
   birthdayLoading.value = true
   try {
     const res = await getBirthdayReminders({
-      customerName: birthdaySearchForm.customerName || undefined,
-      phone: birthdaySearchForm.phone || undefined,
+      keyword: birthdaySearchForm.keyword || undefined,
       careStatus: birthdaySearchForm.careStatus,
       pageIndex: birthdayPagination.pageIndex,
       pageSize: birthdayPagination.pageSize
@@ -321,8 +330,7 @@ const handleBirthdaySearch = () => {
 }
 
 const handleBirthdayReset = () => {
-  birthdaySearchForm.customerName = ''
-  birthdaySearchForm.phone = ''
+  birthdaySearchForm.keyword = ''
   birthdaySearchForm.careStatus = undefined
   handleBirthdaySearch()
 }
@@ -341,8 +349,7 @@ const handleMarkCared = async (row: BirthdayReminder) => {
 const thanksLoading = ref(false)
 const thanksData = ref<ConsumeThankRecord[]>([])
 const thanksSearchForm = reactive({
-  customerName: '',
-  phone: '',
+  keyword: '',
   thankStatus: undefined as number | undefined
 })
 const thanksPagination = reactive({
@@ -355,8 +362,7 @@ const loadThanksData = async () => {
   thanksLoading.value = true
   try {
     const res = await getConsumeThanks({
-      customerName: thanksSearchForm.customerName || undefined,
-      phone: thanksSearchForm.phone || undefined,
+      keyword: thanksSearchForm.keyword || undefined,
       thankStatus: thanksSearchForm.thankStatus,
       pageIndex: thanksPagination.pageIndex,
       pageSize: thanksPagination.pageSize
@@ -376,8 +382,7 @@ const handleThanksSearch = () => {
 }
 
 const handleThanksReset = () => {
-  thanksSearchForm.customerName = ''
-  thanksSearchForm.phone = ''
+  thanksSearchForm.keyword = ''
   thanksSearchForm.thankStatus = undefined
   handleThanksSearch()
 }

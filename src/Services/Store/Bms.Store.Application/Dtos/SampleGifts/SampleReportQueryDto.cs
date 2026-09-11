@@ -30,7 +30,7 @@ public class SampleReportQueryDto : PagedRequestDto
 
 /// <summary>
 /// 样品/赠品按活动维度统计报表查询参数（P-SG-04）
-/// R5：数据源从 SampleGiftOut 迁移到 InventoryLogs（SourceType 9=样品领用出库/10=赠品活动出库）
+/// R5：数据源从 SampleGiftOut 迁移到 InventoryLogs（SourceType 8=样品领用出库/9=赠品活动出库）
 /// </summary>
 public class SampleActivityReportQueryDto : PagedRequestDto
 {
@@ -67,9 +67,9 @@ public class SampleCustomerReportQueryDto : PagedRequestDto
     public long? CustomerId { get; set; }
 
     /// <summary>
-    /// 客户名称（模糊匹配）
+    /// 客户名称或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足）
     /// </summary>
-    public string? CustomerName { get; set; }
+    public string? Keyword { get; set; }
 
     /// <summary>
     /// 开始日期（按 ReceiveTime 过滤）

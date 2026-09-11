@@ -2,7 +2,7 @@ namespace Bms.Store.Domain.Entities;
 
 /// <summary>
 /// 跨店权益操作审计日志
-/// 记录跨店核销、跨店消费、跨店充值、疗程卡转让等高风险操作的审计信息
+/// 记录跨店核销、跨店消费、跨店充值、项目卡转让等高风险操作的审计信息
 /// 用于安全审计、风控分析、对账核查（文档 6.1 节）
 /// 审计日志为 append-only，不提供修改/删除接口
 /// </summary>
@@ -11,7 +11,7 @@ public class CrossStoreOperationLog : StoreBusinessEntityBase
     /// <summary>
     /// 操作类型：
     /// CrossStoreVerify-跨店核销, CrossStoreConsume-跨店消费,
-    /// CrossStoreRecharge-跨店充值, TreatmentCardTransfer-疗程卡转让
+    /// CrossStoreRecharge-跨店充值, TreatmentCardTransfer-项目卡转让
     /// </summary>
     public string OperationType { get; set; } = string.Empty;
 
@@ -56,7 +56,7 @@ public class CrossStoreOperationLog : StoreBusinessEntityBase
     public string? CustomerPhoneTail { get; set; }
 
     /// <summary>
-    /// 客户归属门店ID（储值账户开户门店 / 疗程卡发卡门店）
+    /// 客户归属门店ID（储值账户开户门店 / 项目卡发卡门店）
     /// 与 OperationStoreId 对比判断是否跨店
     /// </summary>
     public long? HomeStoreId { get; set; }
@@ -82,12 +82,12 @@ public class CrossStoreOperationLog : StoreBusinessEntityBase
     public string? RelatedEntitySnapshot { get; set; }
 
     /// <summary>
-    /// 转出客户ID（仅疗程卡转让使用）
+    /// 转出客户ID（仅项目卡转让使用）
     /// </summary>
     public long? FromCustomerId { get; set; }
 
     /// <summary>
-    /// 转入客户ID（仅疗程卡转让使用）
+    /// 转入客户ID（仅项目卡转让使用）
     /// </summary>
     public long? ToCustomerId { get; set; }
 

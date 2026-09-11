@@ -12,6 +12,24 @@
               style="width: 180px"
             />
           </el-form-item>
+          <el-form-item label="批次号">
+            <el-input
+              v-model="searchForm.batchNo"
+              placeholder="请输入批次号"
+              clearable
+              style="width: 180px"
+            />
+          </el-form-item>
+          <el-form-item label="出库来源">
+            <el-select v-model="searchForm.sourceType" placeholder="全部来源" clearable style="width: 150px">
+              <el-option
+                v-for="item in outboundSourceTypeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item label="日期范围">
             <el-date-picker
               v-model="searchForm.dateRange"
@@ -40,7 +58,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button v-if="hasPermission('store:purchase-inventory:outbound:add')" type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
           新增出库
         </el-button>
@@ -71,9 +89,9 @@
             <span class="quantity-negative">{{ formatNumber(row.quantity) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="出库来源" width="100" align="center">
+        <el-table-column label="出库来源" width="120" align="center">
           <template #default="{ row }">
-            {{ row.sourceType ? (outboundSourceTypeMap[row.sourceType as OutboundSourceType] || '-') : '-' }}
+            {{ row.sourceType != null ? (inventoryLogSourceTypeMap[row.sourceType as InventoryLogSourceType] || '-') : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="操作前库存" width="100" align="center">
@@ -144,9 +162,9 @@
             placeholder="请选择出库来源"
             style="width: 100%"
           >
-            <el-option label="样品领用" :value="9" />
-            <el-option label="赠品活动" :value="10" />
-            <el-option label="其他" :value="11" />
+            <el-option label="样品领用" :value="8" />
+            <el-option label="赠品活动" :value="9" />
+            <el-option label="其他" :value="10" />
           </el-select>
         </el-form-item>
         <el-form-item label="当前库存">
@@ -230,16 +248,34 @@ import {
   getProductOptions,
   getProductStock,
   getProductBatches,
-  outboundSourceTypeMap
+  inventoryLogSourceTypeMap
 } from '@/api/inventory-ops'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { InventoryLog, OutboundSourceType, InventoryBatchOption } from '@/api/inventory-ops/types'
+import { useUserStore } from '@/stores/user'
+import type { InventoryLog, OutboundSourceType, InventoryLogSourceType, InventoryBatchOption } from '@/api/inventory-ops/types'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
+
+// 出库来源筛选选项（仅列出 Type=2 出库流水相关的来源类型，标签与表格列保持一致）
+const outboundSourceTypeOptions: { label: string; value: InventoryLogSourceType }[] = [
+  { label: '销售出库', value: 0 },
+  { label: '盘点调整', value: 3 },
+  { label: '调拨出库', value: 5 },
+  { label: '采购退货出库', value: 6 },
+  { label: '项目卡核销出库', value: 7 },
+  { label: '样品领用出库', value: 8 },
+  { label: '赠品活动出库', value: 9 },
+  { label: '其他', value: 10 }
+]
 
 // 搜索表单
 const searchForm = reactive({
   productName: '',
+  batchNo: '',
+  sourceType: undefined as InventoryLogSourceType | undefined,
   dateRange: [] as string[]
 })
 
@@ -263,7 +299,9 @@ const loadData = async () => {
   try {
     const res = await getInventoryLogList({
       productName: searchForm.productName || undefined,
+      batchNo: searchForm.batchNo || undefined,
       type: 2,
+      sourceType: searchForm.sourceType,
       startDate: searchForm.dateRange?.[0] || undefined,
       endDate: searchForm.dateRange?.[1] || undefined,
       pageIndex: pagination.pageIndex,
@@ -298,6 +336,8 @@ const handleSearch = () => {
 // 重置
 const handleReset = () => {
   searchForm.productName = ''
+  searchForm.batchNo = ''
+  searchForm.sourceType = undefined
   searchForm.dateRange = []
   handleSearch()
 }
@@ -467,18 +507,6 @@ const formatNumber = (num: number) => {
   return num.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

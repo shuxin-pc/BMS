@@ -97,8 +97,12 @@ public class InventoryLogAppService : IInventoryLogAppService
                 filtered = filtered.Where(x => x.Log.CreatedTime <= query.EndDate.Value.Date.AddDays(1).AddTicks(-1));
 
             var filteredTotal = filtered.Count();
+            // 展示排序：时间倒序 + 同时间块内按 Id 倒序（与累加正序严格反向），
+            // 保证同时间操作的多条流水"商品总库存"列从上到下连续，
+            // 最上方为该时间块最后执行的结果：入库块总量大的在上、出库块总量小的在上。
             var pageItems = filtered
                 .OrderByDescending(x => x.Log.CreatedTime)
+                .ThenByDescending(x => x.Log.Id)
                 .Skip((query.PageIndex - 1) * query.PageSize)
                 .Take(query.PageSize)
                 .ToList();
@@ -263,7 +267,7 @@ public class InventoryLogAppService : IInventoryLogAppService
             && InventoryLogSourceTypes.IsSalesCategory(dto.SourceType.Value))
         {
             return ApiResponseDto<InventoryLogDto>.Fail(
-                $"销售出库类流水（SourceType={dto.SourceType}）必须通过订单/疗程卡核销流程创建，禁止手动录入", 400);
+                $"销售出库类流水（SourceType={dto.SourceType}）必须通过订单/项目卡核销流程创建，禁止手动录入", 400);
         }
 
         var tenantId = _currentUser.TenantId.Value;

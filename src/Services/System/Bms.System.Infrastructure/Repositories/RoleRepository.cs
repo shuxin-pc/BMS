@@ -56,6 +56,18 @@ public class RoleRepository : IRoleRepository
         return roles;
     }
 
+    public async Task<int> GetCountAsync(long? tenantId = null)
+    {
+        var query = _context.Roles.Where(r => !r.IsDeleted);
+
+        if (tenantId.HasValue)
+        {
+            query = query.Where(r => r.TenantId == tenantId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
     public async Task<List<Role>> GetByTenantIdAsync(long tenantId)
     {
         return await _context.Roles

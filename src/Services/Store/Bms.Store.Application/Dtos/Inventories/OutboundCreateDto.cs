@@ -11,8 +11,8 @@ public class OutboundCreateDto
 
     /// <summary>
     /// 出库来源类型，取值见 InventoryLogSourceTypes：
-    /// 3=盘点盘亏 5=调拨出库 6=其他 7=采购退货出库 9=样品赠品(历史) 10=样品领用 11=赠品活动
-    /// 禁止手动创建的来源 {0=销售出库, 8=疗程卡核销出库} 由 Validator 拒绝
+    /// 0=销售出库 3=盘点调整 5=调拨出库 6=采购退货出库 7=项目卡核销出库 8=样品领用出库 9=赠品活动出库 10=其他
+    /// 手动出库仅允许 {8=样品领用 9=赠品活动 10=其他}，其余来源由对应业务流程产生，Validator 拒绝
     /// </summary>
     public int SourceType { get; set; }
 

@@ -13,17 +13,12 @@ public class CustomerPointsLogQueryDto : PagedRequestDto
     public long? CustomerId { get; set; }
 
     /// <summary>
-    /// 积分类型（参见 CustomerPointsLogType：1:消费获得 2:积分抵扣 3:退款扣减 5:充值获得 6:疗程卡购买获得 7:过期清零 8:手动调整）
+    /// 积分类型（参见 CustomerPointsLogType：1:消费获得 2:积分抵扣 3:退款扣减 5:充值获得 6:项目卡购买获得 7:过期清零 8:手动调整）
     /// </summary>
     public int? Type { get; set; }
 
     /// <summary>
-    /// 客户姓名（模糊匹配）
+    /// 客户名称或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足）
     /// </summary>
-    public string? CustomerName { get; set; }
-
-    /// <summary>
-    /// 手机号（模糊匹配）
-    /// </summary>
-    public string? Phone { get; set; }
+    public string? Keyword { get; set; }
 }

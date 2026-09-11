@@ -29,7 +29,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:customer:tag:add')">
           <el-icon><Plus /></el-icon>
           新增标签
         </el-button>
@@ -37,6 +37,7 @@
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
+          v-if="hasPermission('store:customer:tag:batchDelete')"
         >
           <el-icon><Delete /></el-icon>
           批量删除
@@ -76,11 +77,11 @@
         <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:customer:tag:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:customer:tag:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -148,9 +149,14 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import { getAllCustomerTags, createCustomerTag, updateCustomerTag, deleteCustomerTag, batchDeleteCustomerTags } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { CustomerTag } from '@/api/customer/types'
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 颜色选项
 const colorOptions = [

@@ -4,7 +4,7 @@ using Bms.Store.Application.Dtos.TreatmentCards;
 namespace Bms.Store.Application.Services;
 
 /// <summary>
-/// 疗程卡配置应用服务接口
+/// 项目卡配置应用服务接口
 /// </summary>
 public interface ITreatmentCardAppService
 {

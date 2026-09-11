@@ -140,6 +140,8 @@ export interface SampleReceiveQuery {
   productId?: number
   /** 客户ID */
   customerId?: number
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 页码 */
   pageIndex?: number
   /** 每页条数 */

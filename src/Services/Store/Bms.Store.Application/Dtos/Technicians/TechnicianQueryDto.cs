@@ -8,14 +8,9 @@ namespace Bms.Store.Application.Dtos.Technicians;
 public class TechnicianQueryDto : PagedRequestDto
 {
     /// <summary>
-    /// 技师姓名（模糊查询）
+    /// 技师姓名或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足）
     /// </summary>
-    public string? Name { get; set; }
-
-    /// <summary>
-    /// 手机号
-    /// </summary>
-    public string? Phone { get; set; }
+    public string? Keyword { get; set; }
 
     /// <summary>
     /// 状态筛选（1:在岗 2:休息）

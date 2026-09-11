@@ -49,6 +49,8 @@ public class CustomerAppService : ICustomerAppService
             queryable = queryable.Where(c => c.Name.Contains(query.Name));
         if (!string.IsNullOrWhiteSpace(query.Phone))
             queryable = queryable.Where(c => c.Phone.Contains(query.Phone));
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(c => c.Name.Contains(query.Keyword) || c.Phone.Contains(query.Keyword));
         if (query.LevelId.HasValue)
             queryable = queryable.Where(c => c.LevelId == query.LevelId.Value);
         if (query.TagId.HasValue)
@@ -263,12 +265,12 @@ public class CustomerAppService : ICustomerAppService
         var lastConsumeTime = orders.Max(o => (DateTime?)o.OrderTime);
 
         // 按订单类型分组统计消费偏好（保留现有逻辑，兼容前端契约）
-        // OrderType 映射：1:零售->实物商品 2:服务->服务项目 3:疗程卡核销->疗程卡
+        // OrderType 映射：1:零售->实物商品 2:服务->服务项目 3:项目卡核销->项目卡
         var typeNames = new Dictionary<int, (int ProductType, string Name)>
         {
             { 1, (1, "实物商品") },
             { 2, (2, "服务项目") },
-            { 3, (4, "疗程卡") }
+            { 3, (4, "项目卡") }
         };
 
         var preferences = orders
@@ -402,9 +404,9 @@ public class CustomerAppService : ICustomerAppService
 
     /// <summary>
     /// 永久删除客户档案（物理删除）
-    /// 物理删除客户档案及关联的个人信息（美容档案、体型数据、服务对比照片、消费偏好、积分流水、消费记录、储值账户、疗程卡记录）
+    /// 物理删除客户档案及关联的个人信息（美容档案、体型数据、服务对比照片、消费偏好、积分流水、消费记录、储值账户、项目卡记录）
     /// 订单业务数据脱敏保留（CustomerId 置空，断开与客户的关联）
-    /// 前置条件：无未完成订单、无未核销疗程卡、无储值余额
+    /// 前置条件：无未完成订单、无未核销项目卡、无储值余额
     /// 审计日志永久保留，满足《个人信息保护法》第 47 条合规要求
     /// 注：仅能删除本店客户；关联数据按租户聚合清除（含跨门店消费记录）
     /// </summary>
@@ -427,19 +429,13 @@ public class CustomerAppService : ICustomerAppService
         if (!string.Equals(phoneLast4, dto.ConfirmCode, StringComparison.Ordinal))
             return ApiResponseDto.Fail("二次确认码不匹配（应为客户手机号后4位）", 400);
 
-        // 前置条件1：无未完成订单（Status=1 进行中）
-        var hasPendingOrders = await _dbContext.Orders
-            .AnyAsync(o => o.CustomerId == id && o.TenantId == tenantId && o.Status == 1);
-        if (hasPendingOrders)
-            return ApiResponseDto.Fail("客户存在未完成订单，无法永久删除", 400);
-
-        // 前置条件2：无未核销疗程卡（Status=1 有效 且 RemainingTimes > 0）
+        // 前置条件1：无未核销项目卡（Status=1 有效 且 RemainingTimes > 0）
         var hasActiveTreatmentCards = await _dbContext.TreatmentCardSales
             .AnyAsync(t => t.CustomerId == id && t.TenantId == tenantId && !t.IsDeleted && t.Status == 1 && t.RemainingTimes > 0);
         if (hasActiveTreatmentCards)
-            return ApiResponseDto.Fail("客户存在未核销的疗程卡，无法永久删除", 400);
+            return ApiResponseDto.Fail("客户存在未核销的项目卡，无法永久删除", 400);
 
-        // 前置条件3：无储值余额
+        // 前置条件2：无储值余额
         var storedValueAccount = await _dbContext.StoredValueAccounts
             .FirstOrDefaultAsync(a => a.CustomerId == id && a.TenantId == tenantId);
         if (storedValueAccount != null && storedValueAccount.Balance > 0)

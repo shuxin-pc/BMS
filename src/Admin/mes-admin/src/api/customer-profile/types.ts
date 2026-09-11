@@ -56,10 +56,8 @@ export interface CustomerBeautyProfile {
 export interface BeautyProfileQuery {
   /** 客户ID（精确匹配，用于服务档案页按当前客户过滤） */
   customerId?: number
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 客户手机号（模糊匹配） */
-  customerPhone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 肤质类型 */
   skinType?: SkinType
   /** 页码 */
@@ -147,10 +145,8 @@ export interface ServiceReaction {
 export interface ServiceReactionQuery {
   /** 客户ID（精确匹配，用于服务档案页按当前客户过滤） */
   customerId?: number
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 客户手机号（模糊匹配） */
-  customerPhone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 开始日期 */
   startDate?: string
   /** 结束日期 */
@@ -261,10 +257,8 @@ export interface ServiceComparisonPhoto {
 export interface ComparisonPhotoQuery {
   /** 客户ID */
   customerId?: number
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 客户手机号（模糊匹配） */
-  customerPhone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 服务项目（模糊匹配） */
   serviceItem?: string
   /** 页码 */
@@ -358,10 +352,8 @@ export interface BodyDataRecord {
 export interface BodyDataQuery {
   /** 客户ID */
   customerId?: number
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 客户手机号（模糊匹配） */
-  customerPhone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 开始日期 */
   startDate?: string
   /** 结束日期 */

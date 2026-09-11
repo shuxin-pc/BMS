@@ -16,7 +16,7 @@ public class TopProductsQueryDto
     public int Month { get; set; }
 
     /// <summary>
-    /// 商品类型筛选（多值，1:零售 2:服务 3:耗材 4:疗程卡），不传则查全部
+    /// 商品类型筛选（多值，1:零售 2:服务 3:耗材 4:项目卡），不传则查全部
     /// </summary>
     public List<int>? ProductTypes { get; set; }
 

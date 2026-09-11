@@ -57,10 +57,9 @@ public class TechnicianAppService : ITechnicianAppService
             .Include(t => t.TechnicianSkills).ThenInclude(ts => ts.SkillCategory)
             .Where(t => !t.IsDeleted && (t.TenantId == tenantId || t.TenantId == PlatformTenantId));
 
-        if (!string.IsNullOrWhiteSpace(query.Name))
-            queryable = queryable.Where(t => t.Name.Contains(query.Name));
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            queryable = queryable.Where(t => t.Phone.Contains(query.Phone));
+        // 技师姓名/手机号合并关键字查询：命中姓名或手机号其一即满足（对齐预约列表）
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(t => t.Name.Contains(query.Keyword) || t.Phone.Contains(query.Keyword));
         if (query.Status.HasValue)
             queryable = queryable.Where(t => t.Status == query.Status.Value);
         if (query.Source.HasValue)

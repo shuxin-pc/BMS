@@ -49,10 +49,9 @@ public class CustomerBeautyProfileAppService : ICustomerBeautyProfileAppService
 
         if (query.CustomerId.HasValue)
             queryable = queryable.Where(x => x.p.CustomerId == query.CustomerId.Value);
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            queryable = queryable.Where(x => x.c.Name.Contains(query.CustomerName));
-        if (!string.IsNullOrWhiteSpace(query.CustomerPhone))
-            queryable = queryable.Where(x => x.c.Phone.Contains(query.CustomerPhone));
+        // 客户名称/手机号合并关键字查询：命中姓名或手机号其一即满足（对齐预约列表）
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(x => x.c.Name.Contains(query.Keyword) || x.c.Phone.Contains(query.Keyword));
         if (!string.IsNullOrWhiteSpace(query.SkinType))
             queryable = queryable.Where(x => x.p.SkinType == query.SkinType);
 

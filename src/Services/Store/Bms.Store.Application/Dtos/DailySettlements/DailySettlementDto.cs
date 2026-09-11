@@ -76,7 +76,7 @@ public class DailySettlementDto
     public decimal SalesOutboundCost { get; set; }
 
     /// <summary>
-    /// 疗程卡核销出库成本（核销时扣减的零售商品/BOM 耗材）
+    /// 项目卡核销出库成本（核销时扣减的零售商品/BOM 耗材）
     /// </summary>
     public decimal TreatmentCardOutboundCost { get; set; }
 
@@ -151,7 +151,7 @@ public class DailySettlementDto
     public int Source { get; set; }
 
     /// <summary>
-    /// 疗程卡核销折算金额（权责发生制转营收）
+    /// 项目卡核销折算金额（权责发生制转营收）
     /// </summary>
     public decimal TreatmentCardVerifyAmount { get; set; }
 

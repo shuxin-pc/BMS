@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Bms.Store.Domain.Constants;
 using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
 
@@ -13,7 +14,9 @@ namespace Bms.Store.Api.BackgroundServices;
 /// <summary>
 /// 客户生日提醒站内信自动发送定时任务
 /// 每日凌晨 07:00 执行（避开 01:00 积分过期 / 02:00 日结 / 02:30 月度统计 / 03:00 库存预警 / 06:00 设备保养），
-/// 扫描未来 3 天内（含当天）过生日的客户，向门店设置中配置的生日提醒角色发送站内信。
+/// 扫描未来 3 天内（含当天）过生日的客户，向各门店提醒配置（子表 StoreReminderSetting，ReminderType=Birthday）中
+/// 配置的生日提醒角色发送站内信。
+/// 生日提醒角色为门店级配置（每门店一条记录）：按门店扫描该门店客户，使用该门店配置的角色发送。
 /// 按客户+生日年份去重（BizType=BirthdayReminder, BizKey={customerId}:{year}），
 /// 服务中断恢复后只要仍在 3 天窗口内会自动补发，同一客户同一年生日仅发送一次。
 /// </summary>
@@ -112,7 +115,7 @@ public class BirthdayReminderService : BackgroundService
     }
 
     /// <summary>
-    /// 扫描所有租户的未来 3 天内过生日的客户，向配置的角色发送站内信
+    /// 扫描所有门店配置的未来 3 天内过生日的客户，向各门店配置的角色发送站内信
     /// </summary>
     private async Task ScanAsync(CancellationToken cancellationToken)
     {
@@ -131,18 +134,19 @@ public class BirthdayReminderService : BackgroundService
 
         var today = DateTime.Today;
 
-        // 1. 查询所有配置了生日提醒角色的租户设置（每租户一条）
-        var settings = await dbContext.StoreTenantSettings
-            .Where(s => !s.IsDeleted)
-            .ToListAsync(cancellationToken);
-
-        var activeSettings = settings
-            .Where(s => s.BirthdayReminderRoleIds != null && s.BirthdayReminderRoleIds.Count > 0)
+        // 1. 查询所有配置了生日提醒角色的门店提醒配置（子表，每门店一条，含 TenantId/StoreId/RoleIds）
+        // RoleIds 为 jsonb 列，EF 会把 Count>0 翻译为 cardinality(jsonb)，PostgreSQL 不支持该函数，
+        // 故不在 SQL 中过滤 RoleIds 非空，先按 ReminderType 查出后在内存过滤（三提醒服务同一模式）
+        var activeSettings = (await dbContext.StoreReminderSettings
+            .Where(s => !s.IsDeleted
+                && s.ReminderType == ReminderTypes.Birthday)
+            .ToListAsync(cancellationToken))
+            .Where(s => s.RoleIds != null && s.RoleIds.Count > 0)
             .ToList();
 
         if (activeSettings.Count == 0)
         {
-            _logger.LogInformation("生日提醒扫描完成：无租户配置生日提醒角色，跳过");
+            _logger.LogInformation("生日提醒扫描完成：无门店配置生日提醒角色，跳过");
             return;
         }
 
@@ -157,27 +161,30 @@ public class BirthdayReminderService : BackgroundService
             totalSkipped += skipped;
         }
 
-        _logger.LogInformation("生日提醒扫描完成：扫描租户 {Tenants} 个，发送站内信 {Sent} 条，跳过已发送 {Skipped} 条",
+        _logger.LogInformation("生日提醒扫描完成：扫描门店配置 {Stores} 条，发送站内信 {Sent} 条，跳过已发送 {Skipped} 条",
             activeSettings.Count, totalSent, totalSkipped);
     }
 
     /// <summary>
-    /// 处理单个租户的生日提醒
+    /// 处理单个门店的生日提醒
+    /// 按该门店配置的 StoreId 过滤客户，使用该门店配置的生日提醒角色发送
     /// </summary>
     private async Task<(int sent, int skipped)> ProcessTenantAsync(
         StoreDbContext dbContext,
         HttpClient httpClient,
-        StoreTenantSetting setting,
+        StoreReminderSetting setting,
         DateTime today,
         CancellationToken cancellationToken)
     {
         var tenantId = setting.TenantId;
+        var storeId = setting.StoreId;
 
-        // 2. 查询该租户下所有有生日且未删除的客户
+        // 2. 查询该门店下所有有生日且未删除的客户
         var customers = await dbContext.Customers
             .Where(c => c.Birthday.HasValue
                 && !c.IsDeleted
-                && c.TenantId == tenantId)
+                && c.TenantId == tenantId
+                && c.StoreId == storeId)
             .Select(c => new { c.Id, c.Name, c.Phone, c.Birthday })
             .ToListAsync(cancellationToken);
 
@@ -271,7 +278,7 @@ public class BirthdayReminderService : BackgroundService
     /// </summary>
     private async Task<bool> SendBirthdayNotifyAsync(
         HttpClient httpClient,
-        StoreTenantSetting setting,
+        StoreReminderSetting setting,
         long customerId,
         string customerName,
         string phone,
@@ -291,7 +298,7 @@ public class BirthdayReminderService : BackgroundService
             Category = MessageCategoryBusiness,
             SourceSubsystemCode = SourceSubsystemCode,
             TargetType = MessageTargetTypeRole,
-            TargetIds = setting.BirthdayReminderRoleIds,
+            TargetIds = setting.RoleIds,
             TargetUrl = targetUrl,
             TenantId = setting.TenantId,
             BizType = BizType,

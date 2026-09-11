@@ -4,20 +4,12 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="客户姓名">
+          <el-form-item label="客户名称/手机号">
             <el-input
-              v-model="searchForm.name"
-              placeholder="请输入客户姓名"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 180px"
-            />
-          </el-form-item>
-          <el-form-item label="手机号">
-            <el-input
-              v-model="searchForm.phone"
-              placeholder="请输入手机号"
-              clearable
-              style="width: 150px"
             />
           </el-form-item>
           <el-form-item label="客户等级">
@@ -63,7 +55,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:customer:profile:add')">
           <el-icon><Plus /></el-icon>
           新增客户
         </el-button>
@@ -71,6 +63,7 @@
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
+          v-if="hasPermission('store:customer:profile:batchDelete')"
         >
           <el-icon><Delete /></el-icon>
           批量删除
@@ -159,15 +152,15 @@
               <el-icon><View /></el-icon>
               详情
             </el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:customer:profile:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:customer:profile:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
-            <el-button link type="danger" size="small" @click="handlePermanentDelete(row)">
+            <el-button link type="danger" size="small" @click="handlePermanentDelete(row)" v-if="hasPermission('store:customer:profile:permanentDelete')">
               <el-icon><WarnTriangleFilled /></el-icon>
               永久删除
             </el-button>
@@ -360,13 +353,13 @@
         </el-descriptions-item>
         <el-descriptions-item label="积分">
           <span class="points-text">{{ detailData.totalPoints }}</span>
-          <el-button link type="primary" size="small" class="detail-inline-btn" @click="handleOpenPointsAdjust">
+          <el-button link type="primary" size="small" class="detail-inline-btn" @click="handleOpenPointsAdjust" v-if="hasPermission('store:customer:profile:adjustPoints')">
             手动调整
           </el-button>
         </el-descriptions-item>
         <el-descriptions-item label="余额">
           <span class="balance-text">¥{{ formatPrice(detailData.balance) }}</span>
-          <el-button link type="primary" size="small" class="detail-inline-btn" @click="rechargeVisible = true">
+          <el-button link type="primary" size="small" class="detail-inline-btn" @click="rechargeVisible = true" v-if="hasPermission('store:customer:profile:recharge')">
             充值
           </el-button>
         </el-descriptions-item>
@@ -473,7 +466,7 @@
                   <div>按订单类型分组的金额占比：</div>
                   <div>· 零售单 -> 实物商品</div>
                   <div>· 服务单 -> 服务项目</div>
-                  <div>· 疗程卡核销 -> 疗程卡</div>
+                  <div>· 项目卡核销 -> 项目卡</div>
                   <div style="margin-top: 4px; font-size: 12px; color: #606266;">仅统计近 6 个月已完成订单</div>
                 </div>
               </template>
@@ -558,7 +551,7 @@
     >
       <el-alert type="error" :closable="false" show-icon style="margin-bottom: 16px;">
         <template #title>
-          此操作将<strong>物理删除</strong>客户及所有关联个人信息（美容档案、体型数据、服务对比照片、消费偏好、积分流水、消费记录、疗程卡销售、储值账户等），订单数据将脱敏保留。<strong>此操作不可恢复！</strong>
+          此操作将<strong>物理删除</strong>客户及所有关联个人信息（美容档案、体型数据、服务对比照片、消费偏好、积分流水、消费记录、项目卡销售、储值账户等），订单数据将脱敏保留。<strong>此操作不可恢复！</strong>
         </template>
       </el-alert>
 
@@ -631,10 +624,16 @@ import {
   createPointsLog
 } from '@/api/customer'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { Customer, CustomerLevel, CustomerTag, AuthorizationStatus, CustomerConsumptionStat, CustomerPermanentDeleteDto } from '@/api/customer/types'
 import RechargeDialog from '@/views/store/storedvalue/components/RechargeDialog.vue'
+import { formatDate, formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 const route = useRoute()
 
@@ -646,8 +645,7 @@ const allTags = ref<CustomerTag[]>([])
 
 // 搜索表单
 const searchForm = reactive({
-  name: '',
-  phone: '',
+  keyword: '',
   levelId: undefined as number | undefined,
   tagId: undefined as number | undefined,
   gender: undefined as number | undefined
@@ -735,8 +733,7 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getCustomers({
-      name: searchForm.name || undefined,
-      phone: searchForm.phone || undefined,
+      keyword: searchForm.keyword || undefined,
       levelId: searchForm.levelId,
       tagId: searchForm.tagId,
       gender: searchForm.gender,
@@ -760,8 +757,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.name = ''
-  searchForm.phone = ''
+  searchForm.keyword = ''
   searchForm.levelId = undefined
   searchForm.tagId = undefined
   searchForm.gender = undefined
@@ -1086,29 +1082,7 @@ const formatPrice = (price: number) => {
   return price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
-// 格式化日期（仅日期）
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-}
 
-// 格式化日期时间
-const formatDateTime = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

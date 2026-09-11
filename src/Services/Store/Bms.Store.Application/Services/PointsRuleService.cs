@@ -31,7 +31,7 @@ public class PointsRuleService : IPointsRuleService
     /// 计算应发积分：按 PointsRate 计算，Floor 取整
     /// - 校验 PointsRate > 0
     /// - 校验 baseAmount > 0
-    /// - baseAmount 低于 MinAmountThreshold 门槛不发积分（消费、储值充值、疗程卡购买三个场景统一适用）
+    /// - baseAmount 低于 MinAmountThreshold 门槛不发积分（消费、储值充值、项目卡购买三个场景统一适用）
     /// - BirthdayDouble=true 且客户生日当天（月+日相等）-> 积分 ×2
     /// </summary>
     public int CalculateAwardPoints(PointsRule? rule, DateTime? customerBirthday, decimal baseAmount, DateTime now)

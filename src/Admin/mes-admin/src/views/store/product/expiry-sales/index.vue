@@ -162,6 +162,7 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getProductExpirySalesStats, type ProductExpirySalesStat, type ProductExpirySalesQuery } from '@/api/statistics/expiry-sales'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
 
@@ -185,13 +186,6 @@ const dateRange = ref<[string, string]>([
   formatDate(firstDayOfMonth),
   formatDate(today)
 ])
-
-function formatDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 // 表格数据
 const tableLoading = ref(false)

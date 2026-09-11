@@ -4,10 +4,10 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="客户名称">
+          <el-form-item label="客户名称/手机号">
             <el-input
-              v-model="searchForm.customerName"
-              placeholder="请输入客户名称"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 160px"
             />
@@ -43,9 +43,6 @@
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <span class="toolbar-hint">疗程卡销售记录</span>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -64,7 +61,7 @@
         <el-table-column prop="customerName" label="客户名称" width="100" />
         <el-table-column prop="phone" label="手机号" width="130" />
         <el-table-column prop="cardName" label="卡名称" min-width="140" show-overflow-tooltip />
-        <el-table-column label="购买/剩余" width="110" align="center">
+        <el-table-column label="项目/剩余" width="110" align="center">
           <template #default="{ row }">
             <span class="count-text">
               {{ row.totalCount }} / <span :class="{ 'count-warn': row.remainingTimes <= 2 }">{{ row.remainingTimes }}</span>
@@ -78,13 +75,19 @@
         </el-table-column>
         <el-table-column label="支付方式" width="100" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="getPaymentTagType(row.paymentMethod)">
-              {{ getPaymentText(row.paymentMethod) }}
+            <el-tag size="small" :type="getPaymentTagType(row.payMethod)">
+              {{ getPaymentText(row.payMethod) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="purchaseDate" label="销售时间" width="170" />
-        <el-table-column prop="storeCode" label="销售门店" width="100" />
+        <el-table-column label="销售时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.purchaseDate) }}</template>
+        </el-table-column>
+        <el-table-column label="到期时间" width="170">
+          <template #default="{ row }">
+            {{ row.validityDays > 0 ? formatDateTime(row.expiryDate) : '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="getSaleStatusType(row.status)" size="small" effect="dark">
@@ -92,11 +95,21 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleView(row)">
               <el-icon><View /></el-icon>
               详情
+            </el-button>
+            <el-button
+              v-if="hasPermission('store:treatment:sale:refund') && (row.status === 1 || row.status === 2)"
+              link
+              type="warning"
+              size="small"
+              @click="handleRefund(row)"
+            >
+              <el-icon><RefreshLeft /></el-icon>
+              退卡
             </el-button>
           </template>
         </el-table-column>
@@ -134,16 +147,60 @@
           <span class="price-text">¥{{ formatPrice(detailData.amount) }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="支付方式">
-          <el-tag size="small" :type="getPaymentTagType(detailData.paymentMethod)">
-            {{ getPaymentText(detailData.paymentMethod) }}
+          <el-tag size="small" :type="getPaymentTagType(detailData.payMethod)">
+            {{ getPaymentText(detailData.payMethod) }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="销售时间">{{ detailData.purchaseDate }}</el-descriptions-item>
-        <el-descriptions-item label="销售门店">{{ detailData.storeCode }}</el-descriptions-item>
+        <el-descriptions-item label="销售时间" :span="2">{{ formatDateTime(detailData.purchaseDate) }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ detailData.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 退卡弹窗 -->
+    <el-dialog
+      v-model="refundVisible"
+      title="项目卡退卡"
+      width="480px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="refundFormRef"
+        :model="refundForm"
+        :rules="refundRules"
+        label-width="100px"
+      >
+        <el-form-item label="卡名称">
+          <span>{{ refundForm.cardName }}</span>
+        </el-form-item>
+        <el-form-item label="客户">
+          <span>{{ refundForm.customerName }}</span>
+        </el-form-item>
+        <el-form-item label="原售价">
+          <span class="price-text">¥{{ formatPrice(refundForm.amount) }}</span>
+        </el-form-item>
+        <el-form-item label="已消费">
+          <span>¥{{ formatPrice(refundForm.consumedAmount) }}</span>
+        </el-form-item>
+        <el-form-item label="应退金额">
+          <span class="refund-text">¥{{ formatPrice(refundForm.refundAmount) }}</span>
+        </el-form-item>
+        <el-form-item label="退卡原因" prop="remark">
+          <el-input
+            v-model="refundForm.remark"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入退卡原因"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="refundVisible = false">取消</el-button>
+        <el-button type="primary" :loading="refundLoading" @click="handleRefundSubmit">
+          确认退卡
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -152,16 +209,21 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, View } from '@element-plus/icons-vue'
-import { getTreatmentCardSales } from '@/api/treatment-card'
+import type { FormInstance, FormRules } from 'element-plus'
+import { Search, Refresh, View, RefreshLeft } from '@element-plus/icons-vue'
+import { getTreatmentCardSales, refundTreatmentCardSale } from '@/api/treatment-card'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { TreatmentCardSale, PaymentMethod } from '@/api/treatment-card/types'
+import { useUserStore } from '@/stores/user'
+import { formatDateTime } from '@/utils/date'
+import type { TreatmentCardSale } from '@/api/treatment-card/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
-  customerName: '',
+  keyword: '',
   cardName: '',
   status: undefined as number | undefined
 })
@@ -196,28 +258,24 @@ const getSaleStatusType = (status: number): '' | 'success' | 'info' | 'warning' 
   return map[status] || 'info'
 }
 
-// 支付方式文本
-const getPaymentText = (method: PaymentMethod | undefined): string => {
+// 支付方式文本（对齐订单 Order.PayMethod 枚举：1现金 2支付宝 3微信 4银行卡 5储值卡 6积分抵扣 7组合支付）
+const getPaymentText = (method: number | undefined): string => {
   if (!method) return '-'
-  const map: Record<string, string> = {
-    cash: '现金',
-    wechat: '微信',
-    alipay: '支付宝',
-    card: '银行卡',
-    balance: '余额'
-  }
-  return map[method] || method
+  const map: Record<number, string> = { 1: '现金', 2: '支付宝', 3: '微信', 4: '银行卡', 5: '储值卡', 6: '积分抵扣', 7: '组合支付' }
+  return map[method] || '未知'
 }
 
 // 支付方式标签类型
-const getPaymentTagType = (method: PaymentMethod | undefined): '' | 'success' | 'info' | 'warning' => {
+const getPaymentTagType = (method: number | undefined): '' | 'success' | 'info' | 'warning' | 'danger' => {
   if (!method) return 'info'
-  const map: Record<string, '' | 'success' | 'info' | 'warning'> = {
-    cash: 'warning',
-    wechat: 'success',
-    alipay: '',
-    card: 'info',
-    balance: 'warning'
+  const map: Record<number, '' | 'success' | 'info' | 'warning' | 'danger'> = {
+    1: 'warning',
+    2: 'warning',
+    3: 'success',
+    4: 'info',
+    5: 'danger',
+    6: 'warning',
+    7: 'danger'
   }
   return map[method] || 'info'
 }
@@ -227,7 +285,7 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getTreatmentCardSales({
-      customerName: searchForm.customerName || undefined,
+      keyword: searchForm.keyword || undefined,
       cardName: searchForm.cardName || undefined,
       status: searchForm.status,
       pageIndex: pagination.pageIndex,
@@ -250,7 +308,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.customerName = ''
+  searchForm.keyword = ''
   searchForm.cardName = ''
   searchForm.status = undefined
   handleSearch()
@@ -263,6 +321,60 @@ const detailData = ref<TreatmentCardSale | null>(null)
 const handleView = (row: TreatmentCardSale) => {
   detailData.value = row
   detailVisible.value = true
+}
+
+// ==================== 退卡处理 ====================
+const refundVisible = ref(false)
+const refundLoading = ref(false)
+const refundFormRef = ref<FormInstance>()
+const refundForm = reactive({
+  id: '',
+  cardName: '',
+  customerName: '',
+  amount: 0,
+  consumedAmount: 0,
+  refundAmount: 0,
+  remark: ''
+})
+
+const refundRules: FormRules = {
+  remark: [
+    { required: true, message: '退卡原因不能为空', trigger: 'blur' },
+    { max: 200, message: '退卡原因最多200个字符', trigger: 'blur' }
+  ]
+}
+
+// 打开退卡弹窗：应退金额 = 售价 - 已消费金额（与后端 RefundAsync 口径一致）
+const handleRefund = (row: TreatmentCardSale) => {
+  refundForm.id = String(row.id)
+  refundForm.cardName = row.cardName || '-'
+  refundForm.customerName = row.customerName || '-'
+  refundForm.amount = row.amount
+  refundForm.consumedAmount = row.totalConsumedAmount || 0
+  refundForm.refundAmount = Math.max(0, refundForm.amount - refundForm.consumedAmount)
+  refundForm.remark = ''
+  refundVisible.value = true
+}
+
+const handleRefundSubmit = async () => {
+  if (!refundFormRef.value) return
+  await refundFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    refundLoading.value = true
+    try {
+      const res = await refundTreatmentCardSale({
+        id: refundForm.id,
+        remark: refundForm.remark
+      })
+      ElMessage.success(`退卡成功，退款 ¥${formatPrice(res.refundAmount)}`)
+      refundVisible.value = false
+      loadData()
+    } catch (error) {
+      ElMessage.error((error as Error).message || '退卡失败')
+    } finally {
+      refundLoading.value = false
+    }
+  })
 }
 
 onMounted(async () => {
@@ -336,24 +448,20 @@ onMounted(async () => {
   padding: 0 4px;
 }
 
-.toolbar-left {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
 .toolbar-right {
   display: flex;
   gap: 8px;
-}
-
-.toolbar-hint {
-  font-size: 13px;
-  color: var(--text-tertiary);
+  /* 操作栏仅含右侧按钮时 space-between 对单子元素不生效，用 margin-left:auto 推到最右（对齐客户管理页面） */
+  margin-left: auto;
 }
 
 .price-text {
   color: var(--primary);
+  font-weight: 600;
+}
+
+.refund-text {
+  color: #f56c6c;
   font-weight: 600;
 }
 

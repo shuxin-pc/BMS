@@ -27,9 +27,10 @@ public class SubmitCheckDto
     public List<BatchDeductItem>? DeductBatches { get; set; }
 
     /// <summary>
-    /// 盘盈批次号（差异为正时使用，留空后端生成 PY-yyyyMMddHHmmss）
+    /// 盘盈批次累加明细（差异为正时使用，可多个批次）
+    /// 每个批次分别录入累加数量，数量合计必须与差异数量匹配
     /// </summary>
-    public string? GainBatchNo { get; set; }
+    public List<GainBatchItem>? GainBatches { get; set; }
 
     /// <summary>
     /// 盘盈批次单价（差异为正时使用，留空取 Product.CostPrice）
@@ -70,6 +71,22 @@ public class BatchDeductItem
 
     /// <summary>
     /// 该批次扣减数量，必须 &gt; 0
+    /// </summary>
+    public decimal Quantity { get; set; }
+}
+
+/// <summary>
+/// 盘盈批次累加明细项（盘盈累加批次时使用）
+/// </summary>
+public class GainBatchItem
+{
+    /// <summary>
+    /// 批次ID（InventoryBatch.Id）
+    /// </summary>
+    public long BatchId { get; set; }
+
+    /// <summary>
+    /// 该批次累加数量，必须 &gt; 0
     /// </summary>
     public decimal Quantity { get; set; }
 }

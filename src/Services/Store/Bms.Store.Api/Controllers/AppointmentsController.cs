@@ -65,25 +65,4 @@ public class AppointmentsController : ControllerBase
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
-
-    /// <summary>
-    /// 获取明日预约提醒分页列表
-    /// </summary>
-    [HttpGet("tomorrowReminders")]
-    public async Task<ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>> GetTomorrowReminders([FromQuery] TomorrowReminderQueryDto query)
-        => await _appService.GetTomorrowRemindersAsync(query);
-
-    /// <summary>
-    /// 发送预约提醒（更新提醒状态为已提醒）
-    /// </summary>
-    [HttpPost("{id:long}/reminder")]
-    public async Task<ApiResponseDto> SendReminder(long id)
-        => await _appService.SendReminderAsync(id);
-
-    /// <summary>
-    /// 确认明日预约（更新状态为已确认）
-    /// </summary>
-    [HttpPut("{id:long}/confirm")]
-    public async Task<ApiResponseDto> ConfirmAppointment(long id)
-        => await _appService.ConfirmTomorrowAppointmentAsync(id);
 }

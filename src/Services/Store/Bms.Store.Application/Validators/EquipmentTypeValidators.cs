@@ -17,8 +17,8 @@ public class EquipmentTypeCreateDtoValidator : AbstractValidator<EquipmentTypeCr
             .NotEmpty().WithMessage("类型编码不能为空")
             .MaximumLength(50).WithMessage("类型编码最多50个字符")
             .Matches("^[A-Za-z0-9_-]+$").WithMessage("类型编码只能包含字母、数字、下划线和中划线");
-        RuleFor(x => x.Category)
-            .MaximumLength(50).WithMessage("分类最多50个字符");
+        RuleFor(x => x.ParentId)
+            .GreaterThan(0).WithMessage("父级类型ID无效");
         RuleFor(x => x.Spec)
             .MaximumLength(200).WithMessage("规格/型号最多200个字符");
         RuleFor(x => x.Description)

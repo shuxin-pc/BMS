@@ -1,0 +1,25 @@
+/* ==========================================
+ * Popper 顶部发光横线指示器（可复用）
+ *
+ * 用法：在 el-dropdown / el-popover / el-tooltip 的 popper-class 中追加 "popper-glow-line"
+ * 例：popper-class="my-popper popper-glow-line"
+ *
+ * 效果：浮层顶部边缘一条青色发光横线，替代 Element Plus 默认的白色箭头
+ * 依赖：dark-theme.css 中的 --primary / --primary-glow 变量
+ * ========================================== */
+.popper-glow-line .el-popper__arrow::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--primary) !important;
+  box-shadow:
+    0 0 10px 3px var(--primary-glow),
+    0 0 20px 6px var(--primary-glow),
+    0 0 32px 10px var(--primary-glow);
+  opacity: 0.75;
+}

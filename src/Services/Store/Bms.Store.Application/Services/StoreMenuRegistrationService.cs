@@ -142,7 +142,7 @@ public class StoreMenuRegistrationService : IHostedService
                 Code = StoreMenuSeedData.SubsystemCode,
                 Name = StoreMenuSeedData.SubsystemName,
                 Icon = "Shop",
-                Description = "门店管理系统，包含门店档案、商品管理、收银、客户、会员、预约、疗程卡等功能",
+                Description = "门店管理系统，包含门店档案、商品管理、收银、客户、会员、预约、项目卡等功能",
                 Sort = 99,
                 Status = 1
             };

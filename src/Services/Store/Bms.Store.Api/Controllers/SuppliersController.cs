@@ -44,7 +44,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 创建供应商（Scope=1 门店通用 / Scope=2 门店私用）
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost]
     public async Task<ApiResponseDto<SupplierDto>> Create([FromBody] SupplierCreateDto dto)
         => await _appService.CreateAsync(dto);
@@ -52,7 +52,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 更新供应商
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPut("{id:long}")]
     public async Task<ApiResponseDto<SupplierDto>> Update(long id, [FromBody] SupplierUpdateDto dto)
     {
@@ -63,7 +63,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 删除供应商
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpDelete("{id:long}")]
     public async Task<ApiResponseDto> Delete(long id)
         => await _appService.DeleteAsync(id);
@@ -71,7 +71,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 批量删除供应商
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)
         => await _appService.BatchDeleteAsync(request.Ids);
@@ -81,7 +81,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 批量绑定品项到供应商
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost("bind-products")]
     public async Task<ApiResponseDto<List<ProductSupplierDto>>> BindProducts([FromBody] BindProductsDto dto)
         => await _appService.BindProductsAsync(dto);
@@ -89,7 +89,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 解除品项与供应商的关联
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpDelete("products/{productId:long}/{supplierId:long}")]
     public async Task<ApiResponseDto> UnbindProduct(long productId, long supplierId)
         => await _appService.UnbindProductAsync(productId, supplierId);
@@ -97,7 +97,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 设置品项的默认供应商
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPost("default-supplier")]
     public async Task<ApiResponseDto<ProductSupplierDto>> SetDefaultSupplier([FromBody] SetDefaultSupplierDto dto)
         => await _appService.SetDefaultSupplierAsync(dto);
@@ -105,7 +105,7 @@ public class SuppliersController : ControllerBase
     /// <summary>
     /// 更新品项-供应商关联的参考价与供货周期（不改变默认供应商状态）
     /// </summary>
-    [Permission("store:product:supplier:edit")]
+    // [Permission("store:product:supplier:edit")]  // 临时注释：按钮权限待统一恢复
     [HttpPut("product-relation")]
     public async Task<ApiResponseDto<ProductSupplierDto>> UpdateProductRelation([FromBody] UpdateProductSupplierDto dto)
         => await _appService.UpdateProductSupplierAsync(dto);

@@ -154,6 +154,8 @@ export interface CustomerQuery {
   name?: string
   /** 手机号（模糊匹配） */
   phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 等级ID */
   levelId?: number
   /** 客户标签ID（按标签筛选关联客户） */
@@ -289,7 +291,7 @@ export interface PointsRule {
  * - 2: 积分抵扣
  * - 3: 退款扣减
  * - 5: 充值获得
- * - 6: 疗程卡购买获得
+ * - 6: 项目卡购买获得
  * - 7: 过期清零
  * - 8: 手动调整
  */
@@ -327,10 +329,8 @@ export interface PointsRecord {
  * 积分流水查询参数
  */
 export interface PointsRecordQuery {
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 手机号（模糊匹配） */
-  phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 变动类型 */
   changeType?: PointsChangeType
   /** 页码 */
@@ -381,20 +381,18 @@ export interface ConsumeRecord {
   projectName: string
   /** 支付方式：1-现金，2-支付宝，3-微信，4-银行卡，5-储值卡，6-积分抵扣，7-组合支付 */
   paymentMethod: number
+  /** 订单状态：2-已完成，3-已退款，4-已取消 */
+  status: number
   /** 消费时间 */
   consumeTime: string
-  /** 门店名称 */
-  storeName: string
 }
 
 /**
  * 消费记录查询参数
  */
 export interface ConsumeRecordQuery {
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 手机号（模糊匹配） */
-  phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 开始日期 */
   startDate?: string
   /** 结束日期 */
@@ -444,6 +442,8 @@ export interface BirthdayReminder {
   careStatus: CareStatus
   /** 关怀时间 */
   careTime?: string
+  /** 操作人姓名（已关怀时显示） */
+  operatorName?: string
 }
 
 /**
@@ -458,8 +458,10 @@ export interface ConsumeThankRecord {
   customerName: string
   /** 手机号 */
   phone: string
-  /** 最近消费金额 */
-  lastAmount: number
+  /** 近7天累计消费金额 */
+  totalAmount: number
+  /** 近7天消费频次（订单笔数） */
+  orderCount: number
   /** 最近消费时间 */
   lastConsumeTime: string
   /** 感谢状态：1-待感谢，2-已感谢 */
@@ -468,16 +470,16 @@ export interface ConsumeThankRecord {
   thankMethod?: ThankMethod
   /** 感谢时间 */
   thankTime?: string
+  /** 操作人姓名（已感谢时显示） */
+  operatorName?: string
 }
 
 /**
  * 生日提醒查询参数
  */
 export interface BirthdayReminderQuery {
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 手机号（模糊匹配） */
-  phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 关怀状态 */
   careStatus?: CareStatus
   /** 页码 */
@@ -490,10 +492,8 @@ export interface BirthdayReminderQuery {
  * 消费感谢查询参数
  */
 export interface ConsumeThankQuery {
-  /** 客户名称（模糊匹配） */
-  customerName?: string
-  /** 手机号（模糊匹配） */
-  phone?: string
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 感谢状态 */
   thankStatus?: CareStatus
   /** 页码 */
@@ -528,7 +528,7 @@ export interface CustomerConsumptionStat {
  * 消费偏好项
  */
 export interface ConsumptionPreferenceItem {
-  /** 商品类型（1:实物 2:服务 4:疗程卡） */
+  /** 商品类型（1:实物 2:服务 4:项目卡） */
   productType: number
   /** 商品类型名称 */
   productTypeName: string

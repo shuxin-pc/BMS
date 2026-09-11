@@ -29,7 +29,7 @@ public static class CustomerPointsLogType
     public const int Recharge = 5;
 
     /// <summary>
-    /// 疗程卡购买获得（疗程卡购买时一次性发放，核销不再重复发放）
+    /// 项目卡购买获得（项目卡购买时一次性发放，核销不再重复发放）
     /// </summary>
     public const int TreatmentCardPurchase = 6;
 
@@ -44,6 +44,11 @@ public static class CustomerPointsLogType
     public const int ManualAdjust = 8;
 
     /// <summary>
+    /// 退款退还（订单退款时退还积分抵扣部分的积分，由 OrderAppService.RefundPointsPaymentAsync 写入）
+    /// </summary>
+    public const int RefundReturn = 9;
+
+    /// <summary>
     /// 校验类型值是否合法
     /// </summary>
     /// <param name="type">类型值</param>
@@ -55,6 +60,6 @@ public static class CustomerPointsLogType
     /// </summary>
     private static readonly HashSet<int> ValidTypes = new()
     {
-        Consume, PointsDeduct, RefundDeduct, Recharge, TreatmentCardPurchase, Expire, ManualAdjust
+        Consume, PointsDeduct, RefundDeduct, Recharge, TreatmentCardPurchase, Expire, ManualAdjust, RefundReturn
     };
 }

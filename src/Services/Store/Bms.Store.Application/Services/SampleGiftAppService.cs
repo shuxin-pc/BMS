@@ -6,6 +6,7 @@ using Bms.Store.Application.Dtos.Products;
 using Bms.Store.Application.Dtos.SampleGifts;
 using ProductEntity = Bms.Store.Domain.Entities.Product;
 using InventoryEntity = Bms.Store.Domain.Entities.Inventory;
+using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
 
 namespace Bms.Store.Application.Services;
@@ -119,11 +120,11 @@ public class SampleGiftAppService : ISampleGiftAppService
             .ToDictionaryAsync(x => x.ProductId, x => x.Total);
 
         // 批量查询出库数量（R5：数据源从 SampleGiftOuts 迁移到 InventoryLogs）
-        // SourceType 9=SampleReceiveOutbound 样品领用出库，10=GiftOutbound 赠品活动出库
+        // SourceType 8=SampleReceiveOutbound 样品领用出库，9=GiftOutbound 赠品活动出库
         // InventoryLog.Quantity 出库为负数，求和后取反还原为正数
         var outQuery = _dbContext.InventoryLogs
             .Where(l => l.TenantId == tenantId && l.StoreId == storeId
-                && l.Type == 2 && (l.SourceType == 9 || l.SourceType == 10)
+                && l.Type == 2 && (l.SourceType == InventoryLogSourceTypes.SampleReceiveOutbound || l.SourceType == InventoryLogSourceTypes.GiftOutbound)
                 && productIds.Contains(l.ProductId));
         if (query.StartDate.HasValue)
             outQuery = outQuery.Where(l => l.CreatedTime >= query.StartDate.Value);
@@ -173,7 +174,7 @@ public class SampleGiftAppService : ISampleGiftAppService
 
     /// <summary>
     /// 获取样品/赠品按活动维度统计报表分页列表（P-SG-04）
-    /// R5：数据源从 SampleGiftOut 迁移到 InventoryLogs（SourceType 9=样品领用出库/10=赠品活动出库）
+    /// R5：数据源从 SampleGiftOut 迁移到 InventoryLogs（SourceType 8=样品领用出库/9=赠品活动出库）
     /// 仅统计 ActivityId 有值的记录，按 ActivityId + ProductId 聚合
     /// 分页在内存中处理（GroupBy 后 EF Core 对 Skip/Take 翻译有限制）
     /// </summary>
@@ -186,12 +187,12 @@ public class SampleGiftAppService : ISampleGiftAppService
         var storeId = _currentUser.StoreId.Value;
 
         // R5：数据源从 SampleGiftOuts 迁移到 InventoryLogs
-        // WHERE Type=2(出库) AND SourceType IN (9,10) AND ActivityId IS NOT NULL
+        // WHERE Type=2(出库) AND SourceType IN (8,9) AND ActivityId IS NOT NULL
         // JOIN Products 填充商品名称/成本价
         var queryable = from l in _dbContext.InventoryLogs
                         join p in _dbContext.Products on l.ProductId equals p.Id
                         where l.TenantId == tenantId && l.StoreId == storeId
-                            && l.Type == 2 && (l.SourceType == 9 || l.SourceType == 10)
+                            && l.Type == 2 && (l.SourceType == InventoryLogSourceTypes.SampleReceiveOutbound || l.SourceType == InventoryLogSourceTypes.GiftOutbound)
                             && l.ActivityId.HasValue && !p.IsDeleted
                         select new { l, p };
 
@@ -269,10 +270,10 @@ public class SampleGiftAppService : ISampleGiftAppService
         if (query.EndDate.HasValue)
             queryable = queryable.Where(x => x.r.ReceiveTime <= query.EndDate.Value);
 
-        // 按客户分组聚合（含客户名称模糊匹配，需在 GroupBy 前过滤）
-        // 客户名称模糊匹配无法在 GroupBy 后做，需先过滤再聚合
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            queryable = queryable.Where(x => x.c.Name.Contains(query.CustomerName));
+        // 按客户分组聚合（含客户名称/手机号关键字模糊匹配，需在 GroupBy 前过滤）
+        // 客户名称/手机号模糊匹配无法在 GroupBy 后做，需先过滤再聚合
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(x => x.c.Name.Contains(query.Keyword) || x.c.Phone.Contains(query.Keyword));
 
         var grouped = await queryable
             .GroupBy(x => new { x.r.CustomerId, x.c.Name, x.c.Phone })

@@ -4,20 +4,12 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="技师姓名">
+          <el-form-item label="技师姓名/手机号">
             <el-input
-              v-model="searchForm.name"
-              placeholder="请输入技师姓名"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 180px"
-            />
-          </el-form-item>
-          <el-form-item label="手机号">
-            <el-input
-              v-model="searchForm.phone"
-              placeholder="请输入手机号"
-              clearable
-              style="width: 150px"
             />
           </el-form-item>
           <el-form-item label="状态">
@@ -43,7 +35,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:technician:profile:add')">
           <el-icon><Plus /></el-icon>
           新增技师
         </el-button>
@@ -149,6 +141,7 @@
               size="small"
               :disabled="!canOperate(row)"
               @click="handleEdit(row)"
+              v-if="hasPermission('store:technician:profile:edit')"
             >
               <el-icon><Edit /></el-icon>
               编辑
@@ -159,6 +152,7 @@
               size="small"
               :disabled="!canOperate(row)"
               @click="handleDelete(row)"
+              v-if="hasPermission('store:technician:profile:delete')"
             >
               <el-icon><Delete /></el-icon>
               删除
@@ -295,11 +289,11 @@ import type { Technician, TechnicianSource } from '@/api/staff/types'
 
 const systemConfigStore = useSystemConfigStore()
 const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
-  name: '',
-  phone: '',
+  keyword: '',
   status: undefined as number | undefined
 })
 
@@ -337,8 +331,7 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getTechnicians({
-      name: searchForm.name || undefined,
-      phone: searchForm.phone || undefined,
+      keyword: searchForm.keyword || undefined,
       status: searchForm.status,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
@@ -362,8 +355,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.name = ''
-  searchForm.phone = ''
+  searchForm.keyword = ''
   searchForm.status = undefined
   handleSearch()
 }

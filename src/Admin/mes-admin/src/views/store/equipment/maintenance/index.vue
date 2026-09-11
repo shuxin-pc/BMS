@@ -56,7 +56,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:equipment:maintenance:add')">
           <el-icon><Plus /></el-icon>
           新增保养记录
         </el-button>
@@ -79,9 +79,6 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="maintenanceDate" label="保养日期" width="120">
-          <template #default="{ row }">{{ formatDate(row.maintenanceDate) }}</template>
-        </el-table-column>
         <el-table-column prop="cost" label="保养费用" width="120" align="right">
           <template #default="{ row }">
             {{ row.cost != null ? `¥${Number(row.cost).toLocaleString()}` : '-' }}
@@ -92,6 +89,9 @@
         </el-table-column>
         <el-table-column prop="result" label="保养结果" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">{{ row.result || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="maintenanceDate" label="保养日期" width="120">
+          <template #default="{ row }">{{ formatDate(row.maintenanceDate) }}</template>
         </el-table-column>
         <el-table-column prop="nextMaintenanceDate" label="下次保养日期" width="130">
           <template #default="{ row }">
@@ -105,11 +105,11 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:equipment:maintenance:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:equipment:maintenance:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -237,6 +237,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
+import { formatDate } from '@/utils/date'
 import {
   getMaintenanceList,
   createMaintenance,
@@ -251,6 +253,8 @@ import type {
 } from '@/api/equipment/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -327,13 +331,6 @@ const getTypeTagType = (type: MaintenanceType): 'info' | 'success' | 'warning' =
   return map[type] || 'info'
 }
 
-/**
- * 格式化日期
- */
-const formatDate = (dateStr?: string): string => {
-  if (!dateStr) return '-'
-  return dateStr.split('T')[0]
-}
 
 /**
  * 判断保养日期是否临近（7天内）
@@ -410,7 +407,7 @@ const handleAdd = () => {
   isEdit.value = false
   resetFormData()
   // 默认保养日期为今天
-  formData.maintenanceDate = new Date().toISOString().split('T')[0]
+  formData.maintenanceDate = formatDate(new Date())
   dialogVisible.value = true
 }
 

@@ -29,12 +29,12 @@ public interface ISkillCategoryAppService
     Task<ApiResponseDto<SkillCategoryDto>> UpdateAsync(SkillCategoryUpdateDto dto);
 
     /// <summary>
-    /// 删除技能分类（软删除）
+    /// 删除技能分类（级联软删除整棵子树，并物理清理技师/服务项目关联数据）
     /// </summary>
     Task<ApiResponseDto> DeleteAsync(long id);
 
     /// <summary>
-    /// 批量删除技能分类（软删除）
+    /// 批量删除技能分类（级联软删除整棵子树，并物理清理技师/服务项目关联数据）
     /// </summary>
     Task<ApiResponseDto> BatchDeleteAsync(List<long> ids);
 }

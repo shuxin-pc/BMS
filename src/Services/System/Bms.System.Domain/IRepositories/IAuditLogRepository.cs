@@ -10,5 +10,5 @@ public interface IAuditLogRepository
     Task<int> GetCountAsync(string? userName = null, string? operationType = null, DateTime? startDate = null, DateTime? endDate = null, string? responseStatus = null, long? tenantId = null);
     Task<AuditLog> AddAsync(AuditLog auditLog);
     Task DeleteAsync(long id);
-    Task<int> DeleteExpiredAsync(DateTime beforeDate);
+    Task<int> DeleteExpiredAsync(DateTime beforeDate, long? tenantId = null);
 }

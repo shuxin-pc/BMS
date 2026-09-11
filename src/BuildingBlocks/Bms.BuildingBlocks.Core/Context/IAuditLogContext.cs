@@ -27,6 +27,16 @@ public interface IAuditLogContext
     long? TenantId { get; set; }
 
     /// <summary>
+    /// 当前门店ID（由业务服务写入请求上下文，非门店服务为 null）
+    /// </summary>
+    long? StoreId { get; set; }
+
+    /// <summary>
+    /// 当前门店名称（由业务服务写入请求上下文，非门店服务为 null）
+    /// </summary>
+    string? StoreName { get; set; }
+
+    /// <summary>
     /// 请求路径
     /// </summary>
     string? RequestPath { get; set; }

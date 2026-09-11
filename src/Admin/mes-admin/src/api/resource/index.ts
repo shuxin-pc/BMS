@@ -11,16 +11,19 @@ export type { ResourceAvailabilityDto, TechnicianAvailabilityItem, RoomAvailabil
  * @param startTime 占用开始时间（含）
  * @param endTime 占用结束时间（不含）
  * @param storeId 门店ID（可空，缺省时取当前用户门店）
+ * @param excludeAppointmentId 需排除占用的预约ID（可空；预约转单行编辑时排除其源预约，避免自身来源占用标红/拦截）
  */
 export async function getResourceAvailability(
   startTime: string,
   endTime: string,
-  storeId?: number
+  storeId?: number,
+  excludeAppointmentId?: number
 ): Promise<ResourceAvailabilityDto> {
   const qs = buildQuery({
     startTime,
     endTime,
-    storeId
+    storeId,
+    excludeAppointmentId
   })
   return request<ResourceAvailabilityDto>(`/resources/availability${qs}`)
 }

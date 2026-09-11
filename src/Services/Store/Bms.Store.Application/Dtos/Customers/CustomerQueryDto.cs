@@ -18,6 +18,11 @@ public class CustomerQueryDto : PagedRequestDto
     public string? Phone { get; set; }
 
     /// <summary>
+    /// 客户名称或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足）
+    /// </summary>
+    public string? Keyword { get; set; }
+
+    /// <summary>
     /// 客户等级ID
     /// </summary>
     public long? LevelId { get; set; }

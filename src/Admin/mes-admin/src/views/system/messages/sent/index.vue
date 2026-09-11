@@ -369,6 +369,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import { getUserList, getAllRoles, getOrganizationOptions, getTenants } from '@/api/system'
 import type { User, Role, Organization, Tenant } from '@/api/system/types'
+import { formatDateTime } from '@/utils/date'
 
 const userStore = useUserStore()
 const isSuperAdmin = computed(() => userStore.isSuperAdmin)
@@ -818,15 +819,6 @@ function getCategoryTagType(category: number): 'info' | 'warning' | 'success' {
   }
 }
 
-/**
- * 格式化日期时间
- */
-function formatDateTime(time: string): string {
-  if (!time) return ''
-  const date = new Date(time)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
 </script>
 
 <style scoped>

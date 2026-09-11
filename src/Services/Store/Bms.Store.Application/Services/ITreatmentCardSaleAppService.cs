@@ -4,7 +4,7 @@ using Bms.Store.Application.Dtos.TreatmentCards;
 namespace Bms.Store.Application.Services;
 
 /// <summary>
-/// 疗程卡销售记录应用服务接口
+/// 项目卡销售记录应用服务接口
 /// </summary>
 public interface ITreatmentCardSaleAppService
 {
@@ -16,9 +16,9 @@ public interface ITreatmentCardSaleAppService
     Task<ApiResponseDto> BatchDeleteAsync(List<long> ids);
 
     /// <summary>
-    /// 获取疗程卡到期提醒分页列表
+    /// 获取项目卡到期提醒分页列表（含全量预警级别统计）
     /// </summary>
-    Task<ApiResponseDto<PagedResponseDto<TreatmentCardExpiryDto>>> GetExpiryListAsync(TreatmentCardExpiryQueryDto query);
+    Task<ApiResponseDto<TreatmentCardExpiryPageDto>> GetExpiryListAsync(TreatmentCardExpiryQueryDto query);
 
     /// <summary>
     /// 退卡（规则6）

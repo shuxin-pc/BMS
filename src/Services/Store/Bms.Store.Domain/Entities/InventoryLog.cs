@@ -17,7 +17,7 @@ public class InventoryLog : StoreBusinessEntityBase
 
     /// <summary>
     /// 来源类型（标识业务来源，入库与出库均可设置）
-    /// 取值见 <see cref="InventoryLogSourceTypes"/>：0=销售出库 1=采购入库 2=退货入库 3=盘点调整 4=调拨入库 5=调拨出库 6=其他 7=采购退货出库 8=疗程卡核销出库 9=样品赠品出库(历史合并值) 10=样品领用出库 11=赠品活动出库
+    /// 取值见 <see cref="InventoryLogSourceTypes"/>：0=销售出库 1=采购入库 2=退货入库 3=盘点调整 4=调拨入库 5=调拨出库 6=采购退货出库 7=项目卡核销出库 8=样品领用出库 9=赠品活动出库 10=其他
     /// </summary>
     public int? SourceType { get; set; }
 

@@ -56,14 +56,18 @@ public class CustomerPointsLogAppService : ICustomerPointsLogAppService
             queryable = queryable.Where(x => x.log.CustomerId == query.CustomerId.Value);
         if (query.Type.HasValue)
             queryable = queryable.Where(x => x.log.Type == query.Type.Value);
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            queryable = queryable.Where(x => x.customer.Name.Contains(query.CustomerName));
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            queryable = queryable.Where(x => x.customer.Phone.Contains(query.Phone));
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(x => x.customer.Name.Contains(query.Keyword) || x.customer.Phone.Contains(query.Keyword));
 
         var total = await queryable.CountAsync();
+        // 排序说明：CreatedTime 降序保证最新在前（充值等最早的操作位于列表底部，从下往上看即业务时间正序）；
+        // 同一订单结算产生的多条积分流水（如先积分抵扣后消费获得）使用同一个 CreatedTime（同一 now），
+        // 仅按时间排序键不唯一会导致同订单流水展示顺序随机，从下往上看时出现"上一条变动后积分 ≠ 下一条变动前积分"的余额断链。
+        // 雪花 Id 按创建顺序递增（与业务写入顺序一致），故用 Id 降序作为稳定二级键：
+        // 同一时刻内后写入的（如消费获得）排在上方，从下往上看时同订单流水恰好按业务发生顺序（充值→抵扣→获得）衔接。
         var items = await queryable
             .OrderByDescending(x => x.log.CreatedTime)
+            .ThenByDescending(x => x.log.Id)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(x => new CustomerPointsLogDto

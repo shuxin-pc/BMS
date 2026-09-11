@@ -48,6 +48,18 @@ public class SubmitCheckDtoValidator : AbstractValidator<SubmitCheckDto>
             .Must(list => list == null || list.Select(i => i.BatchId).Distinct().Count() == list.Count)
             .WithMessage("扣减明细中存在重复的批次ID");
 
+        // 盘盈批次累加明细校验（若提供）
+        RuleForEach(x => x.GainBatches).ChildRules(item =>
+        {
+            item.RuleFor(i => i.BatchId).GreaterThan(0).WithMessage("批次ID必须大于0");
+            item.RuleFor(i => i.Quantity).GreaterThan(0).WithMessage("累加数量必须大于0");
+        });
+
+        // 不允许重复批次ID
+        RuleFor(x => x.GainBatches)
+            .Must(list => list == null || list.Select(i => i.BatchId).Distinct().Count() == list.Count)
+            .WithMessage("盘盈累加明细中存在重复的批次ID");
+
         // 盘盈单价校验（若提供）
         RuleFor(x => x.GainUnitPrice)
             .GreaterThanOrEqualTo(0).When(x => x.GainUnitPrice.HasValue)
@@ -82,5 +94,17 @@ public class CreateAndSubmitCheckDtoValidator : AbstractValidator<CreateAndSubmi
         RuleFor(x => x.DeductBatches)
             .Must(list => list == null || list.Select(i => i.BatchId).Distinct().Count() == list.Count)
             .WithMessage("扣减明细中存在重复的批次ID");
+
+        // 盘盈批次累加明细校验（若提供）
+        RuleForEach(x => x.GainBatches).ChildRules(item =>
+        {
+            item.RuleFor(i => i.BatchId).GreaterThan(0).WithMessage("批次ID必须大于0");
+            item.RuleFor(i => i.Quantity).GreaterThan(0).WithMessage("累加数量必须大于0");
+        });
+
+        // 不允许重复批次ID
+        RuleFor(x => x.GainBatches)
+            .Must(list => list == null || list.Select(i => i.BatchId).Distinct().Count() == list.Count)
+            .WithMessage("盘盈累加明细中存在重复的批次ID");
     }
 }

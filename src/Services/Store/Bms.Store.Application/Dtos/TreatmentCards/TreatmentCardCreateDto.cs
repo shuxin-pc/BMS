@@ -1,12 +1,12 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 创建疗程卡配置 DTO
+/// 创建项目卡配置 DTO
 /// </summary>
 public class TreatmentCardCreateDto
 {
     /// <summary>
-    /// 归属门店ID（可空，疗程卡在租户内跨店通用）
+    /// 归属门店ID（可空，项目卡在租户内跨店通用）
     /// </summary>
     public long? StoreId { get; set; }
 
@@ -19,11 +19,6 @@ public class TreatmentCardCreateDto
     /// 卡名称
     /// </summary>
     public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 卡编码
-    /// </summary>
-    public string Code { get; set; } = string.Empty;
 
     /// <summary>
     /// 包含项目描述

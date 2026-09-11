@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Bms.Store.Application.Dtos.Resources;
 using Bms.Store.Domain.Constants;
+using Bms.Store.Domain.Entities;
 using Bms.Store.Infrastructure;
 
 namespace Bms.Store.Application.Services.Resources;
@@ -12,6 +13,7 @@ namespace Bms.Store.Application.Services.Resources;
 /// <summary>
 /// 资源可用性查询服务实现
 /// 返回技师/房间/设备的全量列表，每项带 IsOccupied 标记
+/// 仅预约占用（Appointment.Status IN 1已预约, 2已到店）；已入库订单（Status=2 创建即完成）服务已结束、资源已释放，不参与占用
 /// 占用判定复用 IResourceConflictCheckService 的查询逻辑（按天过滤 + 半开区间 [start, end) 重叠算法）
 /// </summary>
 public class ResourceAvailabilityService : IResourceAvailabilityService
@@ -31,10 +33,11 @@ public class ResourceAvailabilityService : IResourceAvailabilityService
     public async Task<ResourceAvailabilityDto> GetAvailabilityAsync(
         long tenantId,
         long? storeId,
-        DateTime startTime,
-        DateTime endTime,
+        global::System.DateTime startTime,
+        global::System.DateTime endTime,
         int? roomType = null,
-        long? serviceProductId = null)
+        long? serviceProductId = null,
+        long? excludeAppointmentId = null)
     {
         var result = new ResourceAvailabilityDto();
 
@@ -60,13 +63,15 @@ public class ResourceAvailabilityService : IResourceAvailabilityService
             .ToListAsync();
 
         var rooms = await _dbContext.Rooms
-            .Where(r => !r.IsDeleted && r.Status == 1 && r.TenantId == tenantId)
+            .Where(r => !r.IsDeleted && r.Status == 1 && r.TenantId == tenantId
+                && (!storeId.HasValue || r.StoreId == storeId.Value))
             .Where(r => effectiveRoomType == null || r.RoomType == effectiveRoomType)
             .Select(r => new { r.Id, r.Name, r.RoomType, r.Status })
             .ToListAsync();
 
         var equipments = await _dbContext.Equipments
-            .Where(e => !e.IsDeleted && e.Status == EquipmentStatus.Normal && e.TenantId == tenantId)
+            .Where(e => !e.IsDeleted && e.Status == EquipmentStatus.Normal && e.TenantId == tenantId
+                && (!storeId.HasValue || e.StoreId == storeId.Value))
             .Select(e => new { e.Id, e.Name, e.Status })
             .ToListAsync();
 
@@ -74,42 +79,29 @@ public class ResourceAvailabilityService : IResourceAvailabilityService
         // 范围 [startTime.Date-1, endTime.Date]：兜底跨日预约占用（前日跨到今日 / 今日跨到明日）
         var startDate = startTime.Date.AddDays(-1);
         var endDate = endTime.Date;
-        var apptStatuses = new[] { 2, 3 };
+        var apptStatuses = new[] { AppointmentStatus.Confirmed, AppointmentStatus.Arrived };
 
         var appointments = await _dbContext.Appointments
             .Where(a => a.TenantId == tenantId
+                && (!storeId.HasValue || a.StoreId == storeId.Value)
                 && apptStatuses.Contains(a.Status)
-                && a.AppointmentDate.Date >= startDate
-                && a.AppointmentDate.Date <= endDate)
+                && a.StartTime.Date >= startDate
+                && a.StartTime.Date <= endDate)
             .ToListAsync();
-
-        // OrderItem 占用：Order.Status = 1进行中
-        // 预加载 ServiceProduct.Duration（按 ProductId 聚合）
-        var orderItems = await _dbContext.OrderItems
-            .Include(oi => oi.Order)
-            .Where(oi => oi.Order!.TenantId == tenantId
-                && oi.Order.Status == 1
-                && oi.Order.OrderTime.Date >= startDate
-                && oi.Order.OrderTime.Date <= endDate)
-            .ToListAsync();
-
-        Dictionary<long, int> productDurations = new();
-        if (orderItems.Any())
-        {
-            var productIds = orderItems.Select(oi => oi.ProductId).Distinct().ToList();
-            productDurations = await _dbContext.ServiceProducts
-                .Where(sp => productIds.Contains(sp.MasterId))
-                .ToDictionaryAsync(sp => sp.MasterId, sp => sp.Duration ?? 0);
-        }
 
         // 构建占用时间区间列表：[(resourceType, resourceId, start, end, source, info)]
+        // 仅预约占用（Appointment.Status IN 1已预约, 2已到店）；已入库订单服务已结束、资源已释放，不参与占用
         var technicianOccupancy = new List<(long Id, DateTime Start, DateTime End, string Source, string Info)>();
         var roomOccupancy = new List<(long Id, DateTime Start, DateTime End, string Source, string Info)>();
         var equipmentOccupancy = new List<(long Id, DateTime Start, DateTime End, string Source, string Info)>();
 
         foreach (var a in appointments)
         {
-            var aStart = a.AppointmentDate.Date.Add(a.AppointmentTime);
+            // 预约转订单行编辑时排除其源预约占用：该占用由本次转单继承（后端 OrderAppService 对源预约订单跳过冲突校验），
+            // 若计入则编辑弹窗会"自己标红自己"且保存被拦截
+            if (excludeAppointmentId.HasValue && a.Id == excludeAppointmentId.Value) continue;
+
+            var aStart = a.StartTime;
             // EndTime 由 AppointmentAppService 创建/更新时根据 ServiceProduct.Duration 自动计算
             DateTime? aEnd = a.EndTime;
             if (!aEnd.HasValue) continue;
@@ -123,21 +115,6 @@ public class ResourceAvailabilityService : IResourceAvailabilityService
                 roomOccupancy.Add((a.RoomId.Value, aStart, aEndVal, "appointment", info));
             if (a.EquipmentId.HasValue)
                 equipmentOccupancy.Add((a.EquipmentId.Value, aStart, aEndVal, "appointment", info));
-        }
-
-        foreach (var oi in orderItems)
-        {
-            if (!productDurations.TryGetValue(oi.ProductId, out var duration) || duration <= 0) continue;
-            var oStart = oi.Order!.OrderTime;
-            var oEnd = oStart.AddMinutes(duration);
-            var info = $"订单 {oi.Order.OrderNo} {oStart:HH:mm}-{oEnd:HH:mm}";
-
-            if (oi.TechnicianId.HasValue)
-                technicianOccupancy.Add((oi.TechnicianId.Value, oStart, oEnd, "order", info));
-            if (oi.RoomId.HasValue)
-                roomOccupancy.Add((oi.RoomId.Value, oStart, oEnd, "order", info));
-            if (oi.EquipmentId.HasValue)
-                equipmentOccupancy.Add((oi.EquipmentId.Value, oStart, oEnd, "order", info));
         }
 
         // 对每个资源，判断在 [startTime, endTime) 内是否被任意占用区间覆盖

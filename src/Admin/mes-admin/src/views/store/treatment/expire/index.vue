@@ -4,10 +4,10 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="客户名称">
+          <el-form-item label="客户名称/手机号">
             <el-input
-              v-model="searchForm.customerName"
-              placeholder="请输入客户名称"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 180px"
             />
@@ -58,19 +58,13 @@
         </div>
         <div class="stat-content">
           <div class="stat-label">总计</div>
-          <div class="stat-value">{{ pagination.total }}</div>
+          <div class="stat-value">{{ totalCount }}</div>
         </div>
       </div>
     </div>
 
     <!-- 操作栏 -->
     <div class="table-toolbar">
-      <div class="toolbar-left">
-        <el-button type="primary" :disabled="expiringCount === 0" @click="handleBatchNotify">
-          <el-icon><Promotion /></el-icon>
-          批量通知
-        </el-button>
-      </div>
       <div class="toolbar-right">
         <el-button circle @click="loadData">
           <el-icon><Refresh /></el-icon>
@@ -83,15 +77,17 @@
       <el-table
         v-loading="tableLoading"
         :data="tableData"
-        @selection-change="handleSelectionChange"
         style="width: 100%"
       >
-        <el-table-column type="selection" width="50" :selectable="canSelect" />
-        <el-table-column prop="customerName" label="客户名称" width="100" />
+        <el-table-column prop="customerName" label="客户名称" width="120" />
         <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="cardName" label="卡名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="purchaseDate" label="购买时间" width="170" />
-        <el-table-column prop="expiryDate" label="到期日期" width="120" />
+        <el-table-column prop="cardName" label="卡名称" min-width="180" show-overflow-tooltip />
+        <el-table-column label="购买时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.purchaseDate) }}</template>
+        </el-table-column>
+        <el-table-column label="到期日期" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.expiryDate) }}</template>
+        </el-table-column>
         <el-table-column label="剩余天数" width="110" align="center">
           <template #default="{ row }">
             <span :class="getDaysClass(row.remainingDays)">
@@ -99,12 +95,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="剩余次数" width="100" align="center">
+        <el-table-column label="剩余次数" width="80" align="center">
           <template #default="{ row }">
             <span :class="{ 'count-warn': row.remainingTimes <= 2 }">{{ row.remainingTimes }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="预警级别" width="110">
+        <el-table-column label="预警级别" width="100">
           <template #default="{ row }">
             <el-tag :type="row.alertLevel === 1 ? 'warning' : 'danger'" size="small" effect="dark">
               {{ row.alertLevel === 1 ? '即将到期' : '已到期' }}
@@ -116,21 +112,6 @@
             <el-tag :type="getStatusType(row.status)" size="small">
               {{ getStatusText(row.status) }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.alertLevel === 1 && row.status === 1"
-              link
-              type="primary"
-              size="small"
-              @click="handleNotify(row)"
-            >
-              <el-icon><Bell /></el-icon>
-              通知
-            </el-button>
-            <span v-else class="text-tertiary">-</span>
           </template>
         </el-table-column>
       </el-table>
@@ -153,12 +134,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import {
   Search,
   Refresh,
-  Bell,
-  Promotion,
   WarningFilled,
   CircleCloseFilled,
   DataAnalysis
@@ -166,19 +145,19 @@ import {
 import { getTreatmentCardExpiries } from '@/api/treatment-card'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import type { TreatmentCardExpiry } from '@/api/treatment-card/types'
+import { formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
 
 // 搜索表单
 const searchForm = reactive({
-  customerName: '',
+  keyword: '',
   alertLevel: undefined as number | undefined
 })
 
 // 表格数据
 const tableLoading = ref(false)
 const tableData = ref<TreatmentCardExpiry[]>([])
-const selectedRows = ref<TreatmentCardExpiry[]>([])
 
 // 分页
 const pagination = reactive({
@@ -187,9 +166,10 @@ const pagination = reactive({
   total: 0
 })
 
-// 统计数据
-const expiringCount = computed(() => tableData.value.filter(r => r.alertLevel === 1).length)
-const expiredCount = computed(() => tableData.value.filter(r => r.alertLevel === 2).length)
+// 统计数据（全量级别统计，来自后端，不受分页与预警级别筛选影响）
+const expiringCount = ref(0)
+const expiredCount = ref(0)
+const totalCount = computed(() => expiringCount.value + expiredCount.value)
 
 // 状态文本
 const getStatusText = (status: number): string => {
@@ -214,21 +194,21 @@ const getDaysClass = (days: number): string => {
   return 'days-normal'
 }
 
-// 是否可选（即将到期且有效的）
-const canSelect = (row: TreatmentCardExpiry) => row.alertLevel === 1 && row.status === 1
 
 // 加载数据
 const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getTreatmentCardExpiries({
-      customerName: searchForm.customerName || undefined,
+      keyword: searchForm.keyword || undefined,
       alertLevel: searchForm.alertLevel,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
     tableData.value = res.list
     pagination.total = res.total
+    expiringCount.value = res.expiringCount
+    expiredCount.value = res.expiredCount
   } catch {
     ElMessage.error('加载数据失败')
   } finally {
@@ -244,52 +224,9 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.customerName = ''
+  searchForm.keyword = ''
   searchForm.alertLevel = undefined
   handleSearch()
-}
-
-// 选择行
-const handleSelectionChange = (rows: TreatmentCardExpiry[]) => {
-  selectedRows.value = rows
-}
-
-// 通知客户
-const handleNotify = async (row: TreatmentCardExpiry) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要通知客户 "${row.customerName}" 疗程卡 "${row.cardName}" 即将到期吗？剩余 ${row.remainingDays} 天，${row.remainingTimes} 次。将通过短信发送提醒。`,
-      '到期通知',
-      {
-        type: 'info',
-        confirmButtonText: '发送通知',
-        cancelButtonText: '取消'
-      }
-    )
-    // Mock 模式下直接提示成功
-    ElMessage.success('通知已发送')
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('操作失败')
-  }
-}
-
-// 批量通知
-const handleBatchNotify = async () => {
-  if (selectedRows.value.length === 0) return
-  try {
-    await ElMessageBox.confirm(
-      `确定要批量通知 ${selectedRows.value.length} 位客户疗程卡即将到期吗？`,
-      '批量通知',
-      {
-        type: 'info',
-        confirmButtonText: '批量发送',
-        cancelButtonText: '取消'
-      }
-    )
-    ElMessage.success('批量通知已发送')
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('操作失败')
-  }
 }
 
 onMounted(async () => {
@@ -416,15 +353,10 @@ onMounted(async () => {
 /* 操作栏 */
 .table-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   padding: 0 4px;
-}
-
-.toolbar-left {
-  display: flex;
-  gap: 12px;
 }
 
 .toolbar-right {
@@ -450,10 +382,6 @@ onMounted(async () => {
 .count-warn {
   color: #e6a23c;
   font-weight: 600;
-}
-
-.text-tertiary {
-  color: var(--text-tertiary);
 }
 
 /* 分页 */

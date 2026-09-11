@@ -29,7 +29,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button v-if="hasPermission('store:product:category:add')" type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
           新增分类
         </el-button>
@@ -64,15 +64,15 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleAdd(row)">
+            <el-button v-if="hasPermission('store:product:category:add')" link type="primary" size="small" @click="handleAdd(row)">
               <el-icon><Plus /></el-icon>
               新增子级
             </el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button v-if="hasPermission('store:product:category:edit')" link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button v-if="hasPermission('store:product:category:delete')" link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -133,6 +133,11 @@ import {
   deleteCategory
 } from '@/api/product'
 import type { ProductCategory } from '@/api/product/types'
+import { formatDateTimeSeconds as formatDateTime } from '@/utils/date'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -245,17 +250,6 @@ const findNode = (nodes: ProductCategory[], id: number | string): ProductCategor
     }
   }
   return null
-}
-
-/**
- * 格式化日期时间（标准 ISO 字符串转 YYYY-MM-DD HH:mm:ss）
- */
-const formatDateTime = (dateStr?: string): string => {
-  if (!dateStr) return '-'
-  const dt = new Date(dateStr)
-  if (Number.isNaN(dt.getTime())) return dateStr
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
 }
 
 // 加载数据

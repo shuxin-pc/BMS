@@ -50,4 +50,11 @@ public class DashboardController : ControllerBase
     [HttpGet("revenue-composition")]
     public async Task<ApiResponseDto<List<RevenueCompositionItemDto>>> GetRevenueComposition([FromQuery] MonthlyTrendQueryDto query)
         => await _appService.GetRevenueCompositionAsync(query);
+
+    /// <summary>
+    /// 获取首页预警提醒（库存预警/批次临期/项目卡到期/客户生日聚合）
+    /// </summary>
+    [HttpGet("alerts")]
+    public async Task<ApiResponseDto<List<DashboardAlertDto>>> GetAlerts()
+        => await _appService.GetDashboardAlertsAsync();
 }

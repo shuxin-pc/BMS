@@ -27,7 +27,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:customer:archive:photo:add')">
           <el-icon><Plus /></el-icon>
           上传照片
         </el-button>
@@ -52,11 +52,11 @@
             <span class="pair-field">拍照日期：{{ pair.photoDate }}</span>
           </div>
           <div class="pair-actions">
-            <el-button link type="primary" @click="handleEdit(pair)">
+            <el-button link type="primary" @click="handleEdit(pair)" v-if="hasPermission('store:customer:archive:photo:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" @click="handleDelete(pair)">
+            <el-button link type="danger" @click="handleDelete(pair)" v-if="hasPermission('store:customer:archive:photo:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -207,6 +207,7 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus, Right, Picture, Loading, Edit, Delete } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import { getComparisonPhotos, batchDeleteComparisonPhotos } from '@/api/customer-profile'
 import type { ServiceComparisonPhoto, ServiceComparisonPhotoItem } from '@/api/customer-profile/types'
 import PhotoUploadDialog from './PhotoUploadDialog.vue'
@@ -228,6 +229,10 @@ interface PhotoPairDisplay {
 }
 
 const systemConfigStore = useSystemConfigStore()
+
+const userStore = useUserStore()
+
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 卡片内每种类型最多平铺展示的照片数，超出部分通过"查看全部"弹窗查看
 const PREVIEW_LIMIT = 2

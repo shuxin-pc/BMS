@@ -7,7 +7,7 @@ using Bms.Store.Application.Services;
 namespace Bms.Store.Api.Controllers;
 
 /// <summary>
-/// 疗程卡配置管理控制器
+/// 项目卡配置管理控制器
 /// </summary>
 [ApiController]
 [Route("api/store/[controller]")]
@@ -22,28 +22,28 @@ public class TreatmentCardsController : ControllerBase
     }
 
     /// <summary>
-    /// 获取疗程卡配置分页列表
+    /// 获取项目卡配置分页列表
     /// </summary>
     [HttpGet]
     public async Task<ApiResponseDto<PagedResponseDto<TreatmentCardDto>>> GetList([FromQuery] TreatmentCardQueryDto query)
         => await _appService.GetPagedListAsync(query);
 
     /// <summary>
-    /// 获取疗程卡配置详情
+    /// 获取项目卡配置详情
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<ApiResponseDto<TreatmentCardDto?>> GetById(long id)
         => await _appService.GetByIdAsync(id);
 
     /// <summary>
-    /// 创建疗程卡配置
+    /// 创建项目卡配置
     /// </summary>
     [HttpPost]
     public async Task<ApiResponseDto<TreatmentCardDto>> Create([FromBody] TreatmentCardCreateDto dto)
         => await _appService.CreateAsync(dto);
 
     /// <summary>
-    /// 更新疗程卡配置
+    /// 更新项目卡配置
     /// </summary>
     [HttpPut("{id:long}")]
     public async Task<ApiResponseDto<TreatmentCardDto>> Update(long id, [FromBody] TreatmentCardUpdateDto dto)
@@ -53,14 +53,14 @@ public class TreatmentCardsController : ControllerBase
     }
 
     /// <summary>
-    /// 删除疗程卡配置
+    /// 删除项目卡配置
     /// </summary>
     [HttpDelete("{id:long}")]
     public async Task<ApiResponseDto> Delete(long id)
         => await _appService.DeleteAsync(id);
 
     /// <summary>
-    /// 批量删除疗程卡配置
+    /// 批量删除项目卡配置
     /// </summary>
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)

@@ -12,7 +12,7 @@ public class CustomerPointsLog : StoreBusinessEntityBase
 
     /// <summary>
     /// 积分类型（参见 <see cref="Bms.Store.Domain.Constants.CustomerPointsLogType"/>）
-    /// 1:消费获得 2:积分抵扣 3:退款扣减 5:充值获得 6:疗程卡购买获得 7:过期清零 8:手动调整
+    /// 1:消费获得 2:积分抵扣 3:退款扣减 5:充值获得 6:项目卡购买获得 7:过期清零 8:手动调整 9:退款退还
     /// </summary>
     public int Type { get; set; }
 

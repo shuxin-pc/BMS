@@ -57,7 +57,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" :loading="exporting" @click="handleExport">
+        <el-button v-if="hasPermission('store:purchase-inventory:inventory:export')" type="primary" :loading="exporting" @click="handleExport">
           <el-icon><Download /></el-icon>
           {{ selectedRows.length > 0 ? '导出勾选' : '导出全部' }}
         </el-button>
@@ -195,11 +195,15 @@ import { Search, Refresh, Download } from '@element-plus/icons-vue'
 import { getInventoryList, getInventoryBatchList } from '@/api/inventory'
 import { getCategoryTree } from '@/api/product'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { Inventory, InventoryBatch, InventoryBatchStatus, ProductType, InventoryStatus } from '@/api/inventory/types'
 import type { ProductCategory } from '@/api/product/types'
 import InventoryLogDrawer from './components/InventoryLogDrawer.vue'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 商品分类树（用于分类筛选）
 const categoryTree = ref<ProductCategory[]>([])
@@ -306,18 +310,6 @@ const handleReset = () => {
   handleSearch()
 }
 
-// 格式化日期
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 // 批次状态映射：1-在库 2-已用完 3-已过期
 const batchStatusLabel = (status: InventoryBatchStatus): string => {

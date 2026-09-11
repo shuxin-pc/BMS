@@ -4,10 +4,10 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="客户名称">
+          <el-form-item label="客户名称/手机号">
             <el-input
-              v-model="searchForm.customerName"
-              placeholder="请输入客户名称"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 180px"
             />
@@ -46,7 +46,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:sample:receive:add')">
           <el-icon><Plus /></el-icon>
           新增领用/派发
         </el-button>
@@ -166,9 +166,12 @@
                 <el-option
                   v-for="item in customerOptions"
                   :key="item.id"
-                  :label="`${item.name}（${item.phone || '无手机号'}）`"
+                  :label="item.name"
                   :value="item.id"
-                />
+                >
+                  <!-- 下拉列表仍展示手机号便于区分同名客户，选中后输入框仅回显姓名 -->
+                  <span>{{ item.name }}（{{ item.phone || '无手机号' }}）</span>
+                </el-option>
               </el-select>
             </el-form-item>
           </el-col>
@@ -243,15 +246,19 @@ import type { ActivityOption } from '@/api/activity/types'
 import { getCustomers } from '@/api/customer'
 import { getInventoryBatchList } from '@/api/inventory'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
+import { toLocalDateTime } from '@/utils/time'
 import type { SampleReceive, Sample } from '@/api/sample/types'
 import type { InventoryBatch } from '@/api/inventory/types'
 import type { Customer } from '@/api/customer/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
-  customerName: '',
+  keyword: '',
   purpose: undefined as number | undefined
 })
 
@@ -331,8 +338,9 @@ const handleSampleChange = (sampleId: number | undefined) => {
 const loadData = async () => {
   tableLoading.value = true
   try {
-    // TODO: 后端 SampleReceiveQuery 不支持 customerName/purpose/startDate/endDate 查询
+    // purpose/startDate/endDate 后端暂未支持，仅客户名称/手机号关键字筛选生效
     const res = await getSampleReceives({
+      keyword: searchForm.keyword || undefined,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
@@ -353,7 +361,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.customerName = ''
+  searchForm.keyword = ''
   searchForm.purpose = undefined
   dateRange.value = null
   handleSearch()
@@ -456,7 +464,7 @@ const handleSubmit = async () => {
           inventoryBatchId: formData.inventoryBatchId!,
           customerId: formData.customerId,
           quantity: formData.quantity,
-          receiveTime: new Date().toISOString(),
+          receiveTime: toLocalDateTime(),
           activityId: formData.activityId,
           remark: formData.remark || undefined
         })

@@ -58,6 +58,12 @@ public class OrderDto
     /// </summary>
     public decimal? PointsAmount { get; set; }
 
+    /// <summary>
+    /// 下单时的积分抵扣比例快照（来自 PointsRule.DeductRate，元/积分，如 100分=1元 时 =0.01）
+    /// 用于退款/取消时把积分抵扣金额换算为应退积分数量；0 表示无快照（不换算展示）
+    /// </summary>
+    public decimal DeductRate { get; set; }
+
     public DateTime OrderTime { get; set; }
     public DateTime? CompleteTime { get; set; }
     public decimal RefundAmount { get; set; }

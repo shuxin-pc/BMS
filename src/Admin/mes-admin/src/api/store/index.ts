@@ -9,7 +9,8 @@ import type {
   TenantUser,
   AvailableUser,
   StoreTenantSetting,
-  StoreTenantSettingUpdate
+  StoreTenantSettingUpdate,
+  StoreReminderSetting
 } from './types'
 import { handleUnauthorized } from '../shared/auth'
 
@@ -24,7 +25,8 @@ export type {
   TenantUser,
   AvailableUser,
   StoreTenantSetting,
-  StoreTenantSettingUpdate
+  StoreTenantSettingUpdate,
+  StoreReminderSetting
 }
 
 // 通过网关访问后端服务
@@ -193,10 +195,11 @@ export async function assignStoreUsers(storeId: string, userIds: string[]): Prom
   })
 }
 
-// ==================== 租户门店设置 ====================
+// ==================== 门店设置 ====================
 
 /**
- * 获取当前租户的门店设置（跨店核销等租户级开关）
+ * 获取当前门店的设置（按 X-Store-Id 门店上下文）
+ * 跨店核销为租户级（后端按租户取第一条记录）
  * 后端不存在记录时返回默认值（AllowCrossStoreVerify=true），不自动落库
  */
 export async function getStoreTenantSetting(): Promise<StoreTenantSetting> {
@@ -204,11 +207,30 @@ export async function getStoreTenantSetting(): Promise<StoreTenantSetting> {
 }
 
 /**
- * 更新当前租户的门店设置（不存在时自动创建）
+ * 更新当前门店的设置（不存在时自动创建；跨店核销变更时后端同步该租户所有门店）
  * @param data 开关配置
  */
 export async function updateStoreTenantSetting(data: StoreTenantSettingUpdate): Promise<StoreTenantSetting> {
   return request<StoreTenantSetting>(`${API_BASE}/store-tenant-settings`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 获取当前门店的各类提醒接收角色配置（子表 StoreReminderSetting）
+ * 按 X-Store-Id 门店上下文过滤；未配置的类型不返回，前端按类型清单兜底为空列表
+ */
+export async function getStoreReminderSettings(): Promise<StoreReminderSetting[]> {
+  return request<StoreReminderSetting[]>(`${API_BASE}/store-tenant-settings/reminder-settings`)
+}
+
+/**
+ * 保存当前门店的各类提醒接收角色（按 ReminderType upsert 到子表）
+ * @param data 各提醒类型的接收角色配置列表
+ */
+export async function updateStoreReminderSettings(data: StoreReminderSetting[]): Promise<StoreReminderSetting[]> {
+  return request<StoreReminderSetting[]>(`${API_BASE}/store-tenant-settings/reminder-settings`, {
     method: 'PUT',
     body: JSON.stringify(data)
   })

@@ -4,7 +4,7 @@ namespace Bms.Store.Application.Services;
 
 /// <summary>
 /// 跨店权益操作审计日志服务接口
-/// 记录跨店核销、跨店消费、跨店充值、疗程卡转让等高风险操作（文档 6.1 节）
+/// 记录跨店核销、跨店消费、跨店充值、项目卡转让等高风险操作（文档 6.1 节）
 /// 审计日志在调用方事务内写入，事务回滚则审计日志同步回滚（仅记录成功操作）
 /// </summary>
 public interface ICrossStoreOperationAuditService

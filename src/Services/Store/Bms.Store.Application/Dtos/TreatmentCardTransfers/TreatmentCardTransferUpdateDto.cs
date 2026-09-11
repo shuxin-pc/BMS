@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCardTransfers;
 
 /// <summary>
-/// 更新疗程卡转让请求 DTO
+/// 更新项目卡转让请求 DTO
 /// </summary>
 public class TreatmentCardTransferUpdateDto : TreatmentCardTransferCreateDto
 {

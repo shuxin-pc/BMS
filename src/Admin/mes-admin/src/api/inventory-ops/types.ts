@@ -46,7 +46,7 @@ export interface InventoryLog {
   productCode?: string
   /** 库存操作类型：1-入库 2-出库 3-盘点 4-调拨 */
   type: InventoryOpType
-  /** 来源类型（0-13，详见 InventoryLogSourceType） */
+  /** 来源类型（0-10，详见 InventoryLogSourceType） */
   sourceType?: InventoryLogSourceType
   /** 供应商ID（采购入库时有值） */
   supplierId?: number
@@ -92,7 +92,7 @@ export interface InventoryLogQuery {
   productName?: string
   /** 操作类型 */
   type?: InventoryOpType
-  /** 来源类型（0-13，详见 InventoryLogSourceType） */
+  /** 来源类型（0-10，详见 InventoryLogSourceType） */
   sourceType?: InventoryLogSourceType
   /** 开始日期 */
   startDate?: string
@@ -109,11 +109,11 @@ export interface InventoryLogQuery {
 /**
  * 出库来源类型（前端暴露的常用手动来源）
  * - 3: 盘点盘亏
- * - 9: 样品领用
- * - 10: 赠品活动
- * - 11: 其他
+ * - 8: 样品领用
+ * - 9: 赠品活动
+ * - 10: 其他
  */
-export type OutboundSourceType = 3 | 9 | 10 | 11
+export type OutboundSourceType = 3 | 8 | 9 | 10
 
 /**
  * 库存流水来源类型（完整枚举，对应后端 InventoryLogSourceTypes 常量）
@@ -124,15 +124,12 @@ export type OutboundSourceType = 3 | 9 | 10 | 11
  * - 4: 调拨入库
  * - 5: 调拨出库
  * - 6: 采购退货出库
- * - 7: 疗程卡核销出库
- * - 8: 样品/赠品出库（历史）
- * - 9: 样品领用出库
- * - 10: 赠品活动出库
- * - 11: 其他
- * - 12: 样品赠品调拨出库
- * - 13: 样品赠品调拨入库
+ * - 7: 项目卡核销出库
+ * - 8: 样品领用出库
+ * - 9: 赠品活动出库
+ * - 10: 其他
  */
-export type InventoryLogSourceType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+export type InventoryLogSourceType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
 
 /**
  * 批次扣减明细（手动模式）

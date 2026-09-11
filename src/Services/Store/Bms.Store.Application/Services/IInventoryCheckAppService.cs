@@ -44,11 +44,12 @@ public interface IInventoryCheckAppService
     Task<ApiResponseDto<List<InventoryCheckProductOptionDto>>> GetProductOptionsForCheckAsync();
 
     /// <summary>
-    /// 盘盈批次号查询：按 productId + batchNo 查当前商品在当前门店的全部历史批次（含已扣完）
-    /// 用于盘盈录入时校验批次号存在性并带出批次属性
+    /// 盘盈批次选项查询：按商品+门店列出可累加的目标批次（含已用完/已过期），供盘盈弹窗选择
+    /// - expirationDate 有值：精确匹配该过期日期的批次（无论批次是否已过期/已用完，均提供）
+    /// - noExpiry=true：匹配未录入效期（过期日期为空）的批次
+    /// 两个条件互斥，由前端「按过期日期 / 无效期」二选一传参
     /// </summary>
-    /// <returns>找到返回批次详情，找不到返回 null</returns>
-    Task<ApiResponseDto<InventoryCheckBatchLookupDto?>> GetBatchLookupForCheckAsync(long productId, string batchNo);
+    Task<ApiResponseDto<List<InventoryCheckBatchLookupDto>>> GetBatchOptionsForCheckAsync(long productId, DateTime? expirationDate, bool noExpiry);
 
     /// <summary>
     /// 查询当日该商品是否已有非取消状态的盘点记录（用于前端软约束提示）

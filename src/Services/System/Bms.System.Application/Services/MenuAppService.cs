@@ -135,6 +135,31 @@ public class MenuAppService : IMenuAppService
             throw new InvalidOperationException($"菜单编码 {code} 已存在");
         }
 
+        // 上级菜单校验：不能选择自身或自身下级菜单作为父级，否则形成循环引用导致树构建无限递归
+        if (dto.ParentId is long parentId && parentId != 0)
+        {
+            if (parentId == dto.Id)
+            {
+                throw new InvalidOperationException("上级菜单不能选择自身");
+            }
+            var allMenus = await _menuRepository.GetListAsync();
+            var menuDict = allMenus.ToDictionary(x => x.Id);
+            var visited = new HashSet<long> { dto.Id };
+            var cursor = parentId;
+            while (cursor != 0)
+            {
+                if (cursor == dto.Id)
+                {
+                    throw new InvalidOperationException("上级菜单不能选择自身或自身的下级菜单");
+                }
+                if (!menuDict.TryGetValue(cursor, out var parent) || !visited.Add(cursor))
+                {
+                    break; // 父级不存在或数据中已存在循环引用，终止遍历
+                }
+                cursor = parent.ParentId ?? 0;
+            }
+        }
+
         menu.ParentId = dto.ParentId;
         menu.Name = dto.Name;
         menu.Code = code;

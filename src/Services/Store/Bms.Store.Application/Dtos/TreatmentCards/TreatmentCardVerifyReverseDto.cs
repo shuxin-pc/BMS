@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 疗程卡核销冲正请求 DTO
+/// 项目卡核销冲正请求 DTO
 /// 冲正不物理删除核销记录，仅更新 ReverseStatus 状态（规则7）
 /// 冲正金额冲减原核销门店服务业绩
 /// </summary>

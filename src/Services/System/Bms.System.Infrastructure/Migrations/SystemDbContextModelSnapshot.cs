@@ -18,7 +18,7 @@ namespace Bms.System.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("bms_system")
-                .HasAnnotation("ProductVersion", "8.0.24")
+                .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -39,6 +39,9 @@ namespace Bms.System.Infrastructure.Migrations
 
                     b.Property<string>("EntityChanges")
                         .HasColumnType("text");
+
+                    b.Property<long?>("EntityId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2000)
@@ -70,6 +73,13 @@ namespace Bms.System.Infrastructure.Migrations
 
                     b.Property<int?>("ResponseStatus")
                         .HasColumnType("integer");
+
+                    b.Property<long?>("StoreId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoreName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<long?>("TenantId")
                         .HasColumnType("bigint");
@@ -141,8 +151,8 @@ namespace Bms.System.Infrastructure.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Component")
                         .HasMaxLength(200)

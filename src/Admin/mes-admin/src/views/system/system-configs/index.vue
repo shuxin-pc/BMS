@@ -255,6 +255,7 @@ import { getSystemConfigs, createSystemConfig, updateSystemConfig, deleteSystemC
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { useSortAutoFill } from '@/composables/useSortAutoFill'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const userStore = useUserStore()
 const systemConfigStore = useSystemConfigStore()
@@ -612,18 +613,6 @@ const formatJsonValue = (str: string) => {
   }
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 // Logo上传 - 将图片转换为Base64
 const handleLogoUpload = (file: File) => {

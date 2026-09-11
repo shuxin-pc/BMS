@@ -4,7 +4,7 @@ using Bms.Store.Application.Dtos.TreatmentCards;
 namespace Bms.Store.Application.Validators;
 
 /// <summary>
-/// 创建疗程卡项目明细请求验证器
+/// 创建项目卡项目明细请求验证器
 /// </summary>
 public class CourseCardItemCreateDtoValidator : AbstractValidator<CourseCardItemCreateDto>
 {
@@ -22,7 +22,7 @@ public class CourseCardItemCreateDtoValidator : AbstractValidator<CourseCardItem
 }
 
 /// <summary>
-/// 更新疗程卡项目关联请求验证器
+/// 更新项目卡项目关联请求验证器
 /// </summary>
 public class CourseCardItemUpdateDtoValidator : AbstractValidator<CourseCardItemUpdateDto>
 {

@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 更新疗程卡项目关联请求 DTO
+/// 更新项目卡项目关联请求 DTO
 /// </summary>
 public class CourseCardItemUpdateDto : CourseCardItemCreateDto
 {

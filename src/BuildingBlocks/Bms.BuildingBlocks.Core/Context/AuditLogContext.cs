@@ -7,7 +7,6 @@ namespace Bms.BuildingBlocks.Core.Context;
 public class AuditLogContext : IAuditLogContext
 {
     private static readonly AsyncLocal<AuditLogContextHolder> _current = new();
-    private readonly List<AuditLogEntry> _pendingAuditLogs = new();
 
     public long? UserId
     {
@@ -42,6 +41,24 @@ public class AuditLogContext : IAuditLogContext
         set
         {
             EnsureContext().TenantId = value;
+        }
+    }
+
+    public long? StoreId
+    {
+        get => _current.Value?.Context?.StoreId;
+        set
+        {
+            EnsureContext().StoreId = value;
+        }
+    }
+
+    public string? StoreName
+    {
+        get => _current.Value?.Context?.StoreName;
+        set
+        {
+            EnsureContext().StoreName = value;
         }
     }
 
@@ -135,16 +152,23 @@ public class AuditLogContext : IAuditLogContext
         }
     }
 
-    public IList<AuditLogEntry> PendingAuditLogs => _pendingAuditLogs;
+    /// <summary>
+    /// 待写入的审计日志列表（请求作用域隔离，由 AsyncLocal 保证多请求并发安全）
+    /// </summary>
+    public IList<AuditLogEntry> PendingAuditLogs =>
+        _current.Value?.Context?.PendingAuditLogs ?? (IList<AuditLogEntry>)Array.Empty<AuditLogEntry>();
 
     public void AddPendingAuditLog(AuditLogEntry auditLog)
     {
-        _pendingAuditLogs.Add(auditLog);
+        EnsureContext().PendingAuditLogs.Add(auditLog);
     }
 
     public void ClearPendingAuditLogs()
     {
-        _pendingAuditLogs.Clear();
+        if (_current.Value?.Context != null)
+        {
+            _current.Value.Context.PendingAuditLogs.Clear();
+        }
     }
 
     /// <summary>
@@ -152,20 +176,13 @@ public class AuditLogContext : IAuditLogContext
     /// </summary>
     public void Reset()
     {
-        _current.Value = null;
-        _pendingAuditLogs.Clear();
+        _current.Value = null!;
     }
 
     private AuditLogContextData EnsureContext()
     {
-        if (_current.Value == null)
-        {
-            _current.Value = new AuditLogContextHolder
-            {
-                Context = new AuditLogContextData()
-            };
-        }
-        return _current.Value.Context;
+        var holder = _current.Value ??= new AuditLogContextHolder();
+        return holder.Context ??= new AuditLogContextData();
     }
 
     private class AuditLogContextHolder
@@ -176,12 +193,14 @@ public class AuditLogContext : IAuditLogContext
     /// <summary>
     /// 审计日志上下文数据
     /// </summary>
-    private class AuditLogContextData : IAuditLogContext
+    private class AuditLogContextData
     {
         public long? UserId { get; set; }
         public string? UserName { get; set; }
         public string? RealName { get; set; }
         public long? TenantId { get; set; }
+        public long? StoreId { get; set; }
+        public string? StoreName { get; set; }
         public string? RequestPath { get; set; }
         public string? RequestMethod { get; set; }
         public string? RequestIp { get; set; }
@@ -193,9 +212,9 @@ public class AuditLogContext : IAuditLogContext
         public bool IsEnabled { get; set; } = true;
         public string? CustomOperationType { get; set; }
 
-        // 以下接口实现使用 AuditLogContext 实例的列表
-        public IList<AuditLogEntry> PendingAuditLogs => throw new NotSupportedException("Use instance property");
-        public void AddPendingAuditLog(AuditLogEntry auditLog) => throw new NotSupportedException("Use instance method");
-        public void ClearPendingAuditLogs() => throw new NotSupportedException("Use instance method");
+        /// <summary>
+        /// 待写入的审计日志列表（随上下文数据存储在 AsyncLocal 中，请求间隔离）
+        /// </summary>
+        public List<AuditLogEntry> PendingAuditLogs { get; } = new();
     }
 }

@@ -1,2 +1,2 @@
 [{"Id":206963828485787648,"Code":"BasicDataManagement","Name":"基础数据","Icon":"Grid","Description":"基础数据管理子系统，包含系统管理等基础功能","Sort":1,"Status":1,"CreatedTime":"2026-07-26T10:40:21.913665","UpdatedTime":null,"IsDeleted":false}, 
- {"Id":206963886274908160,"Code":"StoreManagement","Name":"门店管理","Icon":"Shop","Description":"门店管理系统，包含门店档案、商品管理、收银、客户、会员、预约、疗程卡等功能","Sort":99,"Status":1,"CreatedTime":"2026-07-26T10:40:35.677412","UpdatedTime":"2026-07-26T10:40:35.677412","IsDeleted":false}]
+ {"Id":206963886274908160,"Code":"StoreManagement","Name":"门店管理","Icon":"Shop","Description":"门店管理系统，包含门店档案、商品管理、收银、客户、会员、预约、项目卡等功能","Sort":99,"Status":1,"CreatedTime":"2026-07-26T10:40:35.677412","UpdatedTime":"2026-07-26T10:40:35.677412","IsDeleted":false}]

@@ -145,7 +145,7 @@
               <div class="security-info">
                 <span class="security-label">最后登录时间</span>
                 <span class="security-value data-highlight">
-                  {{ formatFullDate(securityInfo.lastLoginTime) || '-' }}
+                  {{ formatFullDate(securityInfo.lastLoginTime) }}
                 </span>
               </div>
             </div>
@@ -304,6 +304,7 @@ import { getUserProfile, updateProfile, changeProfilePassword, updateAvatar, get
 import type { User, Role, SystemConfig } from '@/api/system/types'
 import { useUserStore } from '@/stores/user'
 import { usePasswordPolicy } from '@/composables/usePasswordPolicy'
+import { formatDate, formatDateTimeSeconds as formatFullDate } from '@/utils/date'
 
 const router = useRouter()
 
@@ -561,18 +562,6 @@ const handlePasswordChange = async () => {
       }
     }
   })
-}
-
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-CN')
-}
-
-// 格式化完整日期
-const formatFullDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-CN')
 }
 
 onMounted(() => {

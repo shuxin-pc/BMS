@@ -9,9 +9,7 @@ import type {
   Appointment,
   AppointmentQuery,
   AppointmentCreate,
-  AppointmentStatusUpdate,
-  TomorrowReminder,
-  TomorrowReminderQuery,
+  AppointmentUpdate,
   ApiResponse,
   TechnicianSource,
   RoomOption
@@ -22,9 +20,7 @@ export type {
   Appointment,
   AppointmentQuery,
   AppointmentCreate,
-  AppointmentStatusUpdate,
-  TomorrowReminder,
-  TomorrowReminderQuery,
+  AppointmentUpdate,
   ApiResponse,
   PagedResponse,
   TechnicianSource,
@@ -42,11 +38,13 @@ export type {
 export async function getAppointments(query?: AppointmentQuery): Promise<PagedResponse<Appointment>> {
   const qs = buildQuery({
     customerId: query?.customerId,
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
+    appointmentNo: query?.appointmentNo,
     status: query?.status,
-    appointmentDateStart: query?.appointmentDateStart,
-    appointmentDateEnd: query?.appointmentDateEnd,
+    // statuses 数组由 buildQuery 展开为多个同名参数（statuses=1&statuses=2），后端 List<int> 标准绑定
+    statuses: query?.statuses,
+    startTimeStart: query?.startTimeStart,
+    startTimeEnd: query?.startTimeEnd,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })
@@ -59,7 +57,8 @@ export async function getAppointments(query?: AppointmentQuery): Promise<PagedRe
  * @param id 预约ID
  * @returns 预约详情
  */
-export async function getAppointment(id: number): Promise<Appointment> {
+export async function getAppointment(id: string): Promise<Appointment> {
+  // 后端 LongToStringConverter 将 long 主键序列化为字符串，必须按字符串传递，避免 Number 精度丢失
   return request<Appointment>(`/appointments/${id}`)
 }
 
@@ -114,52 +113,16 @@ export async function getAvailableRoomsByServiceProduct(
 }
 
 /**
- * 更新预约状态
+ * 更新预约（编辑 / 状态流转均走此接口，提交完整 DTO）
  * 对接后端：PUT /api/store/appointments/{id}
- * @param data 状态更新信息
+ * 后端 AppointmentAppService.UpdateAsync 校验状态流转与资源冲突（排除自身）
+ * @param data 预约更新信息（含 id）
+ * @returns 更新后的预约信息
  */
-export async function updateAppointmentStatus(data: AppointmentStatusUpdate): Promise<void> {
-  await request<unknown>(`/appointments/${data.id}`, {
+export async function updateAppointment(data: AppointmentUpdate): Promise<Appointment> {
+  const { id, ...payload } = data
+  return request<Appointment>(`/appointments/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ status: data.status })
+    body: JSON.stringify(payload)
   })
-}
-
-// ==================== 明日提醒 ====================
-
-/**
- * 获取明日提醒分页列表
- * 对接后端：GET /api/store/appointments/tomorrowReminders
- * @param query 查询参数
- * @returns 分页明日提醒列表
- */
-export async function getTomorrowReminders(query?: TomorrowReminderQuery): Promise<PagedResponse<TomorrowReminder>> {
-  const qs = buildQuery({
-    customerName: query?.customerName,
-    phone: query?.phone,
-    remindStatus: query?.remindStatus,
-    pageIndex: query?.pageIndex,
-    pageSize: query?.pageSize
-  })
-  return request<PagedResponse<TomorrowReminder>>(`/appointments/tomorrowReminders${qs}`)
-}
-
-/**
- * 发送提醒（短信/微信）
- * 对接后端：POST /api/store/appointments/{id}/reminder
- * 注意：后端仅记录提醒状态，不区分渠道；channel 参数保留供前端 UI 使用
- * @param id 预约ID
- * @param channel 提醒渠道（sms/wechat，前端 UI 用，不传后端）
- */
-export async function sendReminder(id: number, _channel: 'sms' | 'wechat'): Promise<void> {
-  await request<unknown>(`/appointments/${id}/reminder`, { method: 'POST' })
-}
-
-/**
- * 确认预约
- * 对接后端：PUT /api/store/appointments/{id}/confirm
- * @param id 预约ID
- */
-export async function confirmTomorrowAppointment(id: number): Promise<void> {
-  await request<unknown>(`/appointments/${id}/confirm`, { method: 'PUT' })
 }

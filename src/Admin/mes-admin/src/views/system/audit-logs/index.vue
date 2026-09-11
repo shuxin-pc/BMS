@@ -79,7 +79,7 @@
           v-if="hasPermission('system:auditLog:clearHistory')"
         >
           <el-icon><Delete /></el-icon>
-          清空历史
+          清理过期日志
         </el-button>
       </div>
       <div class="toolbar-right">
@@ -187,8 +187,16 @@
               <span class="item-value data-highlight">{{ currentLog.id }}</span>
             </div>
             <div class="detail-item">
+              <span class="item-label">对象ID</span>
+              <span class="item-value data-highlight">{{ currentLog.entityId || '-' }}</span>
+            </div>
+            <div class="detail-item">
               <span class="item-label">操作人</span>
               <span class="item-value">{{ currentLog.userName }} / {{ currentLog.realName }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="item-label">所属门店</span>
+              <span class="item-value">{{ currentLog.storeName || '-' }}</span>
             </div>
             <div class="detail-item">
               <span class="item-label">操作类型</span>
@@ -273,6 +281,8 @@ import type { AuditLog, Tenant } from '@/api/system/types'
 import { getAuditLogs, clearExpiredAuditLogs, getTenants } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { formatDateTimeSeconds as formatDate, formatDateTimeSeconds as formatFullDate } from '@/utils/date'
+import { formatDate as formatLocalDate } from '@/utils/date'
 
 const userStore = useUserStore()
 const systemConfigStore = useSystemConfigStore()
@@ -361,9 +371,9 @@ const loadData = async () => {
     pagination.total = res.total || 0
     totalLogs.value = res.total || 0
     // 今日日志数计算
-    const today = new Date().toISOString().split('T')[0]
+    const today = formatLocalDate(new Date())
     todayLogs.value = tableData.value.filter(log => {
-      const logDate = new Date(log.createdTime).toISOString().split('T')[0]
+      const logDate = formatLocalDate(log.createdTime)
       return logDate === today
     }).length
   } catch {
@@ -435,7 +445,7 @@ const handleExport = async () => {
       const tenantName = tenant?.name || `租户${effectiveTenantId}`
       fileName += `_${tenantName}`
     }
-    fileName += `_${new Date().toISOString().split('T')[0]}`
+    fileName += `_${formatLocalDate(new Date())}`
 
     // 下载文件
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -453,16 +463,19 @@ const handleExport = async () => {
   }
 }
 
-// 清空历史
+// 清理过期日志（仅删除超过保留天数的日志，范围跟随当前租户筛选）
 const handleClearHistory = async () => {
   try {
-    await ElMessageBox.confirm('确定要清空历史日志吗？此操作不可恢复！', '警告', {
+    await ElMessageBox.confirm('将删除超过系统保留天数的历史日志，保留期内的日志不受影响。此操作不可恢复，确定继续吗？', '清理过期日志', {
       type: 'warning',
-      confirmButtonText: '确定清空',
+      confirmButtonText: '确定清理',
       cancelButtonText: '取消'
     })
-    const deletedCount = await clearExpiredAuditLogs()
-    ElMessage.success(`已清理 ${deletedCount} 条历史日志`)
+    const effectiveTenantId = isSuperAdmin.value
+      ? (searchForm.tenantId || 1)
+      : currentTenantId.value
+    const deletedCount = await clearExpiredAuditLogs(effectiveTenantId)
+    ElMessage.success(`已清理 ${deletedCount} 条过期日志`)
     loadData()
   } catch (error) {
     if (error !== 'cancel') {
@@ -518,26 +531,6 @@ const getStatusClass = (status: number | string | null | undefined) => {
   if (numStatus >= 400 && numStatus < 500) return 'error'
   if (numStatus >= 500) return 'error'
   return 'warning'
-}
-
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
-
-// 格式化完整日期
-const formatFullDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
 }
 
 // 格式化JSON

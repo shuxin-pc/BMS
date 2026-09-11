@@ -15,6 +15,7 @@ public class SubsystemAppService : ISubsystemAppService
     private readonly ISubsystemMenuRepository _subsystemMenuRepository;
     private readonly ITenantSubsystemRepository _tenantSubsystemRepository;
     private readonly ITenantSubsystemAppService _tenantSubsystemAppService;
+    private readonly IMenuRepository _menuRepository;
 
     /// <summary>
     /// 平台租户ID
@@ -25,12 +26,14 @@ public class SubsystemAppService : ISubsystemAppService
         ISubsystemRepository subsystemRepository,
         ISubsystemMenuRepository subsystemMenuRepository,
         ITenantSubsystemRepository tenantSubsystemRepository,
-        ITenantSubsystemAppService tenantSubsystemAppService)
+        ITenantSubsystemAppService tenantSubsystemAppService,
+        IMenuRepository menuRepository)
     {
         _subsystemRepository = subsystemRepository;
         _subsystemMenuRepository = subsystemMenuRepository;
         _tenantSubsystemRepository = tenantSubsystemRepository;
         _tenantSubsystemAppService = tenantSubsystemAppService;
+        _menuRepository = menuRepository;
     }
 
     public async Task<ApiResponseDto<List<SubsystemDto>>> GetListAsync(SubsystemQueryDto query, bool isSuperAdmin = true, long? tenantId = null)
@@ -197,7 +200,35 @@ public class SubsystemAppService : ISubsystemAppService
     {
         var subsystemMenus = await _subsystemMenuRepository.GetBySubsystemIdAsync(id);
         var menuIds = subsystemMenus.Select(x => x.MenuId).ToList();
-        return ApiResponseDto<List<long>>.Success(menuIds);
+
+        // 分配保存仅存叶子节点（前端父子联动只提交叶子），读时合并祖先补全父级链，
+        // 保证按子系统分组展示（菜单管理页）能通过顶级菜单定位归属
+        var result = new HashSet<long>(menuIds);
+        if (menuIds.Count > 0)
+        {
+            var allMenus = await _menuRepository.GetListAsync();
+            var menuDict = allMenus.ToDictionary(x => x.Id);
+            foreach (var menuId in menuIds)
+            {
+                CollectAncestorIds(menuId, menuDict, result);
+            }
+        }
+
+        return ApiResponseDto<List<long>>.Success(result.ToList());
+    }
+
+    /// <summary>
+    /// 递归收集指定菜单的所有祖先菜单ID并加入结果集
+    /// </summary>
+    private void CollectAncestorIds(long menuId, Dictionary<long, Menu> menuDict, HashSet<long> result)
+    {
+        if (!menuDict.TryGetValue(menuId, out var menu) || menu.ParentId is null || menu.ParentId == 0)
+        {
+            return;
+        }
+        var parentId = menu.ParentId.Value;
+        result.Add(parentId);
+        CollectAncestorIds(parentId, menuDict, result);
     }
 
     public async Task<ApiResponseDto> AssignMenusAsync(long id, SubsystemMenuAssignDto dto)

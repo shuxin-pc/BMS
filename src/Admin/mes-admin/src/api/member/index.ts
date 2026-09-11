@@ -7,6 +7,7 @@ import type {
   MemberAccountQuery,
   RechargeRequest,
   RechargeGiftPreview,
+  StoredValueRefundRequest,
   RechargeRule,
   RechargeRuleQuery,
   RechargeRuleCreate,
@@ -23,6 +24,7 @@ export type {
   MemberAccountQuery,
   RechargeRequest,
   RechargeGiftPreview,
+  StoredValueRefundRequest,
   RechargeRule,
   RechargeRuleQuery,
   RechargeRuleCreate,
@@ -45,8 +47,7 @@ export type {
 export async function getMemberAccounts(query?: MemberAccountQuery): Promise<PagedResponse<MemberAccount>> {
   const qs = buildQuery({
     customerId: query?.customerId,
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
   })
@@ -75,6 +76,20 @@ export async function rechargeAccount(data: RechargeRequest): Promise<void> {
 export async function previewRechargeGift(amount: number): Promise<RechargeGiftPreview> {
   const qs = buildQuery({ amount })
   return request<RechargeGiftPreview>(`/storedValueRules/gift-preview${qs}`)
+}
+
+/**
+ * 储值退款
+ * 对接后端 POST /api/store/storedValueAccounts/refund，
+ * 由后端扣减余额（先实收后赠送）、同步客户档案余额、扣回充值发放积分并写退款流水（Type=3）
+ * @param data 退款请求
+ * @returns 退款后的储值账户
+ */
+export async function refundStoredValue(data: StoredValueRefundRequest): Promise<MemberAccount> {
+  return request<MemberAccount>('/storedValueAccounts/refund', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
 }
 
 // ==================== 储值规则 API ====================
@@ -140,8 +155,7 @@ export async function getMemberTransactions(query?: MemberTransactionQuery): Pro
   const qs = buildQuery({
     customerId: query?.customerId,
     type: query?.type,
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
     startDate: query?.startDate,
     endDate: query?.endDate,
     pageIndex: query?.pageIndex,

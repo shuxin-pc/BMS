@@ -66,6 +66,7 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getStoredValueCashFlow } from '@/api/member'
 import type { StoredValueCashFlow } from '@/api/member/types'
+import { formatDate } from '@/utils/date'
 
 const loading = ref(false)
 
@@ -93,12 +94,6 @@ const formatMoney = (val: number) => {
   return val.toFixed(2)
 }
 
-/** 格式化本地日期为 YYYY-MM-DD（不能用 toISOString，会按 UTC 偏移到前一天） */
-const formatDate = (date: Date) => {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
-}
 
 /** 加载数据 */
 const loadData = async () => {

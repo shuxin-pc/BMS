@@ -26,6 +26,12 @@ public class OrderItemBatchDto
     public long ProductId { get; set; }
 
     /// <summary>
+    /// 商品名称（关联查询填充，用于退款弹窗展示可退批次所属商品；默认查询不填充为 null）
+    /// 注意：服务订单的服务项目行，其 OrderItemBatch.ProductId 是 BOM 耗材，ProductName 即耗材名称
+    /// </summary>
+    public string? ProductName { get; set; }
+
+    /// <summary>
     /// 库存批次ID（可空：原批次可能已删除）
     /// </summary>
     public long? BatchId { get; set; }

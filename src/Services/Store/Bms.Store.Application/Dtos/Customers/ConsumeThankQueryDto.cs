@@ -8,14 +8,9 @@ namespace Bms.Store.Application.Dtos.Customers;
 public class ConsumeThankQueryDto : PagedRequestDto
 {
     /// <summary>
-    /// 客户姓名（模糊匹配）
+    /// 客户名称或手机号关键字（模糊匹配，OR 语义：命中姓名或手机号其一即满足）
     /// </summary>
-    public string? CustomerName { get; set; }
-
-    /// <summary>
-    /// 手机号（模糊匹配）
-    /// </summary>
-    public string? Phone { get; set; }
+    public string? Keyword { get; set; }
 
     /// <summary>
     /// 感谢状态：1=待感谢 2=已感谢

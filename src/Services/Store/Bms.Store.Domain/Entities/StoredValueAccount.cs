@@ -43,6 +43,12 @@ public class StoredValueAccount : StoreEntity
     public decimal TotalConsume { get; set; }
 
     /// <summary>
+    /// 累计充值发放积分快照（充值发积分时累加，参照 Order.Points 快照设计）
+    /// 用于储值退款时按退款比例扣回发放积分（文档 G7），历史数据为空
+    /// </summary>
+    public int AwardedPoints { get; set; }
+
+    /// <summary>
     /// 导航属性：客户
     /// </summary>
     public Customer? Customer { get; set; }

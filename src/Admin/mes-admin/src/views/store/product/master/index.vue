@@ -58,7 +58,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button v-if="hasPermission('store:product:master:add')" type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
           新增主档
         </el-button>
@@ -97,15 +97,15 @@
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button v-if="hasPermission('store:product:master:edit')" link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="success" size="small" @click="handleConfigStore(row)">
+            <el-button v-if="hasPermission('store:product:master:configStore')" link type="success" size="small" @click="handleConfigStore(row)">
               <el-icon><Setting /></el-icon>
               编辑门店档案
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button v-if="hasPermission('store:product:master:delete')" link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -142,7 +142,7 @@
       >
         <el-alert
           v-if="isEdit"
-          title="Master 字段修改全门店同步生效，所有门店档案的对应字段都会同步变更"
+          title="修改商品基础信息将全门店同步生效，各门店商品档案会一并更新"
           type="warning"
           :closable="false"
           show-icon
@@ -313,7 +313,8 @@
       :close-on-click-modal="false"
     >
       <el-alert
-        title="将以下 Store 字段值应用到选中门店：已有档案 -> 覆盖；无档案 -> 自动创建"
+        title="将以下门店信息应用到选中的门店"
+        description="已有档案的门店将更新，没有档案的门店将自动创建"
         type="info"
         :closable="false"
         show-icon
@@ -325,7 +326,8 @@
         :rules="storeConfigRules"
         label-width="120px"
       >
-        <el-row :gutter="16">
+        <!-- 售价/成本价（样品/赠品不可销售，隐藏） -->
+        <el-row v-if="currentMaster?.type !== 4 && currentMaster?.type !== 5" :gutter="16">
           <el-col :span="12">
             <el-form-item label="售价" prop="price">
               <el-input-number
@@ -351,48 +353,59 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="低库存阈值" prop="lowStockThreshold">
-              <el-input-number
-                v-model="storeConfigForm.lowStockThreshold"
-                :min="0"
-                :step="1"
-                :controls="false"
-                style="width: 100%"
-                placeholder="留空不预警"
-                :disabled="currentMaster?.type === 2"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="积压阈值" prop="overstockThreshold">
-              <el-input-number
-                v-model="storeConfigForm.overstockThreshold"
-                :min="0"
-                :step="1"
-                :controls="false"
-                style="width: 100%"
-                placeholder="留空不预警"
-                :disabled="currentMaster?.type === 2"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="效期预警天数" prop="expiryAlertDays">
-              <el-input-number
-                v-model="storeConfigForm.expiryAlertDays"
-                :min="1"
-                :step="1"
-                :controls="false"
-                style="width: 100%"
-                placeholder="留空不预警"
-                :disabled="currentMaster?.type === 2"
-              />
-            </el-form-item>
-          </el-col>
+        <!-- 库存预警字段（服务项目无库存管理，隐藏） -->
+        <template v-if="currentMaster?.type !== 2">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="低库存阈值" prop="lowStockThreshold">
+                <el-input-number
+                  v-model="storeConfigForm.lowStockThreshold"
+                  :min="0"
+                  :step="1"
+                  :controls="false"
+                  style="width: 100%"
+                  placeholder="留空不预警"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="积压阈值" prop="overstockThreshold">
+                <el-input-number
+                  v-model="storeConfigForm.overstockThreshold"
+                  :min="0"
+                  :step="1"
+                  :controls="false"
+                  style="width: 100%"
+                  placeholder="留空不预警"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="效期预警天数" prop="expiryAlertDays">
+                <el-input-number
+                  v-model="storeConfigForm.expiryAlertDays"
+                  :min="1"
+                  :step="1"
+                  :controls="false"
+                  style="width: 100%"
+                  placeholder="留空不预警"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="上架状态" prop="status">
+                <el-radio-group v-model="storeConfigForm.status">
+                  <el-radio :value="1">上架</el-radio>
+                  <el-radio :value="2">下架</el-radio>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <!-- 上架状态（服务项目独立整行展示） -->
+        <el-row v-if="currentMaster?.type === 2" :gutter="16">
           <el-col :span="12">
             <el-form-item label="上架状态" prop="status">
               <el-radio-group v-model="storeConfigForm.status">
@@ -476,6 +489,7 @@ import { getEquipmentTypeOptions } from '@/api/equipment-type'
 import { getSkillCategoryTree } from '@/api/skill'
 import { getTechniciansAvailableByService } from '@/api/staff'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { ProductCategory, ProductType, RequiredRoomType } from '@/api/product/types'
 import type { EquipmentType } from '@/api/equipment-type'
 import type { Store } from '@/api/store/types'
@@ -483,6 +497,8 @@ import type { SkillCategory } from '@/api/skill'
 import type { Technician } from '@/api/staff/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 分类树（租户级共享）
 const categoryTree = ref<ProductCategory[]>([])

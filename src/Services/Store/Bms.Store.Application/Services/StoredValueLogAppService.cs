@@ -68,10 +68,9 @@ public class StoredValueLogAppService : IStoredValueLogAppService
 
         if (query.Type.HasValue)
             queryable = queryable.Where(x => x.Log.Type == query.Type.Value);
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            queryable = queryable.Where(x => x.Customer != null && x.Customer.Name.Contains(query.CustomerName));
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            queryable = queryable.Where(x => x.Customer != null && x.Customer.Phone.Contains(query.Phone));
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(x => x.Customer != null &&
+                (x.Customer.Name.Contains(query.Keyword) || x.Customer.Phone.Contains(query.Keyword)));
         if (query.StartDate.HasValue)
             queryable = queryable.Where(x => x.Log.CreatedTime >= query.StartDate.Value);
         if (query.EndDate.HasValue)

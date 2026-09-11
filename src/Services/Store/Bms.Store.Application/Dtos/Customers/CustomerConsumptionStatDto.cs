@@ -66,7 +66,7 @@ public class CustomerConsumptionStatDto
 public class ConsumptionPreferenceItem
 {
     /// <summary>
-    /// 商品类型（1:实物 2:服务 3:耗材 4:疗程卡）
+    /// 商品类型（1:实物 2:服务 3:耗材 4:项目卡）
     /// </summary>
     public int ProductType { get; set; }
 

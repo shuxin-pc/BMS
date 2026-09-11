@@ -4,20 +4,12 @@
     <div class="card mb-20">
       <div class="search-form">
         <el-form :inline="true" :model="searchForm" class="search-form-inline">
-          <el-form-item label="客户名称">
+          <el-form-item label="客户名称/手机号">
             <el-input
-              v-model="searchForm.customerName"
-              placeholder="请输入客户名称"
+              v-model="searchForm.keyword"
+              placeholder="姓名或手机号"
               clearable
               style="width: 180px"
-            />
-          </el-form-item>
-          <el-form-item label="手机号">
-            <el-input
-              v-model="searchForm.phone"
-              placeholder="请输入手机号"
-              clearable
-              style="width: 160px"
             />
           </el-form-item>
           <el-form-item>
@@ -87,11 +79,15 @@
             <span>{{ formatDateTime(row.createdAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleRecharge(row)">
+            <el-button link type="primary" size="small" @click="handleRecharge(row)" v-if="hasPermission('store:storedvalue:account:recharge')">
               <el-icon><Wallet /></el-icon>
               充值
+            </el-button>
+            <el-button link type="danger" size="small" @click="handleRefund(row)" v-if="hasPermission('store:storedvalue:account:refund')">
+              <el-icon><RefreshLeft /></el-icon>
+              退款
             </el-button>
           </template>
         </el-table-column>
@@ -119,24 +115,38 @@
       :current-balance="rechargeTarget.balance"
       @success="loadData"
     />
+
+    <!-- 退款弹窗 -->
+    <RefundDialog
+      v-model="refundVisible"
+      :customer-id="refundTarget.customerId"
+      :customer-name="refundTarget.customerName"
+      :real-balance="refundTarget.realBalance"
+      :gift-balance="refundTarget.giftBalance"
+      @success="loadData"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, Wallet } from '@element-plus/icons-vue'
+import { Search, Refresh, Wallet, RefreshLeft } from '@element-plus/icons-vue'
 import { getMemberAccounts } from '@/api/member'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { MemberAccount } from '@/api/member/types'
 import RechargeDialog from '../components/RechargeDialog.vue'
+import RefundDialog from '../components/RefundDialog.vue'
+import { formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
-  customerName: '',
-  phone: ''
+  keyword: ''
 })
 
 // 表格数据
@@ -155,8 +165,7 @@ const loadData = async () => {
   tableLoading.value = true
   try {
     const res = await getMemberAccounts({
-      customerName: searchForm.customerName || undefined,
-      phone: searchForm.phone || undefined,
+      keyword: searchForm.keyword || undefined,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
@@ -177,8 +186,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.customerName = ''
-  searchForm.phone = ''
+  searchForm.keyword = ''
   handleSearch()
 }
 
@@ -197,6 +205,29 @@ const handleRecharge = (row: MemberAccount) => {
   rechargeVisible.value = true
 }
 
+// ==================== 退款 ====================
+const refundVisible = ref(false)
+const refundTarget = reactive({
+  customerId: 0,
+  customerName: '',
+  realBalance: 0,
+  giftBalance: 0
+})
+
+const handleRefund = (row: MemberAccount) => {
+  // 文档 G7：只退实收、赠送一律不退；实收余额为 0 时无可退金额。
+  // 提前拦截避免打开弹窗时 InputNumber min(0.01) > max(0) 触发 ElementPlusError
+  if (row.realBalance <= 0) {
+    ElMessage.warning('实收余额为 0，无可退金额（赠送余额一律不退）')
+    return
+  }
+  refundTarget.customerId = row.customerId
+  refundTarget.customerName = row.customerName || ''
+  refundTarget.realBalance = row.realBalance
+  refundTarget.giftBalance = row.giftBalance
+  refundVisible.value = true
+}
+
 // ==================== 工具方法 ====================
 
 /** 格式化价格 */
@@ -205,18 +236,6 @@ const formatPrice = (price: number | undefined) => {
   return price.toFixed(2)
 }
 
-/** 格式化日期时间 */
-const formatDateTime = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

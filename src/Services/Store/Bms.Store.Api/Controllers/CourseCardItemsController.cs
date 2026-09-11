@@ -7,7 +7,7 @@ using Bms.Store.Application.Services;
 namespace Bms.Store.Api.Controllers;
 
 /// <summary>
-/// 疗程卡项目关联管理控制器
+/// 项目卡项目关联管理控制器
 /// </summary>
 [ApiController]
 [Route("api/store/[controller]")]
@@ -22,28 +22,28 @@ public class CourseCardItemsController : ControllerBase
     }
 
     /// <summary>
-    /// 获取疗程卡项目关联分页列表
+    /// 获取项目卡项目关联分页列表
     /// </summary>
     [HttpGet]
     public async Task<ApiResponseDto<PagedResponseDto<CourseCardItemDto>>> GetList([FromQuery] CourseCardItemQueryDto query)
         => await _appService.GetPagedListAsync(query);
 
     /// <summary>
-    /// 获取疗程卡项目关联详情
+    /// 获取项目卡项目关联详情
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<ApiResponseDto<CourseCardItemDto?>> GetById(long id)
         => await _appService.GetByIdAsync(id);
 
     /// <summary>
-    /// 创建疗程卡项目关联
+    /// 创建项目卡项目关联
     /// </summary>
     [HttpPost]
     public async Task<ApiResponseDto<CourseCardItemDto>> Create([FromBody] CourseCardItemCreateDto dto)
         => await _appService.CreateAsync(dto);
 
     /// <summary>
-    /// 更新疗程卡项目关联
+    /// 更新项目卡项目关联
     /// </summary>
     [HttpPut("{id:long}")]
     public async Task<ApiResponseDto<CourseCardItemDto>> Update(long id, [FromBody] CourseCardItemUpdateDto dto)
@@ -53,14 +53,14 @@ public class CourseCardItemsController : ControllerBase
     }
 
     /// <summary>
-    /// 删除疗程卡项目关联
+    /// 删除项目卡项目关联
     /// </summary>
     [HttpDelete("{id:long}")]
     public async Task<ApiResponseDto> Delete(long id)
         => await _appService.DeleteAsync(id);
 
     /// <summary>
-    /// 批量删除疗程卡项目关联
+    /// 批量删除项目卡项目关联
     /// </summary>
     [HttpPost("batch")]
     public async Task<ApiResponseDto> BatchDelete([FromBody] BatchDeleteRequest request)

@@ -4,14 +4,14 @@ using Bms.Store.Application.Dtos.TreatmentCards;
 namespace Bms.Store.Application.Validators;
 
 /// <summary>
-/// 创建疗程卡销售记录请求验证器
+/// 创建项目卡销售记录请求验证器
 /// </summary>
 public class TreatmentCardSaleCreateDtoValidator : AbstractValidator<TreatmentCardSaleCreateDto>
 {
     public TreatmentCardSaleCreateDtoValidator()
     {
         RuleFor(x => x.CardId)
-            .GreaterThan(0).WithMessage("疗程卡ID必须大于0");
+            .GreaterThan(0).WithMessage("项目卡ID必须大于0");
 
         RuleFor(x => x.CustomerId)
             .GreaterThan(0).WithMessage("客户ID必须大于0");
@@ -25,7 +25,7 @@ public class TreatmentCardSaleCreateDtoValidator : AbstractValidator<TreatmentCa
 }
 
 /// <summary>
-/// 更新疗程卡销售记录请求验证器
+/// 更新项目卡销售记录请求验证器
 /// </summary>
 public class TreatmentCardSaleUpdateDtoValidator : AbstractValidator<TreatmentCardSaleUpdateDto>
 {

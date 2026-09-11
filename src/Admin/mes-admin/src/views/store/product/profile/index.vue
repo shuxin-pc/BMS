@@ -64,11 +64,12 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button v-if="hasPermission('store:product:profile:add')" type="primary" @click="handleAdd()">
           <el-icon><Plus /></el-icon>
           新增商品
         </el-button>
         <el-button
+          v-if="hasPermission('store:product:profile:batchDelete')"
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
@@ -122,11 +123,11 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button v-if="hasPermission('store:product:profile:edit')" link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button v-if="hasPermission('store:product:profile:delete')" link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -239,6 +240,7 @@
               <div class="supplier-display">
                 <span class="supplier-name" :class="{ 'is-empty': !formData.defaultSupplierName }">{{ formData.defaultSupplierName || '未设置' }}</span>
                 <el-button
+                  v-if="hasPermission('store:product:profile:manageSupplier')"
                   type="primary"
                   link
                   size="small"
@@ -251,6 +253,40 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <!-- 服务项目信息（type=2，Master 字段只读展示） -->
+        <template v-if="formData.type === 2">
+          <el-divider content-position="left">服务项目信息</el-divider>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="服务时长">
+                <div class="duration-input-group">
+                  <el-input :model-value="formData.duration != null ? String(formData.duration) : ''" disabled style="width: 140px" />
+                  <span class="input-suffix">分钟</span>
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="服务位">
+                <el-input :model-value="getRoomTypeName(formData.requiredRoomType)" disabled />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="24">
+              <el-form-item label="所需仪器">
+                <el-input :model-value="(formData.equipmentTypeNames || []).join('、') || '-'" disabled />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="24">
+              <el-form-item label="适用技能">
+                <el-input :model-value="(formData.skillCategoryNames || []).join('、') || '-'" disabled />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <!-- 售价/成本价（所有商品类型均需维护） -->
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="售价" prop="price">
@@ -277,48 +313,59 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="低库存阈值" prop="lowStockThreshold">
-              <el-input-number
-                v-model="formData.lowStockThreshold"
-                :min="0"
-                :step="1"
-                :controls="false"
-                style="width: 100%"
-                placeholder="留空不预警"
-                :disabled="formData.type === 2"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="积压阈值" prop="overstockThreshold">
-              <el-input-number
-                v-model="formData.overstockThreshold"
-                :min="0"
-                :step="1"
-                :controls="false"
-                style="width: 100%"
-                placeholder="留空不预警"
-                :disabled="formData.type === 2"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="效期预警天数" prop="expiryAlertDays">
-              <el-input-number
-                v-model="formData.expiryAlertDays"
-                :min="1"
-                :step="1"
-                :controls="false"
-                style="width: 100%"
-                placeholder="留空不预警"
-                :disabled="formData.type === 2"
-              />
-            </el-form-item>
-          </el-col>
+        <!-- 库存预警字段（服务项目无库存管理，隐藏） -->
+        <template v-if="formData.type !== 2">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="低库存阈值" prop="lowStockThreshold">
+                <el-input-number
+                  v-model="formData.lowStockThreshold"
+                  :min="0"
+                  :step="1"
+                  :controls="false"
+                  style="width: 100%"
+                  placeholder="留空不预警"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="积压阈值" prop="overstockThreshold">
+                <el-input-number
+                  v-model="formData.overstockThreshold"
+                  :min="0"
+                  :step="1"
+                  :controls="false"
+                  style="width: 100%"
+                  placeholder="留空不预警"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="效期预警天数" prop="expiryAlertDays">
+                <el-input-number
+                  v-model="formData.expiryAlertDays"
+                  :min="1"
+                  :step="1"
+                  :controls="false"
+                  style="width: 100%"
+                  placeholder="留空不预警"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="状态" prop="status">
+                <el-radio-group v-model="formData.status">
+                  <el-radio :value="1">上架</el-radio>
+                  <el-radio :value="2">下架</el-radio>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <!-- 状态（服务项目独立整行展示） -->
+        <el-row v-if="formData.type === 2" :gutter="16">
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
               <el-radio-group v-model="formData.status">
@@ -469,11 +516,14 @@ import {
   updateProductRelation
 } from '@/api/supplier'
 import { useSystemConfigStore } from '@/stores/systemConfig'
-import type { Product, ProductCategory, ProductCreate, ProductStatus, ProductType } from '@/api/product/types'
+import { useUserStore } from '@/stores/user'
+import type { Product, ProductCategory, ProductCreate, ProductStatus, ProductType, RequiredRoomType } from '@/api/product/types'
 import type { Supplier } from '@/api/supplier/types'
 import type { ProductSupplier } from '@/api/supplier/types'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 分类树（仅用于表单下拉选择）
 const categoryTree = ref<ProductCategory[]>([])
@@ -588,6 +638,11 @@ const formData = reactive({
   spec: '',
   unit: '',
   brand: '',
+  // 服务项目子表字段（Master 层，只读展示）
+  duration: undefined as number | undefined,
+  requiredRoomType: undefined as RequiredRoomType,
+  equipmentTypeNames: [] as string[],
+  skillCategoryNames: [] as string[],
   // Store 字段（可编辑）
   defaultSupplierId: undefined as number | undefined,
   defaultSupplierName: '' as string,
@@ -625,6 +680,10 @@ const resetFormData = () => {
   formData.spec = ''
   formData.unit = ''
   formData.brand = ''
+  formData.duration = undefined
+  formData.requiredRoomType = undefined
+  formData.equipmentTypeNames = []
+  formData.skillCategoryNames = []
   formData.defaultSupplierId = undefined
   formData.defaultSupplierName = ''
   formData.price = 0
@@ -657,6 +716,11 @@ const handleEdit = (row: Product) => {
   formData.spec = row.spec || ''
   formData.unit = row.unit || ''
   formData.brand = row.brand || ''
+  // 服务项目子表字段（Master 层，只读展示）
+  formData.duration = row.duration
+  formData.requiredRoomType = row.requiredRoomType
+  formData.equipmentTypeNames = row.equipmentTypeNames ? [...row.equipmentTypeNames] : []
+  formData.skillCategoryNames = row.skillCategoryNames ? [...row.skillCategoryNames] : []
   // Store 字段可编辑
   formData.defaultSupplierId = row.defaultSupplierId ?? undefined
   formData.defaultSupplierName = row.defaultSupplierName || ''
@@ -680,12 +744,17 @@ const handleMasterChange = async (masterId: number) => {
     formData.type = master.type
     formData.unit = master.unit || ''
   }
-  // 获取详情填充其他 Master 字段（specification/brand/categoryId）
+  // 获取详情填充其他 Master 字段（specification/brand/categoryId/服务项目子表字段）
   try {
     const detail = await getProductMaster(masterId)
     formData.spec = detail.specification || ''
     formData.brand = detail.brand || ''
     formData.categoryId = detail.categoryId
+    // 服务项目子表字段（Master 层，只读展示）
+    formData.duration = detail.duration
+    formData.requiredRoomType = detail.requiredRoomType
+    formData.equipmentTypeNames = detail.equipmentTypeNames ? [...detail.equipmentTypeNames] : []
+    formData.skillCategoryNames = detail.skillCategoryNames ? [...detail.skillCategoryNames] : []
   } catch {
     // 忽略，Master 字段保持空
   }
@@ -919,6 +988,13 @@ const getProductTypeName = (type: number) => {
     5: '赠品'
   }
   return map[type] || '-'
+}
+
+// 服务位名称映射（1:房间 2:床位，空=不限）
+const getRoomTypeName = (type: number | undefined) => {
+  if (type === undefined || type === null) return '不限'
+  const map: Record<number, string> = { 1: '房间', 2: '床位' }
+  return map[type] || '不限'
 }
 
 onMounted(async () => {

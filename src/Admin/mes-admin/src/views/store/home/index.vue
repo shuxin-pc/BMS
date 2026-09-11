@@ -111,9 +111,10 @@
               <span class="title-icon"></span>
               预警提醒
             </h3>
-            <el-button type="primary" size="small" link>查看全部</el-button>
+            <el-button type="primary" size="small" link @click="goAlertPage">查看全部</el-button>
           </div>
           <div class="alert-list">
+            <div v-if="alertList.length === 0" class="alert-empty">暂无预警提醒</div>
             <div
               v-for="(item, index) in alertList"
               :key="index"
@@ -198,6 +199,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, markRaw } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { useUserStore } from '@/stores/user'
 import { ArrowUp, ArrowDown, Money, ShoppingCart, TrendCharts, WarningFilled } from '@element-plus/icons-vue'
@@ -205,9 +207,12 @@ import {
   getDashboardSummary,
   getMonthlyTrend,
   getTopProducts,
-  getRevenueComposition
+  getRevenueComposition,
+  getDashboardAlerts
 } from '@/api/statistics'
-import type { DailyStat, ProductSalesStat, ProductType } from '@/api/statistics/types'
+import type { DailyStat, ProductSalesStat, ProductType, DashboardAlert } from '@/api/statistics/types'
+
+const router = useRouter()
 
 const trendChartRef = ref<HTMLElement>()
 const pieChartRef = ref<HTMLElement>()
@@ -289,15 +294,8 @@ const stats = ref([
   }
 ])
 
-// 预警提醒数据（静态，后续可扩展为API）
-const alertList = ref([
-  { level: 'danger', title: '商品库存不足', desc: '"深层补水面膜" 库存仅剩 3 件', tagText: '紧急', time: '10:32' },
-  { level: 'danger', title: '商品即将过期', desc: '"玻尿酸精华液" 距过期仅 5 天', tagText: '过期', time: '09:15' },
-  { level: 'warning', title: '疗程卡即将到期', desc: '客户"李芳" 的水光针疗程卡剩余 2 次，30 天后到期', tagText: '提醒', time: '昨天' },
-  { level: 'warning', title: '客户生日提醒', desc: '客户"王秀英" 明天生日，可发送关怀问候', tagText: '关怀', time: '昨天' },
-  { level: 'info', title: '明日预约提醒', desc: '明天共有 12 个预约，其中 3 个未确认', tagText: '预约', time: '昨天' },
-  { level: 'info', title: '样品库存充足', desc: '"试用装-保湿乳液" 库存 120 件，可正常发放', tagText: '正常', time: '2天前' }
-])
+// 预警提醒数据（从API加载：库存预警/批次临期/项目卡到期/客户生日聚合）
+const alertList = ref<DashboardAlert[]>([])
 
 // 热门商品 TOP 5（从API加载）
 const rankList = ref([
@@ -447,6 +445,9 @@ const loadDashboardData = async () => {
     // 加载排名列表（按当前切换状态）
     await loadRankList()
 
+    // 加载预警提醒（独立加载，失败不影响主数据）
+    await loadAlertList()
+
     // 更新图表
     await nextTick()
     updateTrendChart()
@@ -462,7 +463,7 @@ const loadDashboardData = async () => {
 const loadRankList = async () => {
   try {
     const now = new Date()
-    // 商品=零售(1)+耗材(3)；服务=服务(2)+疗程卡(4)
+    // 商品=零售(1)+耗材(3)；服务=服务(2)+项目卡(4)
     const productTypes: ProductType[] = rankType.value === 'product' ? [1, 3] : [2, 4]
     const list = await getTopProducts({
       year: now.getFullYear(),
@@ -493,6 +494,20 @@ const loadRankList = async () => {
   } catch (error) {
     console.error('加载热门排行失败', error)
   }
+}
+
+// 加载预警提醒列表（库存预警/批次临期/项目卡到期/客户生日聚合）
+const loadAlertList = async () => {
+  try {
+    alertList.value = await getDashboardAlerts()
+  } catch (error) {
+    console.error('加载预警提醒失败', error)
+  }
+}
+
+// 跳转商品预警页（查看全部）
+const goAlertPage = () => {
+  router.push('/store/product/inventory/alert')
 }
 
 // 切换排名类型（商品/服务）
@@ -1042,6 +1057,13 @@ onBeforeUnmount(() => {
   padding: 8px 0;
   max-height: 320px;
   overflow-y: auto;
+}
+
+.alert-empty {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 
 .alert-item {

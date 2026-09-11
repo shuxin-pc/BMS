@@ -45,4 +45,9 @@ public class BirthdayReminderDto
     /// 关怀时间
     /// </summary>
     public DateTime? CareTime { get; set; }
+
+    /// <summary>
+    /// 操作人姓名（已关怀时显示）
+    /// </summary>
+    public string? OperatorName { get; set; }
 }

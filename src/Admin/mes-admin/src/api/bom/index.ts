@@ -31,6 +31,8 @@ export type {
  */
 export async function getBomList(query?: BomQuery): Promise<PagedResponse<BomItem>> {
   const qs = buildQuery({
+    serviceProductId: query?.serviceProductId,
+    productId: query?.productId,
     serviceProductName: query?.serviceProductName,
     consumableProductName: query?.consumableProductName,
     pageIndex: query?.pageIndex,

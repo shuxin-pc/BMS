@@ -4,7 +4,7 @@
     placement="bottom-end"
     :width="380"
     trigger="click"
-    popper-class="message-bell-popper"
+    popper-class="message-bell-popper popper-glow-line"
   >
     <!-- 触发器：铃铛 + 未读数 -->
     <template #reference>
@@ -91,6 +91,7 @@ import { Bell, BellFilled } from '@element-plus/icons-vue'
 import { useMessageStore } from '@/stores/message'
 import { markAsRead, markAllAsRead } from '@/api/message'
 import type { MessageInboxItem } from '@/api/message/types'
+import { formatDateTime } from '@/utils/date'
 import InboxDialog from './InboxDialog.vue'
 
 const messageStore = useMessageStore()
@@ -156,16 +157,6 @@ function formatTime(time: string): string {
   if (diff < day) return `${Math.floor(diff / hour)}小时前`
   if (diff < 7 * day) return `${Math.floor(diff / day)}天前`
   return date.toLocaleDateString('zh-CN')
-}
-
-/**
- * 格式化日期时间（详情展示完整时间）
- */
-function formatDateTime(time: string): string {
-  if (!time) return ''
-  const date = new Date(time)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /**

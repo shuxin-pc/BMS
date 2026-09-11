@@ -64,6 +64,16 @@ public class ServiceBomAppService : IServiceBomAppService
             queryable = queryable.Where(x => x.ServiceProductId == query.ServiceProductId.Value);
         if (query.ConsumableProductId.HasValue)
             queryable = queryable.Where(x => x.ConsumableProductId == query.ConsumableProductId.Value);
+        if (query.ProductId.HasValue)
+        {
+            // 按门店商品档案ID反查：BOM 服务端关联服务项目档案，经商品主档桥接（商品档案.MasterId == 服务项目档案.MasterId）定位对应服务项目
+            var serviceProductIds = await _dbContext.Products
+                .Where(p => p.Id == query.ProductId.Value)
+                .Join(_dbContext.ServiceProducts, p => p.MasterId, sp => sp.MasterId, (p, sp) => sp.Id)
+                .Distinct()
+                .ToListAsync();
+            queryable = queryable.Where(x => serviceProductIds.Contains(x.ServiceProductId));
+        }
         if (!string.IsNullOrWhiteSpace(query.ServiceProductName))
             queryable = queryable.Where(x => x.ServiceProductName.Contains(query.ServiceProductName));
         if (!string.IsNullOrWhiteSpace(query.ConsumableProductName))

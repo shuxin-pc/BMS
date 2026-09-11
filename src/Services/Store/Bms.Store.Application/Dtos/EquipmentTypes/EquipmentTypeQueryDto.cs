@@ -21,4 +21,9 @@ public class EquipmentTypeQueryDto : PagedRequestDto
     /// 启用状态筛选
     /// </summary>
     public bool? IsActive { get; set; }
+
+    /// <summary>
+    /// 父级类型ID筛选（按分类查看其下类型）
+    /// </summary>
+    public long? ParentId { get; set; }
 }

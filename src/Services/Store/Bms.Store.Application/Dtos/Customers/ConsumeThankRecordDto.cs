@@ -27,9 +27,14 @@ public class ConsumeThankRecordDto
     public string Phone { get; set; } = string.Empty;
 
     /// <summary>
-    /// 最近消费金额
+    /// 近 7 天累计消费金额
     /// </summary>
-    public decimal LastAmount { get; set; }
+    public decimal TotalAmount { get; set; }
+
+    /// <summary>
+    /// 近 7 天消费订单笔数
+    /// </summary>
+    public int OrderCount { get; set; }
 
     /// <summary>
     /// 最近消费时间
@@ -50,4 +55,9 @@ public class ConsumeThankRecordDto
     /// 感谢时间
     /// </summary>
     public DateTime? ThankTime { get; set; }
+
+    /// <summary>
+    /// 操作人姓名（已感谢时显示）
+    /// </summary>
+    public string? OperatorName { get; set; }
 }

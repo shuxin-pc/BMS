@@ -16,9 +16,9 @@ public class EquipmentTypeCreateDto
     public string Code { get; set; } = string.Empty;
 
     /// <summary>
-    /// 分类（如"激光类"、"射频类"、"注射类"）
+    /// 父级类型ID（null=顶级分类/分组）
     /// </summary>
-    public string? Category { get; set; }
+    public long? ParentId { get; set; }
 
     /// <summary>
     /// 规格/型号

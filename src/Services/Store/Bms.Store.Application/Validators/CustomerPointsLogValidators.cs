@@ -14,10 +14,10 @@ public class CustomerPointsLogCreateDtoValidator : AbstractValidator<CustomerPoi
     {
         RuleFor(x => x.CustomerId).GreaterThan(0).WithMessage("请选择客户");
 
-        // 类型合法范围：1,2,3,5,6,7,8（4 为已移除的 ActivityGift 空洞，参见 CustomerPointsLogType）
+        // 类型合法范围：1,2,3,5,6,7,8,9（4 为已移除的 ActivityGift 空洞，参见 CustomerPointsLogType）
         RuleFor(x => x.Type)
             .Must(CustomerPointsLogType.IsValid)
-            .WithMessage("积分变动类型取值无效（合法值：1,2,3,5,6,7,8）");
+            .WithMessage("积分变动类型取值无效（合法值：1,2,3,5,6,7,8,9）");
 
         // 变动数量不能为 0
         RuleFor(x => x.Points)

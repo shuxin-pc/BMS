@@ -25,17 +25,12 @@ public interface IDashboardAppService
     Task<ApiResponseDto<List<ProductSalesStatDto>>> GetTopProductsAsync(TopProductsQueryDto query);
 
     /// <summary>
-    /// 获取热门商品 TOP N（仅零售+耗材，ProductType=1,3）（P-DS-05）
-    /// </summary>
-    Task<ApiResponseDto<List<ProductSalesStatDto>>> GetTopProductsBySalesAsync(TopProductsQueryDto query);
-
-    /// <summary>
-    /// 获取热门服务 TOP N（仅服务+疗程卡购买，ProductType=2,4）（P-DS-05）
-    /// </summary>
-    Task<ApiResponseDto<List<ProductSalesStatDto>>> GetTopServicesBySalesAsync(TopProductsQueryDto query);
-
-    /// <summary>
     /// 获取营收构成（按 ProductType 分组）
     /// </summary>
     Task<ApiResponseDto<List<RevenueCompositionItemDto>>> GetRevenueCompositionAsync(MonthlyTrendQueryDto query);
+
+    /// <summary>
+    /// 获取首页预警提醒（聚合库存预警/批次临期/项目卡到期/客户生日，按紧急度排序取前 10 条）
+    /// </summary>
+    Task<ApiResponseDto<List<DashboardAlertDto>>> GetDashboardAlertsAsync();
 }

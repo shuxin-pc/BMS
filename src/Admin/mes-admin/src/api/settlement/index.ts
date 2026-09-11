@@ -69,10 +69,15 @@ export async function validateSettlement(id: number): Promise<SettlementValidati
 }
 
 /**
- * 确认日结（待确认 -> 已确认）
+ * 确认日结（待确认 -> 已确认），确认时可修改备注
+ * @param remark 新备注（可选）：不传则保持原值，传空字符串清空备注
  */
-export async function confirmSettlement(id: number): Promise<DailySettlement> {
-  return request<DailySettlement>(`${BASE}/${id}/confirm`, { method: 'POST' })
+export async function confirmSettlement(id: number, remark?: string): Promise<DailySettlement> {
+  const hasRemark = remark !== undefined
+  return request<DailySettlement>(`${BASE}/${id}/confirm`, {
+    method: 'POST',
+    ...(hasRemark ? { body: JSON.stringify({ remark }) } : {})
+  })
 }
 
 /**

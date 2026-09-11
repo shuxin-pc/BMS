@@ -23,6 +23,7 @@ public class StoreDbContext : TenantDbContext
     public DbSet<Bms.Store.Domain.Entities.Store> Stores => Set<Bms.Store.Domain.Entities.Store>();
     public DbSet<UserStore> UserStores => Set<UserStore>();
     public DbSet<StoreTenantSetting> StoreTenantSettings => Set<StoreTenantSetting>();
+    public DbSet<StoreReminderSetting> StoreReminderSettings => Set<StoreReminderSetting>();
     public DbSet<CrossStoreOperationLog> CrossStoreOperationLogs => Set<CrossStoreOperationLog>();
 
     // DbSets - 商品管理
@@ -44,6 +45,7 @@ public class StoreDbContext : TenantDbContext
     public DbSet<InventoryAlert> InventoryAlerts => Set<InventoryAlert>();
     public DbSet<PriceChangeLog> PriceChangeLogs => Set<PriceChangeLog>();
     public DbSet<InventoryCheck> InventoryChecks => Set<InventoryCheck>();
+    public DbSet<InventoryCheckBatch> InventoryCheckBatches => Set<InventoryCheckBatch>();
     public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<StockTransferItem> StockTransferItems => Set<StockTransferItem>();
@@ -81,6 +83,7 @@ public class StoreDbContext : TenantDbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderItemBatch> OrderItemBatches => Set<OrderItemBatch>();
+    public DbSet<ParkedOrder> ParkedOrders => Set<ParkedOrder>();
 
     // DbSets - 预约管理
     public DbSet<Appointment> Appointments => Set<Appointment>();
@@ -92,7 +95,7 @@ public class StoreDbContext : TenantDbContext
     public DbSet<EquipmentMaintenance> EquipmentMaintenances => Set<EquipmentMaintenance>();
     public DbSet<EquipmentMaintenanceReminder> EquipmentMaintenanceReminders => Set<EquipmentMaintenanceReminder>();
 
-    // DbSets - 疗程卡管理
+    // DbSets - 项目卡管理
     public DbSet<TreatmentCard> TreatmentCards => Set<TreatmentCard>();
     public DbSet<TreatmentCardSale> TreatmentCardSales => Set<TreatmentCardSale>();
     public DbSet<TreatmentCardVerify> TreatmentCardVerifies => Set<TreatmentCardVerify>();
@@ -138,6 +141,7 @@ public class StoreDbContext : TenantDbContext
         ConfigureStore(modelBuilder);
         ConfigureUserStore(modelBuilder);
         ConfigureStoreTenantSetting(modelBuilder);
+        ConfigureStoreReminderSetting(modelBuilder);
         ConfigureCrossStoreOperationLog(modelBuilder);
         ConfigureProductMaster(modelBuilder);
         ConfigureProductCategory(modelBuilder);
@@ -159,6 +163,7 @@ public class StoreDbContext : TenantDbContext
         ConfigureStoredValueRule(modelBuilder);
         ConfigureStoredValueLog(modelBuilder);
         ConfigureOrder(modelBuilder);
+        ConfigureParkedOrder(modelBuilder);
         ConfigureOrderItem(modelBuilder);
         ConfigureOrderItemBatch(modelBuilder);
         ConfigureAppointment(modelBuilder);
@@ -184,6 +189,7 @@ public class StoreDbContext : TenantDbContext
         ConfigurePriceChangeLog(modelBuilder);
         ConfigurePointsExchange(modelBuilder);
         ConfigureInventoryCheck(modelBuilder);
+        ConfigureInventoryCheckBatch(modelBuilder);
         ConfigureServiceBom(modelBuilder);
         ConfigureRoom(modelBuilder);
         ConfigureEquipmentType(modelBuilder);
@@ -254,15 +260,29 @@ public class StoreDbContext : TenantDbContext
         {
             entity.HasKey(e => e.Id);
 
-            // 每租户仅一条配置记录，使用过滤索引保证未删除记录唯一
-            entity.HasIndex(e => e.TenantId)
+            // 每门店仅一条配置记录，使用过滤索引保证未删除记录唯一
+            entity.HasIndex(e => new { e.TenantId, e.StoreId })
                 .IsUnique()
                 .HasFilter("\"IsDeleted\" = false")
-                .HasDatabaseName("UX_StoreTenantSettings_Tenant");
+                .HasDatabaseName("UX_StoreTenantSettings_Tenant_Store");
+        });
+    }
+
+    private void ConfigureStoreReminderSetting(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<StoreReminderSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // 每门店 + 每业务类型仅一条配置记录，使用过滤索引保证未删除记录唯一
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.ReminderType })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false")
+                .HasDatabaseName("UX_StoreReminderSettings_Tenant_Store_Type");
 
             // 角色ID列表用 jsonb 存储，数组语义正确，EF Core+Npgsql 原生支持
             // 列设为 nullable：旧记录迁移后为 null，AppService 读取时用 ?? new List<long>() 兜底
-            entity.Property(e => e.BirthdayReminderRoleIds)
+            entity.Property(e => e.RoleIds)
                 .HasColumnType("jsonb")
                 .IsRequired(false);
         });
@@ -610,6 +630,7 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Type).IsRequired();
             entity.Property(e => e.CareTime).IsRequired();
+            entity.Property(e => e.OperatorName).HasMaxLength(50);
 
             // 普通索引：租户+门店隔离查询
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
@@ -759,18 +780,46 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.DeductRate).HasPrecision(8, 4);
             entity.Property(e => e.RefundReason).HasMaxLength(500);
             entity.Property(e => e.Remark).HasMaxLength(500);
+            entity.Property(e => e.CheckoutSessionNo).HasMaxLength(64);
 
-            entity.HasIndex(e => e.OrderNo).IsUnique();
+            entity.HasIndex(e => e.OrderNo);
             entity.HasIndex(e => e.CustomerId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.BackfillStatus);
             entity.HasIndex(e => e.OrderTime);
+            // 购物车结算批次号索引（POS 购物车一次结算生成的三单据按批次聚合追溯查询）
+            entity.HasIndex(e => e.CheckoutSessionNo);
+            // OrderNo 在"同租户同门店"内唯一（OrderNoGenerator 应用层保证，数据库组合唯一索引兜底，对齐 Appointment/PurchaseOrder 模式）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.OrderNo })
+                .IsUnique()
+                .HasDatabaseName("UX_Orders_Tenant_Store_OrderNo");
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
 
             entity.HasOne(e => e.Customer)
                 .WithMany()
                 .HasForeignKey(e => e.CustomerId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private void ConfigureParkedOrder(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ParkedOrder>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ParkNo).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.CustomerName).HasMaxLength(50);
+            entity.Property(e => e.CreatedByName).HasMaxLength(50);
+            entity.Property(e => e.Remark).HasMaxLength(200);
+            entity.Property(e => e.CartJson).IsRequired().HasColumnType("text");
+
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedTime);
+            // ParkNo 在"同租户同门店"内唯一（ParkedOrderNoGenerator 应用层保证，数据库组合唯一索引兜底，对齐 Order/PurchaseOrder 模式）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.ParkNo })
+                .IsUnique()
+                .HasDatabaseName("UX_ParkedOrders_Tenant_Store_ParkNo");
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
         });
     }
 
@@ -869,12 +918,16 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.ProductId).IsRequired();
             entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.AppointmentNo).IsUnique();
+            entity.HasIndex(e => e.AppointmentNo);
+            // AppointmentNo 在"同租户同门店"内唯一（由 AppointmentNoGenerator 应用层保证，数据库索引兜底）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.AppointmentNo })
+                .IsUnique()
+                .HasDatabaseName("UX_Appointments_Tenant_Store_AppointmentNo");
             entity.HasIndex(e => e.CustomerId);
             entity.HasIndex(e => e.RoomId);
             entity.HasIndex(e => e.EquipmentId);
             entity.HasIndex(e => e.ProductId);
-            entity.HasIndex(e => e.AppointmentDate);
+            entity.HasIndex(e => e.StartTime);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.ReminderStatus);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
@@ -902,12 +955,10 @@ public class StoreDbContext : TenantDbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
             entity.Property(e => e.ServiceItems).HasMaxLength(1000);
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.Code);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
         });
     }
@@ -920,11 +971,22 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.TotalConsumedAmount).HasPrecision(18, 2);
             entity.Property(e => e.Remark).HasMaxLength(500);
+            entity.Property(e => e.CheckoutSessionNo).HasMaxLength(64);
+            entity.Property(e => e.SaleNo).HasMaxLength(50);
+            entity.Property(e => e.CashAmount).HasPrecision(18, 2);
+            entity.Property(e => e.StoredValueAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PointsAmount).HasPrecision(18, 2);
 
             entity.HasIndex(e => e.CardId);
             entity.HasIndex(e => e.CustomerId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 购物车结算批次号索引（POS 购物车一次结算生成的三单据按批次聚合追溯查询）
+            entity.HasIndex(e => e.CheckoutSessionNo);
+            // SaleNo 在"同租户同门店"内唯一（TreatmentCardSaleNoGenerator 应用层保证，数据库组合唯一索引兜底，对齐 Order/Appointment 模式）
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.SaleNo })
+                .IsUnique()
+                .HasDatabaseName("UX_TreatmentCardSales_Tenant_Store_SaleNo");
 
             entity.HasOne(e => e.Card)
                 .WithMany()
@@ -972,11 +1034,14 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.VerifyAmount).HasPrecision(18, 2);
             entity.Property(e => e.OperatorName).HasMaxLength(50);
             entity.Property(e => e.Remark).HasMaxLength(500);
+            entity.Property(e => e.CheckoutSessionNo).HasMaxLength(64);
 
             entity.HasIndex(e => e.CardSaleId);
             entity.HasIndex(e => e.OrderId);
             entity.HasIndex(e => e.VerifyTime);
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
+            // 购物车结算批次号索引（POS 购物车一次结算生成的三单据按批次聚合追溯查询）
+            entity.HasIndex(e => e.CheckoutSessionNo);
 
             entity.HasOne(e => e.CardSale)
                 .WithMany()
@@ -1171,7 +1236,6 @@ public class StoreDbContext : TenantDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Category).HasMaxLength(50);
             entity.Property(e => e.Spec).HasMaxLength(500);
             entity.Property(e => e.Description).HasMaxLength(500);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
@@ -1180,6 +1244,13 @@ public class StoreDbContext : TenantDbContext
             entity.HasIndex(e => new { e.TenantId, e.StoreId, e.Code }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.StoreId });
             entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => e.ParentId);
+
+            // 父子级自引用：父级节点作为分类/分组，禁止物理删除被引用的父级
+            entity.HasOne(e => e.Parent)
+                .WithMany()
+                .HasForeignKey(e => e.ParentId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -1403,6 +1474,30 @@ public class StoreDbContext : TenantDbContext
             entity.HasOne(e => e.Product)
                 .WithMany()
                 .HasForeignKey(e => e.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private void ConfigureInventoryCheckBatch(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryCheckBatch>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.BatchNo).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Quantity).HasPrecision(18, 4);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+
+            entity.HasIndex(e => e.CheckId);
+            entity.HasIndex(e => new { e.TenantId, e.StoreId });
+
+            entity.HasOne(e => e.Check)
+                .WithMany()
+                .HasForeignKey(e => e.CheckId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Batch)
+                .WithMany()
+                .HasForeignKey(e => e.BatchId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
@@ -1633,7 +1728,11 @@ public class StoreDbContext : TenantDbContext
             entity.Property(e => e.OperatorName).HasMaxLength(50);
             entity.Property(e => e.Remark).HasMaxLength(500);
 
-            entity.HasIndex(e => e.TransferNo).IsUnique();
+            // TransferNo 在"同租户同门店"内唯一（StockTransferNoGenerator 应用层保证，数据库组合唯一索引兜底，对齐 Order/Appointment/PurchaseOrder 模式）
+            entity.HasIndex(e => e.TransferNo);
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.TransferNo })
+                .IsUnique()
+                .HasDatabaseName("UX_StockTransfers_Tenant_Store_TransferNo");
             entity.HasIndex(e => e.FromStoreId);
             entity.HasIndex(e => e.ToStoreId);
             entity.HasIndex(e => e.TransferDate);
@@ -1683,7 +1782,7 @@ public class StoreDbContext : TenantDbContext
             entity.HasIndex(e => e.StatMonth);
             entity.HasIndex(e => e.ProductId);
             entity.HasIndex(e => e.ProductType);
-            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.StatDate, e.ProductId }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.StatDate, e.ProductId, e.ProductType }).IsUnique();
 
             entity.HasOne(e => e.Product)
                 .WithMany()

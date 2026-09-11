@@ -50,6 +50,27 @@ export interface InventoryCheck {
   status: number
   /** 备注 */
   remark?: string
+  /** 本次盘点涉及批次明细（盘盈累加批次 / 盘亏扣减批次，无差异时为空） */
+  batches: InventoryCheckBatch[]
+}
+
+/**
+ * 盘点批次明细（盘盈累加批次 / 盘亏扣减批次）
+ * 对应后端 InventoryCheckBatchDto
+ */
+export interface InventoryCheckBatch {
+  /** 明细ID */
+  id: number
+  /** 库存批次ID */
+  batchId: number
+  /** 批次号 */
+  batchNo: string
+  /** 该批次盘点数量（盘盈为累加数量、盘亏为扣减数量，均为正数） */
+  quantity: number
+  /** 该批次单价 */
+  unitPrice?: number
+  /** 该批次过期日期 */
+  expirationDate?: string
 }
 
 /**
@@ -100,8 +121,8 @@ export interface SubmitCheckRequest {
   actualQuantity: number
   /** 盘亏批次扣减明细（差异为负时使用，留空走 FIFO 兜底） */
   deductBatches?: BatchDeductItem[]
-  /** 盘盈批次号（差异为正时使用，留空后端生成 PY-时间戳） */
-  gainBatchNo?: string
+  /** 盘盈批次累加明细（差异为正时使用，可多个批次，数量合计需与差异数量匹配） */
+  gainBatches?: GainBatchItem[]
   /** 盘盈批次单价（差异为正时使用，留空取 Product.CostPrice） */
   gainUnitPrice?: number
   /** 盘盈批次生产日期 */
@@ -129,10 +150,21 @@ export interface CreateAndSubmitRequest {
   actualQuantity: number
   /** 盘亏批次扣减明细（差异为负时使用，留空走 FIFO 兜底） */
   deductBatches?: BatchDeductItem[]
-  /** 盘盈批次号（差异为正时使用，必须为当前商品在当前门店的已有批次号） */
-  gainBatchNo?: string
+  /** 盘盈批次累加明细（差异为正时使用，可多个批次，数量合计需与差异数量匹配） */
+  gainBatches?: GainBatchItem[]
   /** 备注（可选） */
   remark?: string
+}
+
+/**
+ * 盘盈批次累加明细项（盘盈累加批次时使用）
+ * 对应后端 GainBatchItem
+ */
+export interface GainBatchItem {
+  /** 批次ID（InventoryBatch.Id） */
+  batchId: number
+  /** 该批次累加数量，>0 */
+  quantity: number
 }
 
 /**
@@ -186,7 +218,7 @@ export interface InventoryCheckBatchOption {
 }
 
 /**
- * 盘盈批次查询结果（按批次号查当前商品在当前门店的全部历史批次，含已扣完）
+ * 盘盈批次选项/查询结果（当前商品在当前门店的全部批次，含已用完/已过期）
  * 对应后端 InventoryCheckBatchLookupDto
  */
 export interface InventoryCheckBatchLookup {

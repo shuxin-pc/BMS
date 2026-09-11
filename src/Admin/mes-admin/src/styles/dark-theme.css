@@ -682,6 +682,23 @@ body::before {
   color: #1f2937 !important;
 }
 
+.el-dialog__body .detail-items-title {
+  color: #1f2937 !important;
+}
+
+/* 弹窗内描述列表（el-descriptions）- 浅色风格（覆盖暗色主题下浅色文字，与白色弹窗背景协调）
+   暗色主题默认 el-descriptions 文字为浅色（约 #cfd3dc），叠在白色弹窗背景上几乎看不清；
+   此处统一为 border 模式适配：label 灰字 + 浅灰底，content 深色字。 */
+.el-dialog .el-dialog__body .el-descriptions__label {
+  color: #4b5563 !important;
+  font-weight: 600;
+  background-color: #f3f4f6 !important;
+}
+
+.el-dialog .el-dialog__body .el-descriptions__content {
+  color: #1f2937 !important;
+}
+
 /* 表单样式 - 浅色弹窗 */
 :deep(.el-form-item__label) {
   color: #4b5563 !important;

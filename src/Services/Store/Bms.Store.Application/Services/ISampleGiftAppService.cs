@@ -23,7 +23,7 @@ public interface ISampleGiftAppService
 
     /// <summary>
     /// 获取样品/赠品按活动维度统计报表分页列表（P-SG-04）
-    /// R5：数据源 InventoryLogs（SourceType 9=样品领用出库/10=赠品活动出库），按 ActivityId + ProductId 聚合
+    /// R5：数据源 InventoryLogs（SourceType 8=样品领用出库/9=赠品活动出库），按 ActivityId + ProductId 聚合
     /// </summary>
     Task<ApiResponseDto<PagedResponseDto<SampleActivityReportDto>>> GetReportByActivityAsync(SampleActivityReportQueryDto query);
 

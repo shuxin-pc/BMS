@@ -10,11 +10,13 @@ import type {
   OrderItem,
   OrderQuery,
   RefundRequest,
+  RefundItem,
   RefundResult,
   OrderCreate,
   OrderItemCreate,
   CancelRequest,
-  ApiResponse
+  ApiResponse,
+  ConsumableExpiry
 } from './types'
 
 // 导出类型供外部使用
@@ -23,11 +25,13 @@ export type {
   OrderItem,
   OrderQuery,
   RefundRequest,
+  RefundItem,
   RefundResult,
   ApiResponse,
   OrderCreate,
   OrderItemCreate,
   CancelRequest,
+  ConsumableExpiry,
   PagedResponse
 }
 
@@ -43,6 +47,7 @@ export async function getOrders(query?: OrderQuery): Promise<PagedResponse<Order
   const qs = buildQuery({
     orderNo: query?.orderNo,
     customerId: query?.customerId,
+    keyword: query?.keyword,
     orderType: query?.orderType,
     status: query?.status,
     payMethod: query?.payMethod,
@@ -69,7 +74,8 @@ export async function getOrder(id: number): Promise<Order> {
 /**
  * 订单退款
  * 对接后端：POST /api/store/orders/{id}/refund
- * 事务包裹，按订单类型联动库存/疗程卡/储值/积分
+ * 事务包裹，按订单类型联动库存/项目卡/储值/积分
+ * 退库明细 refundItems 由门店在退款弹窗手动选择（粒度 OrderItemBatch），只从订单已有批次退回，绝不新建退货批次
  * @param data 退款请求
  * @returns 退款结果（含联动操作记录）
  */
@@ -77,8 +83,10 @@ export async function refundOrder(data: RefundRequest): Promise<RefundResult> {
   return request<RefundResult>(`/orders/${data.orderId}/refund`, {
     method: 'POST',
     body: JSON.stringify({
+      orderId: data.orderId,
       refundAmount: data.refundAmount,
-      reason: data.reason
+      reason: data.reason,
+      refundItems: data.refundItems
     })
   })
 }
@@ -86,9 +94,9 @@ export async function refundOrder(data: RefundRequest): Promise<RefundResult> {
 /**
  * 取消订单
  * 对接后端：POST /api/store/orders/{id}/cancel
- * 事务包裹，按 OrderType 全量回滚库存/BOM/疗程卡/积分/储值/统计/消费记录
+ * 事务包裹，按 OrderType 全量回滚库存/BOM/项目卡/积分/储值/统计/消费记录
  * 订单 Status 改为 4（已取消），视为订单未发生
- * 仅 Status=1（进行中）或 Status=2（已完成）的订单可取消
+ * 仅 Status=2（已完成）的订单可取消
  * @param data 取消请求（含取消原因）
  */
 export async function cancelOrder(data: CancelRequest): Promise<void> {

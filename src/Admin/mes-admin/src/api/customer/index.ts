@@ -27,6 +27,7 @@ import type {
   CustomerConsumptionStat
 } from './types'
 import { request, buildQuery, type ApiResponse, type PagedResponse } from '../shared/storeRequest'
+import { toLocalDateTime } from '@/utils/time'
 
 // 导出类型供外部使用
 export type {
@@ -69,6 +70,7 @@ export async function getCustomers(query?: CustomerQuery): Promise<PagedResponse
   const params = buildQuery({
     name: query?.name,
     phone: query?.phone,
+    keyword: query?.keyword,
     levelId: query?.levelId,
     tagId: query?.tagId,
     gender: query?.gender,
@@ -135,7 +137,7 @@ export async function deleteCustomers(ids: number[]): Promise<void> {
 /**
  * 永久删除客户档案（物理删除）
  * 物理删除客户及关联个人信息（含美容档案、身体数据、对比照片等），订单脱敏保留
- * 前置条件：无未完成订单、无未核销疗程卡、无储值余额
+ * 前置条件：无未完成订单、无未核销项目卡、无储值余额
  * 需二次确认（客户手机号后4位）
  * 依据：《个人信息保护法》第 47 条
  * @param id 客户ID
@@ -397,8 +399,7 @@ export async function savePointsRule(data: PointsRule): Promise<PointsRule> {
  */
 export async function getPointsRecords(query?: PointsRecordQuery): Promise<PagedResponse<PointsRecord>> {
   const params = buildQuery({
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
     type: query?.changeType,
     pageIndex: query?.pageIndex || 1,
     pageSize: query?.pageSize || 20
@@ -442,7 +443,7 @@ export async function earnPoints(
     beforePoints,
     afterPoints,
     type: 1,
-    changeTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+    changeTime: toLocalDateTime().replace('T', ' '),
     orderNo: orderId,
     remark: '消费获取积分'
   }
@@ -484,7 +485,7 @@ export async function refundPoints(
     beforePoints,
     afterPoints,
     type: 3,
-    changeTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+    changeTime: toLocalDateTime().replace('T', ' '),
     orderNo: orderId,
     remark: `订单退款扣减积分（应扣${pointsToDeduct}，实扣${actualDeduct}）`
   }
@@ -517,9 +518,10 @@ interface OrderDtoForConsume {
   customerId?: number
   customerName?: string
   phone?: string
-  storeName?: string
   projectSummary?: string
   paidAmount: number
+  refundAmount: number
+  status: number
   payMethod?: number
   orderTime: string
 }
@@ -533,8 +535,7 @@ interface OrderDtoForConsume {
  */
 export async function getConsumeRecords(query?: ConsumeRecordQuery): Promise<PagedResponse<ConsumeRecord>> {
   const qs = buildQuery({
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
     startDate: query?.startDate,
     endDate: query?.endDate,
     pageIndex: query?.pageIndex || 1,
@@ -548,11 +549,12 @@ export async function getConsumeRecords(query?: ConsumeRecordQuery): Promise<Pag
       customerName: o.customerName ?? '散客',
       phone: o.phone ?? '',
       orderNo: o.orderNo,
-      amount: o.paidAmount,
+      // 消费金额展示净实付（实收 - 已退款），退款后金额随之减少
+      amount: o.paidAmount - (o.refundAmount || 0),
       projectName: o.projectSummary ?? '',
       paymentMethod: o.payMethod ?? 0,
-      consumeTime: o.orderTime,
-      storeName: o.storeName ?? ''
+      status: o.status,
+      consumeTime: o.orderTime
     })),
     total: res.total,
     pageIndex: res.pageIndex,
@@ -569,8 +571,7 @@ export async function getConsumeRecords(query?: ConsumeRecordQuery): Promise<Pag
  */
 export async function getBirthdayReminders(query?: BirthdayReminderQuery): Promise<PagedResponse<BirthdayReminder>> {
   const params = buildQuery({
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
     careStatus: query?.careStatus,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize
@@ -593,8 +594,7 @@ export async function markBirthdayCared(id: number): Promise<void> {
  */
 export async function getConsumeThanks(query?: ConsumeThankQuery): Promise<PagedResponse<ConsumeThankRecord>> {
   const params = buildQuery({
-    customerName: query?.customerName,
-    phone: query?.phone,
+    keyword: query?.keyword,
     thankStatus: query?.thankStatus,
     pageIndex: query?.pageIndex,
     pageSize: query?.pageSize

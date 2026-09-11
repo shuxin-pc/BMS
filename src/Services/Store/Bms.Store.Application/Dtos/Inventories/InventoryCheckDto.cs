@@ -57,4 +57,47 @@ public class InventoryCheckDto
     public string? Remark { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 本次盘点涉及批次明细（盘盈累加批次 / 盘亏扣减批次）
+    /// 为空表示无差异（未调整库存）
+    /// </summary>
+    public List<InventoryCheckBatchDto> Batches { get; set; } = new();
+}
+
+/// <summary>
+/// 库存盘点批次明细 DTO（盘盈累加批次 / 盘亏扣减批次）
+/// 对应实体 InventoryCheckBatch
+/// </summary>
+public class InventoryCheckBatchDto
+{
+    /// <summary>
+    /// 明细ID
+    /// </summary>
+    public long Id { get; set; }
+
+    /// <summary>
+    /// 库存批次ID（InventoryBatch.Id）
+    /// </summary>
+    public long BatchId { get; set; }
+
+    /// <summary>
+    /// 批次号
+    /// </summary>
+    public string BatchNo { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 该批次盘点数量（盘盈为累加数量、盘亏为扣减数量，均为正数）
+    /// </summary>
+    public decimal Quantity { get; set; }
+
+    /// <summary>
+    /// 该批次单价（冗余存储，用于金额核算与展示）
+    /// </summary>
+    public decimal? UnitPrice { get; set; }
+
+    /// <summary>
+    /// 该批次过期日期（冗余存储，用于展示）
+    /// </summary>
+    public DateTime? ExpirationDate { get; set; }
 }

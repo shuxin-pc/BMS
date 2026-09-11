@@ -41,11 +41,11 @@ export interface DailySettlement {
   totalStoredValueConsume: number
   /** 订单数 */
   orderCount: number
-  /** 总成本（主营成本 = 销售出库成本 + 疗程卡核销出库成本） */
+  /** 总成本（主营成本 = 销售出库成本 + 项目卡核销出库成本） */
   totalCost: number
   /** 销售出库成本 */
   salesOutboundCost: number
-  /** 疗程卡核销出库成本 */
+  /** 项目卡核销出库成本 */
   treatmentCardOutboundCost: number
   /** 盘亏损失（营业外支出） */
   inventoryLossAmount: number

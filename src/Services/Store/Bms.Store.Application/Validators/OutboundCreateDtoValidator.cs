@@ -12,9 +12,9 @@ public class OutboundCreateDtoValidator : AbstractValidator<OutboundCreateDto>
     /// <summary>合法的出库来源类型集合（仅允许手动出库来源，盘点/调拨/采购退货等由专门流程产生）</summary>
     private static readonly HashSet<int> ValidOutboundSourceTypes = new()
     {
-        InventoryLogSourceTypes.Other,                     // 11
-        InventoryLogSourceTypes.SampleReceiveOutbound,     // 9
-        InventoryLogSourceTypes.GiftOutbound               // 10
+        InventoryLogSourceTypes.Other,                     // 10
+        InventoryLogSourceTypes.SampleReceiveOutbound,     // 8
+        InventoryLogSourceTypes.GiftOutbound               // 9
     };
 
     public OutboundCreateDtoValidator()
@@ -24,7 +24,7 @@ public class OutboundCreateDtoValidator : AbstractValidator<OutboundCreateDto>
 
         RuleFor(x => x.SourceType)
             .Must(st => ValidOutboundSourceTypes.Contains(st))
-            .WithMessage("出库来源类型不合法，仅允许 9=样品领用 10=赠品活动 11=其他");
+            .WithMessage("出库来源类型不合法，仅允许 8=样品领用 9=赠品活动 10=其他");
 
         // Quantity 与 BatchItems 互斥：只能填一个
         RuleFor(x => x)

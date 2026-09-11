@@ -3,7 +3,7 @@
     <div class="card setting-card" v-loading="loading">
       <div class="page-header">
         <h3 class="page-title">门店设置</h3>
-        <p class="page-desc">跨店权益配置，修改后立即生效</p>
+        <p class="page-desc">跨店核销为租户级配置，提醒接收角色按当前门店配置</p>
       </div>
 
       <el-form label-width="160px" class="setting-form">
@@ -19,21 +19,25 @@
                 {{ form.allowCrossStoreVerify ? '已开启' : '已关闭' }}
               </span>
               <span class="switch-hint">
-                开启后允许在其他门店核销疗程卡；关闭后仅限发卡门店核销
+                开启后允许在其他门店核销项目卡；关闭后仅限发卡门店核销
               </span>
             </div>
           </div>
         </el-form-item>
 
-        <el-form-item label="生日提醒接收角色">
+        <el-form-item
+          v-for="rt in reminderTypes"
+          :key="rt.type"
+          :label="`${rt.label}接收角色`"
+        >
           <div class="switch-row">
             <el-select
-              v-model="form.birthdayReminderRoleIds"
+              v-model="form.reminderRoles[rt.type]"
               multiple
               filterable
               collapse-tags
               collapse-tags-tooltip
-              placeholder="选择接收客户生日提醒站内信的角色（不选则不发送）"
+              :placeholder="`选择接收${rt.label}站内信的角色（不选则不发送）`"
               :disabled="saving || roleLoading"
               :loading="roleLoading"
               style="width: 360px"
@@ -47,7 +51,7 @@
             </el-select>
             <div class="switch-meta">
               <span class="switch-hint">
-                多选；所选角色的用户将在客户生日时收到站内信提醒。空列表表示不发送
+                多选；所选角色的用户将收到{{ rt.label }}站内信。空列表表示不发送
               </span>
             </div>
           </div>
@@ -59,6 +63,7 @@
             :loading="saving"
             :disabled="loading || !dirty"
             @click="handleSave"
+            v-if="hasPermission('store:store:setting:save')"
           >
             保存设置
           </el-button>
@@ -74,13 +79,26 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   getStoreTenantSetting,
-  updateStoreTenantSetting
+  updateStoreTenantSetting,
+  getStoreReminderSettings,
+  updateStoreReminderSettings
 } from '@/api/store'
 import { getAllRoles } from '@/api/system'
+import { useUserStore } from '@/stores/user'
 import type { Role } from '@/api/system/types'
-import type { StoreTenantSettingUpdate } from '@/api/store/types'
+import type { StoreTenantSettingUpdate, StoreReminderSetting } from '@/api/store/types'
 
 defineOptions({ name: 'StoreSetting' })
+
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
+
+// 提醒类型清单：各类型提醒的接收角色独立配置（对应子表 StoreReminderSetting.ReminderType）
+const reminderTypes = [
+  { type: 'Birthday', label: '生日提醒' },
+  { type: 'Appointment', label: '预约提醒' },
+  { type: 'TreatmentExpiry', label: '项目卡到期' }
+] as const
 
 const loading = ref(false)
 const saving = ref(false)
@@ -90,31 +108,51 @@ const roleOptions = ref<Role[]>([])
 
 const form = reactive({
   allowCrossStoreVerify: true,
-  birthdayReminderRoleIds: [] as string[]
+  // 各提醒类型接收角色ID（key 为 ReminderType，value 为 roleIds 字符串数组）
+  reminderRoles: {} as Record<string, string[]>
 })
 
 // 原始快照，用于判断是否有改动
 const snapshot = reactive({
   allowCrossStoreVerify: true,
-  birthdayReminderRoleIds: [] as string[]
+  reminderRoles: {} as Record<string, string[]>
+})
+
+// 为每个提醒类型初始化空数组，保证 reactive 可追踪动态 key
+reminderTypes.forEach(rt => {
+  form.reminderRoles[rt.type] = []
+  snapshot.reminderRoles[rt.type] = []
 })
 
 // 数组用 JSON.stringify 比对，保存后回填顺序与 snapshot 一致，无需额外排序
 const dirty = computed(
   () =>
     form.allowCrossStoreVerify !== snapshot.allowCrossStoreVerify ||
-    JSON.stringify(form.birthdayReminderRoleIds) !==
-      JSON.stringify(snapshot.birthdayReminderRoleIds)
+    reminderTypes.some(
+      rt =>
+        JSON.stringify(form.reminderRoles[rt.type] ?? []) !==
+        JSON.stringify(snapshot.reminderRoles[rt.type] ?? [])
+    )
 )
 
 async function loadData() {
   loading.value = true
   try {
-    const data = await getStoreTenantSetting()
-    form.allowCrossStoreVerify = data.allowCrossStoreVerify
-    form.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
-    snapshot.allowCrossStoreVerify = data.allowCrossStoreVerify
-    snapshot.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
+    // 并行加载主设置与各提醒类型配置，互不依赖
+    const [setting, reminderSettings] = await Promise.all([
+      getStoreTenantSetting(),
+      getStoreReminderSettings()
+    ])
+    form.allowCrossStoreVerify = setting.allowCrossStoreVerify
+    snapshot.allowCrossStoreVerify = setting.allowCrossStoreVerify
+
+    // 按类型填充角色ID：未配置的类型保持空数组
+    const roleMap = new Map(reminderSettings.map(s => [s.reminderType, s.roleIds ?? []]))
+    reminderTypes.forEach(rt => {
+      const roles = roleMap.get(rt.type) ?? []
+      form.reminderRoles[rt.type] = [...roles]
+      snapshot.reminderRoles[rt.type] = [...roles]
+    })
   } catch (err) {
     ElMessage.error((err as { message?: string }).message || '加载门店设置失败')
   } finally {
@@ -140,15 +178,27 @@ async function handleSave() {
   if (!dirty.value) return
   saving.value = true
   try {
+    // 1. 保存主设置（跨店核销开关）
     const payload: StoreTenantSettingUpdate = {
-      allowCrossStoreVerify: form.allowCrossStoreVerify,
-      birthdayReminderRoleIds: [...form.birthdayReminderRoleIds]
+      allowCrossStoreVerify: form.allowCrossStoreVerify
     }
-    const data = await updateStoreTenantSetting(payload)
-    snapshot.allowCrossStoreVerify = data.allowCrossStoreVerify
-    snapshot.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
-    form.allowCrossStoreVerify = data.allowCrossStoreVerify
-    form.birthdayReminderRoleIds = [...(data.birthdayReminderRoleIds ?? [])]
+    await updateStoreTenantSetting(payload)
+
+    // 2. 保存各提醒类型接收角色（整体提交）
+    const reminderPayload: StoreReminderSetting[] = reminderTypes.map(rt => ({
+      reminderType: rt.type,
+      roleIds: [...(form.reminderRoles[rt.type] ?? [])]
+    }))
+    const savedReminderSettings = await updateStoreReminderSettings(reminderPayload)
+
+    // 3. 回填快照，保证 dirty 判定回到未改动状态
+    snapshot.allowCrossStoreVerify = form.allowCrossStoreVerify
+    const roleMap = new Map(savedReminderSettings.map(s => [s.reminderType, s.roleIds ?? []]))
+    reminderTypes.forEach(rt => {
+      const roles = roleMap.get(rt.type) ?? []
+      form.reminderRoles[rt.type] = [...roles]
+      snapshot.reminderRoles[rt.type] = [...roles]
+    })
     ElMessage.success('保存成功')
   } catch (err) {
     ElMessage.error((err as { message?: string }).message || '保存失败')
@@ -159,7 +209,9 @@ async function handleSave() {
 
 function handleReset() {
   form.allowCrossStoreVerify = snapshot.allowCrossStoreVerify
-  form.birthdayReminderRoleIds = [...snapshot.birthdayReminderRoleIds]
+  reminderTypes.forEach(rt => {
+    form.reminderRoles[rt.type] = [...(snapshot.reminderRoles[rt.type] ?? [])]
+  })
 }
 
 onMounted(() => {

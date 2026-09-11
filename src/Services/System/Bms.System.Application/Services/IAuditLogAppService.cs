@@ -9,5 +9,5 @@ public interface IAuditLogAppService
     Task<ApiResponseDto<PagedResponseDto<AuditLogDto>>> GetPagedListAsync(AuditLogQueryDto query);
     Task<ApiResponseDto> CreateAsync(CreateAuditLogDto dto);
     Task<ApiResponseDto> DeleteAsync(long id);
-    Task<ApiResponseDto> DeleteExpiredAsync(DateTime beforeDate);
+    Task<ApiResponseDto> DeleteExpiredAsync(DateTime beforeDate, long? tenantId = null);
 }

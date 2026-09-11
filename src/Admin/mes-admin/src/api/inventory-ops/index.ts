@@ -125,16 +125,6 @@ export const inboundSourceTypeMap: Record<InboundSourceType, string> = {
 }
 
 /**
- * 出库来源类型标签映射
- */
-export const outboundSourceTypeMap: Record<OutboundSourceType, string> = {
-  3: '盘点盘亏',
-  9: '样品领用',
-  10: '赠品活动',
-  11: '其他'
-}
-
-/**
  * 库存操作类型标签映射
  */
 export const inventoryOpTypeMap: Record<InventoryOpType, string> = {
@@ -145,7 +135,7 @@ export const inventoryOpTypeMap: Record<InventoryOpType, string> = {
 }
 
 /**
- * 库存流水来源类型标签映射（完整 0-13，用于流水 Drawer 列展示与筛选）
+ * 库存流水来源类型标签映射（用于流水 Drawer 列展示与筛选）
  */
 export const inventoryLogSourceTypeMap: Record<InventoryLogSourceType, string> = {
   0: '销售出库',
@@ -155,13 +145,10 @@ export const inventoryLogSourceTypeMap: Record<InventoryLogSourceType, string> =
   4: '调拨入库',
   5: '调拨出库',
   6: '采购退货出库',
-  7: '疗程卡核销出库',
-  8: '样品/赠品出库（历史）',
-  9: '样品领用出库',
-  10: '赠品活动出库',
-  11: '其他',
-  12: '样品赠品调拨出库',
-  13: '样品赠品调拨入库'
+  7: '项目卡核销出库',
+  8: '样品领用出库',
+  9: '赠品活动出库',
+  10: '其他'
 }
 
 /**
@@ -175,11 +162,8 @@ export const inventoryLogSourceTypeOptions: { label: string; value: InventoryLog
   { label: '调拨入库', value: 4 },
   { label: '调拨出库', value: 5 },
   { label: '采购退货出库', value: 6 },
-  { label: '疗程卡核销出库', value: 7 },
-  { label: '样品/赠品出库（历史）', value: 8 },
-  { label: '样品领用出库', value: 9 },
-  { label: '赠品活动出库', value: 10 },
-  { label: '其他', value: 11 },
-  { label: '样品赠品调拨出库', value: 12 },
-  { label: '样品赠品调拨入库', value: 13 }
+  { label: '项目卡核销出库', value: 7 },
+  { label: '样品领用出库', value: 8 },
+  { label: '赠品活动出库', value: 9 },
+  { label: '其他', value: 10 }
 ]

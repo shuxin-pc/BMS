@@ -13,7 +13,8 @@ import type {
   EquipmentCreate,
   EquipmentUpdate,
   MaintenanceCreate,
-  MaintenanceUpdate
+  MaintenanceUpdate,
+  EquipmentStatus
 } from './types'
 
 // 导出类型供外部使用
@@ -51,10 +52,12 @@ export async function getEquipmentList(query?: EquipmentQuery): Promise<PagedRes
 /**
  * 获取全部设备列表（用于下拉选择）
  * 对接后端：GET /api/store/equipments?pageIndex=1&pageSize=1000
+ * @param status 可选状态筛选（如预约场景传 1 仅取正常设备）
  * @returns 设备列表
  */
-export async function getAllEquipments(): Promise<Equipment[]> {
-  const result = await request<PagedResponse<Equipment>>(`/equipments?pageIndex=1&pageSize=1000`)
+export async function getAllEquipments(status?: EquipmentStatus): Promise<Equipment[]> {
+  const qs = buildQuery({ status, pageIndex: 1, pageSize: 1000 })
+  const result = await request<PagedResponse<Equipment>>(`/equipments${qs}`)
   return result.list
 }
 
@@ -130,21 +133,24 @@ export async function getUpcomingMaintenance(days: number = 7): Promise<Equipmen
 /**
  * 按服务项目查询可用设备列表
  * 对接后端：GET /api/store/equipments/available-by-service
- * 按服务项目 ServiceProductEquipment 关联的设备类型过滤，并排除指定时段已冲突的设备
- * @param serviceProductId 服务项目子表ID（关联 ServiceProduct.Id）
- * @param startTime 预约开始时间（ISO 字符串）
- * @param endTime 预约结束时间（ISO 字符串）
+ * 按服务项目 ServiceProductEquipment 关联的设备类型过滤；startTime/endTime 均传入时额外排除指定时段已冲突的设备
+ * @param serviceProductId 服务项目子表ID（关联 ServiceProduct.Id，预约页语境）
+ * @param masterId 商品主档ID（服务项目页语境，后端自动反查租户内 ServiceProduct）
+ * @param startTime 预约开始时间（ISO 字符串）；可选，不传时仅按类型过滤、不排除冲突
+ * @param endTime 预约结束时间（ISO 字符串）；可选，不传时仅按类型过滤、不排除冲突
  * @param excludeAppointmentId 需排除的预约ID（更新场景，避免与自身冲突）
  * @returns 可用设备列表；服务项目未关联设备类型时返回空列表
  */
 export async function getAvailableEquipmentsByService(
-  serviceProductId: number,
-  startTime: string,
-  endTime: string,
+  serviceProductId?: number,
+  masterId?: number,
+  startTime?: string,
+  endTime?: string,
   excludeAppointmentId?: number
 ): Promise<Equipment[]> {
   const qs = buildQuery({
     serviceProductId,
+    masterId,
     startTime,
     endTime,
     excludeAppointmentId

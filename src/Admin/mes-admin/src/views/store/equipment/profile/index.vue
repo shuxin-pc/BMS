@@ -44,7 +44,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:equipment:profile:add')">
           <el-icon><Plus /></el-icon>
           新增设备
         </el-button>
@@ -63,16 +63,10 @@
     <!-- 表格区域 -->
     <div class="card">
       <el-table v-loading="tableLoading" :data="tableData" style="width: 100%">
+      <el-table-column prop="name" label="设备名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="code" label="资产编号" width="140" />
         <el-table-column prop="equipmentTypeName" label="设备类型" width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.equipmentTypeName || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="name" label="设备名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="model" label="型号" width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.model || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="manufacturer" label="厂商" width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.manufacturer || '-' }}</template>
         </el-table-column>
         <el-table-column prop="purchaseDate" label="购入日期" width="120">
           <template #default="{ row }">{{ formatDate(row.purchaseDate) }}</template>
@@ -101,11 +95,11 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:equipment:profile:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:equipment:profile:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -283,11 +277,7 @@
           <template #default="{ row }">{{ row.location || '-' }}</template>
         </el-table-column>
         <el-table-column prop="nextMaintenanceDate" label="下次保养" width="140">
-          <template #default="{ row }">
-            <span :class="{ 'maintenance-warn': isMaintenanceNear(row.nextMaintenanceDate) }">
-              {{ formatDate(row.nextMaintenanceDate) }}
-            </span>
-          </template>
+          <template #default="{ row }">{{ getMaintenanceDaysText(row.nextMaintenanceDate) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
@@ -309,6 +299,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit, Bell } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import {
   getEquipmentList,
   createEquipment,
@@ -319,8 +310,11 @@ import {
 import type { Equipment, EquipmentStatus } from '@/api/equipment/types'
 import { getEquipmentTypeOptions } from '@/api/equipment-type'
 import type { EquipmentType } from '@/api/equipment-type'
+import { formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -412,13 +406,6 @@ const getStatusTagType = (status: EquipmentStatus): 'info' | 'success' | 'warnin
   return map[status] || 'info'
 }
 
-/**
- * 格式化日期
- */
-const formatDate = (dateStr?: string): string => {
-  if (!dateStr) return '-'
-  return dateStr.split('T')[0]
-}
 
 /**
  * 判断保养日期是否临近（7天内）
@@ -430,6 +417,20 @@ const isMaintenanceNear = (dateStr?: string): boolean => {
   const diff = target.getTime() - now.getTime()
   const days = diff / (1000 * 60 * 60 * 24)
   return days >= 0 && days <= 7
+}
+
+/**
+ * 计算下次保养剩余天数文本（按自然日差值）
+ */
+const getMaintenanceDaysText = (dateStr?: string): string => {
+  if (!dateStr) return '-'
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(dateStr.split('T')[0])
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays > 0) return `剩余 ${diffDays} 天`
+  if (diffDays === 0) return '今天到期'
+  return `已过期 ${Math.abs(diffDays)} 天`
 }
 
 // 加载数据

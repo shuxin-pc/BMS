@@ -46,11 +46,12 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button v-if="hasPermission('store:purchase-inventory:purchase-return:add')" type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           发起退货
         </el-button>
         <el-button
+          v-if="hasPermission('store:purchase-inventory:purchase-return:batchDelete')"
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
@@ -122,8 +123,8 @@
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="hasPermission('store:purchase-inventory:purchase-return:edit')" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="hasPermission('store:purchase-inventory:purchase-return:delete')" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -302,6 +303,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import {
   getPurchaseReturns,
   createPurchaseReturn,
@@ -314,8 +316,11 @@ import { getSuppliers, getProductsBySupplier } from '@/api/supplier'
 import type { Supplier } from '@/api/supplier/types'
 import { getProductOptions, getProductBatches } from '@/api/inventory-ops'
 import type { InventoryBatchOption } from '@/api/inventory-ops/types'
+import { formatDate as formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 商品下拉选项（从后端加载，用于列表展开行展示商品名称）
 const productOptions = ref<{ id: number; name: string; code: string }[]>([])
@@ -564,7 +569,7 @@ const handleQuantityChange = (index: number) => {
 const resetFormData = () => {
   formData.returnNo = ''
   formData.supplierId = undefined
-  formData.returnTime = new Date().toISOString().slice(0, 10)
+  formData.returnTime = formatDateTime(new Date())
   formData.voucherImageUrl = ''
   formData.remark = ''
   formData.items = []
@@ -716,11 +721,6 @@ const handleSubmit = async () => {
   })
 }
 
-// 格式化日期（退货时间只精确到天）
-const formatDateTime = (dateStr: string): string => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toISOString().split('T')[0]
-}
 
 onMounted(async () => {
   if (!systemConfigStore.loaded) {

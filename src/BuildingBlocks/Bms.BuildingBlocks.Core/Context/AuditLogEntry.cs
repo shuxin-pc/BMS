@@ -6,11 +6,17 @@ namespace Bms.BuildingBlocks.Core.Context;
 public class AuditLogEntry
 {
     public long? TenantId { get; set; }
+    public long? StoreId { get; set; }
+    public string? StoreName { get; set; }
     public long? UserId { get; set; }
     public string? UserName { get; set; }
     public string? RealName { get; set; }
     public string? OperationType { get; set; }
     public string? OperationContent { get; set; }
+    /// <summary>
+    /// 被操作对象的ID（业务实体变更时填充，自定义操作如登录/日结确认为空）
+    /// </summary>
+    public long? EntityId { get; set; }
     public string? RequestPath { get; set; }
     public string? RequestMethod { get; set; }
     public string? RequestIp { get; set; }

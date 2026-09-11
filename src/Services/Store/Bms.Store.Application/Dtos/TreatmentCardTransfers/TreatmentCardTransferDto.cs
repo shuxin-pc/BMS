@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCardTransfers;
 
 /// <summary>
-/// 疗程卡转让记录 DTO
+/// 项目卡转让记录 DTO
 /// </summary>
 public class TreatmentCardTransferDto
 {
@@ -11,7 +11,7 @@ public class TreatmentCardTransferDto
     public long Id { get; set; }
 
     /// <summary>
-    /// 操作门店ID（可空，疗程卡跨店通用）
+    /// 操作门店ID（可空，项目卡跨店通用）
     /// </summary>
     public long? StoreId { get; set; }
 
@@ -21,9 +21,19 @@ public class TreatmentCardTransferDto
     public string? StoreCode { get; set; }
 
     /// <summary>
-    /// 疗程卡销售记录ID
+    /// 操作门店名称（join Store 展示）
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
+    /// 项目卡销售记录ID
     /// </summary>
     public long CardSaleId { get; set; }
+
+    /// <summary>
+    /// 项目卡名称（join TreatmentCardSale.Card 展示）
+    /// </summary>
+    public string? CardName { get; set; }
 
     /// <summary>
     /// 原客户ID
@@ -31,9 +41,29 @@ public class TreatmentCardTransferDto
     public long FromCustomerId { get; set; }
 
     /// <summary>
+    /// 原客户名称（join Customer 展示）
+    /// </summary>
+    public string? FromCustomerName { get; set; }
+
+    /// <summary>
+    /// 原客户手机号（join Customer 展示）
+    /// </summary>
+    public string? FromCustomerPhone { get; set; }
+
+    /// <summary>
     /// 新客户ID
     /// </summary>
     public long ToCustomerId { get; set; }
+
+    /// <summary>
+    /// 新客户名称（join Customer 展示）
+    /// </summary>
+    public string? ToCustomerName { get; set; }
+
+    /// <summary>
+    /// 新客户手机号（join Customer 展示）
+    /// </summary>
+    public string? ToCustomerPhone { get; set; }
 
     /// <summary>
     /// 转让日期

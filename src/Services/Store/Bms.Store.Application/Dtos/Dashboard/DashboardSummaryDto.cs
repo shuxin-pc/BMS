@@ -27,7 +27,7 @@ public class DashboardSummaryDto
     public decimal TodayPointsDeductAmount { get; set; }
 
     /// <summary>
-    /// 今日疗程卡核销折算金额（权责发生制转营收）
+    /// 今日项目卡核销折算金额（权责发生制转营收）
     /// </summary>
     public decimal TodayTreatmentCardVerifyAmount { get; set; }
 

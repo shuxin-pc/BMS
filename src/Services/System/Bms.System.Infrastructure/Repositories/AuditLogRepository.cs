@@ -96,11 +96,17 @@ public class AuditLogRepository : IAuditLogRepository
         }
     }
 
-    public async Task<int> DeleteExpiredAsync(DateTime beforeDate)
+    public async Task<int> DeleteExpiredAsync(DateTime beforeDate, long? tenantId = null)
     {
-        var expiredLogs = await _context.AuditLogs
-            .Where(a => a.CreatedTime < beforeDate)
-            .ToListAsync();
+        var query = _context.AuditLogs.Where(a => a.CreatedTime < beforeDate);
+
+        // 租户隔离：限定租户范围，防止越权清理其他租户日志
+        if (tenantId.HasValue)
+        {
+            query = query.Where(a => a.TenantId == tenantId.Value);
+        }
+
+        var expiredLogs = await query.ToListAsync();
 
         _context.AuditLogs.RemoveRange(expiredLogs);
         await _context.SaveChangesAsync();

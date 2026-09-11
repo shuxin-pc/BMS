@@ -1,7 +1,7 @@
 namespace Bms.Store.Application.Dtos.TreatmentCards;
 
 /// <summary>
-/// 更新疗程卡核销记录请求 DTO
+/// 更新项目卡核销记录请求 DTO
 /// </summary>
 public class TreatmentCardVerifyUpdateDto : TreatmentCardVerifyCreateDto
 {

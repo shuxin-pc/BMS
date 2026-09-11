@@ -174,6 +174,12 @@ public class ServiceProductAppService : IServiceProductAppService
                 .CountAsync(t => distinctTypeIds.Contains(t.Id) && t.TenantId == tenantId && !t.IsDeleted);
             if (validTypeCount != distinctTypeIds.Count)
                 return ApiResponseDto<ServiceProductDto>.Fail("所选设备类型不存在或已被删除", 400);
+
+            // 停用类型不可用于新的服务项目关联
+            var inactiveTypeCount = await _dbContext.EquipmentTypes
+                .CountAsync(t => distinctTypeIds.Contains(t.Id) && t.TenantId == tenantId && !t.IsDeleted && !t.IsActive);
+            if (inactiveTypeCount > 0)
+                return ApiResponseDto<ServiceProductDto>.Fail("所选设备类型存在已停用项，请先启用后再关联", 400);
         }
 
         var entity = dto.Adapt<ServiceProductEntity>();
@@ -256,6 +262,12 @@ public class ServiceProductAppService : IServiceProductAppService
                 .CountAsync(t => distinctTypeIds.Contains(t.Id) && t.TenantId == tenantId && !t.IsDeleted);
             if (validTypeCount != distinctTypeIds.Count)
                 return ApiResponseDto<ServiceProductDto>.Fail("所选设备类型不存在或已被删除", 400);
+
+            // 停用类型不可用于新的服务项目关联
+            var inactiveTypeCount = await _dbContext.EquipmentTypes
+                .CountAsync(t => distinctTypeIds.Contains(t.Id) && t.TenantId == tenantId && !t.IsDeleted && !t.IsActive);
+            if (inactiveTypeCount > 0)
+                return ApiResponseDto<ServiceProductDto>.Fail("所选设备类型存在已停用项，请先启用后再关联", 400);
         }
 
         entity.MasterId = dto.ProductId;

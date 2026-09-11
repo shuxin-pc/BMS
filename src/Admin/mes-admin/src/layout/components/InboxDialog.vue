@@ -171,6 +171,7 @@ import {
 } from '@/api/message'
 import { useMessageStore } from '@/stores/message'
 import { MessageCategory, type MessageInboxItem, type MessageInboxQuery } from '@/api/message/types'
+import { formatDateTime } from '@/utils/date'
 
 const props = defineProps<{
   modelValue: boolean
@@ -392,15 +393,6 @@ function getCategoryTagType(category: number): 'info' | 'warning' | 'success' {
   }
 }
 
-/**
- * 格式化日期时间
- */
-function formatDateTime(time: string): string {
-  if (!time) return ''
-  const date = new Date(time)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
 </script>
 
 <style scoped>

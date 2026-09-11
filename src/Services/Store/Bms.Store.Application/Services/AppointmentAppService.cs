@@ -6,6 +6,7 @@ using Bms.Store.Application.Dtos;
 using Bms.Store.Application.Dtos.Appointments;
 using Bms.Store.Application.Services.Resources;
 using Bms.Store.Domain.Constants;
+using Bms.Store.Domain.Entities;
 using AppointmentEntity = Bms.Store.Domain.Entities.Appointment;
 using ProductEntity = Bms.Store.Domain.Entities.Product;
 using ServiceProductEntity = Bms.Store.Domain.Entities.ServiceProduct;
@@ -47,21 +48,26 @@ public class AppointmentAppService : IAppointmentAppService
             return ApiResponseDto<PagedResponseDto<AppointmentDto>>.Fail("登录状态异常，请重新登录", 401);
 
         var tenantId = _currentUser.TenantId.Value;
+        var storeId = _currentUser.StoreId ?? 0;
         var queryable = _dbContext.Appointments
-            .Where(a => a.TenantId == tenantId);
+            .Where(a => a.TenantId == tenantId && a.StoreId == storeId);
 
         if (query.CustomerId.HasValue)
             queryable = queryable.Where(a => a.CustomerId == query.CustomerId.Value);
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            queryable = queryable.Where(a => a.CustomerName.Contains(query.CustomerName));
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            queryable = queryable.Where(a => a.CustomerPhone.Contains(query.Phone));
+        // 客户名称/手机号合并关键字查询：命中姓名或手机号其一即满足
+        if (!string.IsNullOrWhiteSpace(query.Keyword))
+            queryable = queryable.Where(a => a.CustomerName.Contains(query.Keyword) || a.CustomerPhone.Contains(query.Keyword));
+        if (!string.IsNullOrWhiteSpace(query.AppointmentNo))
+            queryable = queryable.Where(a => a.AppointmentNo.Contains(query.AppointmentNo));
         if (query.Status.HasValue)
             queryable = queryable.Where(a => a.Status == query.Status.Value);
-        if (query.AppointmentDateStart.HasValue)
-            queryable = queryable.Where(a => a.AppointmentDate >= query.AppointmentDateStart.Value);
-        if (query.AppointmentDateEnd.HasValue)
-            queryable = queryable.Where(a => a.AppointmentDate <= query.AppointmentDateEnd.Value);
+        // 多状态 IN 过滤（如快速开单转单需同时匹配 1已预约/2已到店），与 Status 单值过滤叠加生效
+        if (query.Statuses is { Count: > 0 })
+            queryable = queryable.Where(a => query.Statuses.Contains(a.Status));
+        if (query.StartTimeStart.HasValue)
+            queryable = queryable.Where(a => a.StartTime.Date >= query.StartTimeStart.Value);
+        if (query.StartTimeEnd.HasValue)
+            queryable = queryable.Where(a => a.StartTime.Date <= query.StartTimeEnd.Value);
         if (query.TechnicianSource.HasValue)
         {
             var matchingTechIds = _dbContext.Technicians
@@ -77,11 +83,25 @@ public class AppointmentAppService : IAppointmentAppService
             .Take(query.PageSize)
             .ToListAsync();
 
-        // 查询关联技师的来源，填充到 DTO
+        // 查询关联技师的来源与名称，填充到 DTO
         var technicianIds = items.Where(a => a.TechnicianId.HasValue).Select(a => a.TechnicianId!.Value).Distinct().ToList();
-        var technicianSources = await _dbContext.Technicians
+        var technicians = await _dbContext.Technicians
             .Where(t => technicianIds.Contains(t.Id))
-            .Select(t => new { t.Id, t.Source })
+            .Select(t => new { t.Id, t.Source, t.Name })
+            .ToListAsync();
+
+        // 批量查询关联房间/床位名称，填充到 DTO（日历按技师展示时需显示房间名）
+        var roomIds = items.Where(a => a.RoomId.HasValue).Select(a => a.RoomId!.Value).Distinct().ToList();
+        var roomNames = await _dbContext.Rooms
+            .Where(r => roomIds.Contains(r.Id) && !r.IsDeleted && r.TenantId == tenantId)
+            .Select(r => new { r.Id, r.Name })
+            .ToListAsync();
+
+        // 批量查询关联设备名称，填充到 DTO（列表/详情展示设备名）
+        var equipmentIds = items.Where(a => a.EquipmentId.HasValue).Select(a => a.EquipmentId!.Value).Distinct().ToList();
+        var equipmentNames = await _dbContext.Equipments
+            .Where(e => equipmentIds.Contains(e.Id) && !e.IsDeleted && e.TenantId == tenantId)
+            .Select(e => new { e.Id, e.Name })
             .ToListAsync();
 
         // 批量查询关联商品名称，填充到 DTO（替代原 ServiceItem 字符串字段）
@@ -96,8 +116,17 @@ public class AppointmentAppService : IAppointmentAppService
         {
             if (dto.TechnicianId.HasValue)
             {
-                var tech = technicianSources.FirstOrDefault(t => t.Id == dto.TechnicianId.Value);
+                var tech = technicians.FirstOrDefault(t => t.Id == dto.TechnicianId.Value);
                 dto.TechnicianSource = tech?.Source;
+                dto.TechnicianName = tech?.Name;
+            }
+            if (dto.RoomId.HasValue)
+            {
+                dto.RoomName = roomNames.FirstOrDefault(r => r.Id == dto.RoomId.Value)?.Name;
+            }
+            if (dto.EquipmentId.HasValue)
+            {
+                dto.EquipmentName = equipmentNames.FirstOrDefault(e => e.Id == dto.EquipmentId.Value)?.Name;
             }
             dto.ProductName = productNames.FirstOrDefault(p => p.Id == dto.ProductId)?.Name;
         }
@@ -121,7 +150,7 @@ public class AppointmentAppService : IAppointmentAppService
             return ApiResponseDto<AppointmentDto?>.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value && a.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<AppointmentDto?>.Fail("预约不存在", 404);
 
@@ -131,6 +160,19 @@ public class AppointmentAppService : IAppointmentAppService
             var tech = await _dbContext.Technicians
                 .FirstOrDefaultAsync(t => t.Id == entity.TechnicianId.Value);
             dto.TechnicianSource = tech?.Source;
+            dto.TechnicianName = tech?.Name;
+        }
+        if (entity.RoomId.HasValue)
+        {
+            var room = await _dbContext.Rooms
+                .FirstOrDefaultAsync(r => r.Id == entity.RoomId.Value && !r.IsDeleted);
+            dto.RoomName = room?.Name;
+        }
+        if (entity.EquipmentId.HasValue)
+        {
+            var equipment = await _dbContext.Equipments
+                .FirstOrDefaultAsync(e => e.Id == entity.EquipmentId.Value && !e.IsDeleted);
+            dto.EquipmentName = equipment?.Name;
         }
 
         // 填充服务项目商品名称（替代原 ServiceItem 字符串字段）
@@ -156,12 +198,7 @@ public class AppointmentAppService : IAppointmentAppService
             return ApiResponseDto<AppointmentDto>.Fail(string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), 400);
 
         var tenantId = _currentUser.TenantId.Value;
-
-        // 检查预约号唯一性
-        var noExists = await _dbContext.Appointments
-            .AnyAsync(a => a.AppointmentNo == dto.AppointmentNo && a.TenantId == tenantId );
-        if (noExists)
-            return ApiResponseDto<AppointmentDto>.Fail($"预约号 {dto.AppointmentNo} 已存在", 400);
+        var storeId = _currentUser.StoreId ?? 0;
 
         // 查询服务项目商品（校验 type=2 服务项目）+ ServiceProduct（获取 Duration）
         var (product, serviceProduct) = await GetServiceProductAsync(dto.ProductId, tenantId);
@@ -174,7 +211,8 @@ public class AppointmentAppService : IAppointmentAppService
         if (serviceProduct.RequiredRoomType.HasValue && dto.RoomId.HasValue)
         {
             var room = await _dbContext.Rooms
-                .FirstOrDefaultAsync(r => r.Id == dto.RoomId.Value && !r.IsDeleted && r.TenantId == tenantId);
+                .FirstOrDefaultAsync(r => r.Id == dto.RoomId.Value && !r.IsDeleted && r.TenantId == tenantId
+                    && r.StoreId == (_currentUser.StoreId ?? 0));
             if (room == null)
                 return ApiResponseDto<AppointmentDto>.Fail("所选房间不存在", 400);
             if (room.RoomType != serviceProduct.RequiredRoomType.Value)
@@ -187,7 +225,8 @@ public class AppointmentAppService : IAppointmentAppService
         if (dto.EquipmentId.HasValue)
         {
             var equipment = await _dbContext.Equipments
-                .FirstOrDefaultAsync(e => e.Id == dto.EquipmentId.Value && !e.IsDeleted && e.TenantId == tenantId);
+                .FirstOrDefaultAsync(e => e.Id == dto.EquipmentId.Value && !e.IsDeleted && e.TenantId == tenantId
+                    && e.StoreId == (_currentUser.StoreId ?? 0));
             if (equipment == null)
                 return ApiResponseDto<AppointmentDto>.Fail("所选设备不存在", 400);
             // 设备状态：1=正常 可用；2=维修中 3=已停用 不可用
@@ -202,13 +241,13 @@ public class AppointmentAppService : IAppointmentAppService
                 return ApiResponseDto<AppointmentDto>.Fail("所选设备类型不符合服务项目要求", 400);
         }
 
-        // 计算 EndTime（基于 ServiceProduct.Duration，后端权威计算）
-        var start = dto.AppointmentDate.Date.Add(dto.AppointmentTime);
+        // 计算 EndTime（基于 ServiceProduct.Duration，后端权威计算；跨日时自动进位到次日）
+        var start = dto.StartTime;
         var endTime = start.AddMinutes(serviceProduct.Duration.Value);
 
-        // 检查资源冲突（技师/房间/设备任一相同且时段重叠即冲突，跨 Appointment + OrderItem 双向）
+        // 检查冲突（技师/房间/设备任一相同且时段重叠即冲突，跨 Appointment + OrderItem 双向；同一客户时段不可交集）
         var conflictMsg = await BuildConflictMessageAsync(
-            tenantId, dto.TechnicianId, dto.RoomId, dto.EquipmentId,
+            tenantId, storeId, dto.CustomerId, dto.TechnicianId, dto.RoomId, dto.EquipmentId,
             start, endTime);
         if (conflictMsg != null)
             return ApiResponseDto<AppointmentDto>.Fail(conflictMsg, 400);
@@ -216,6 +255,7 @@ public class AppointmentAppService : IAppointmentAppService
         var entity = dto.Adapt<AppointmentEntity>();
         entity.TenantId = tenantId;
         entity.TenantCode = _currentUser.TenantCode ?? string.Empty;
+        entity.StoreId = storeId;
         entity.EndTime = endTime;
         entity.CreatedTime = DateTime.Now;
 
@@ -229,8 +269,26 @@ public class AppointmentAppService : IAppointmentAppService
                 entity.TechnicianSource = technician.Source;
         }
 
-        _dbContext.Appointments.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        // 事务级顾问锁：按 (租户, 预约日期) 串行化并发请求
+        // AppointmentNo 采用"查max+1"生成模式，并发下需串行化避免重复
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            var lockKey = AppointmentNoGenerator.BuildLockKey(tenantId, storeId, dto.StartTime);
+            await _dbContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0})", lockKey);
+
+            // 在锁保护下生成预约号（AP{yyyyMMdd}{序号}，同租户+门店+开始日递增）
+            entity.AppointmentNo = await AppointmentNoGenerator.GenerateAsync(_dbContext, tenantId, storeId, dto.StartTime);
+
+            _dbContext.Appointments.Add(entity);
+            await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
 
         // 填充 ProductName 返回
         var resultDto = entity.Adapt<AppointmentDto>();
@@ -253,18 +311,9 @@ public class AppointmentAppService : IAppointmentAppService
 
         var tenantId = _currentUser.TenantId.Value;
         var entity = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.Id == dto.Id && a.TenantId == tenantId);
+            .FirstOrDefaultAsync(a => a.Id == dto.Id && a.TenantId == tenantId && a.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto<AppointmentDto>.Fail("预约不存在", 404);
-
-        // 预约号变更时检查唯一性
-        if (entity.AppointmentNo != dto.AppointmentNo)
-        {
-            var noExists = await _dbContext.Appointments
-                .AnyAsync(a => a.AppointmentNo == dto.AppointmentNo && a.TenantId == tenantId && a.Id != dto.Id);
-            if (noExists)
-                return ApiResponseDto<AppointmentDto>.Fail($"预约号 {dto.AppointmentNo} 已存在", 400);
-        }
 
         // 查询服务项目商品（校验 type=2 服务项目）+ ServiceProduct（获取 Duration）
         var (product, serviceProduct) = await GetServiceProductAsync(dto.ProductId, tenantId);
@@ -277,7 +326,8 @@ public class AppointmentAppService : IAppointmentAppService
         if (serviceProduct.RequiredRoomType.HasValue && dto.RoomId.HasValue)
         {
             var room = await _dbContext.Rooms
-                .FirstOrDefaultAsync(r => r.Id == dto.RoomId.Value && !r.IsDeleted && r.TenantId == tenantId);
+                .FirstOrDefaultAsync(r => r.Id == dto.RoomId.Value && !r.IsDeleted && r.TenantId == tenantId
+                    && r.StoreId == (_currentUser.StoreId ?? 0));
             if (room == null)
                 return ApiResponseDto<AppointmentDto>.Fail("所选房间不存在", 400);
             if (room.RoomType != serviceProduct.RequiredRoomType.Value)
@@ -290,7 +340,8 @@ public class AppointmentAppService : IAppointmentAppService
         if (dto.EquipmentId.HasValue)
         {
             var equipment = await _dbContext.Equipments
-                .FirstOrDefaultAsync(e => e.Id == dto.EquipmentId.Value && !e.IsDeleted && e.TenantId == tenantId);
+                .FirstOrDefaultAsync(e => e.Id == dto.EquipmentId.Value && !e.IsDeleted && e.TenantId == tenantId
+                    && e.StoreId == (_currentUser.StoreId ?? 0));
             if (equipment == null)
                 return ApiResponseDto<AppointmentDto>.Fail("所选设备不存在", 400);
             // 设备状态：1=正常 可用；2=维修中 3=已停用 不可用
@@ -305,23 +356,22 @@ public class AppointmentAppService : IAppointmentAppService
                 return ApiResponseDto<AppointmentDto>.Fail("所选设备类型不符合服务项目要求", 400);
         }
 
-        // 计算 EndTime（基于 ServiceProduct.Duration，后端权威计算）
-        var start = dto.AppointmentDate.Date.Add(dto.AppointmentTime);
+        // 计算 EndTime（基于 ServiceProduct.Duration，后端权威计算；跨日时自动进位到次日）
+        var start = dto.StartTime;
         var endTime = start.AddMinutes(serviceProduct.Duration.Value);
 
-        // 检查资源冲突（技师/房间/设备任一相同且时段重叠即冲突，跨 Appointment + OrderItem 双向，排除自身）
+        // 检查冲突（技师/房间/设备任一相同且时段重叠即冲突，跨 Appointment + OrderItem 双向，排除自身；同一客户时段不可交集）
         var conflictMsg = await BuildConflictMessageAsync(
-            tenantId, dto.TechnicianId, dto.RoomId, dto.EquipmentId,
+            tenantId, _currentUser.StoreId ?? 0, dto.CustomerId, dto.TechnicianId, dto.RoomId, dto.EquipmentId,
             start, endTime, excludeAppointmentId: dto.Id);
         if (conflictMsg != null)
             return ApiResponseDto<AppointmentDto>.Fail(conflictMsg, 400);
 
-        entity.AppointmentNo = dto.AppointmentNo;
+        // 预约号由后端生成且创建后不可变，更新时不修改
         entity.CustomerId = dto.CustomerId;
         entity.CustomerName = dto.CustomerName;
         entity.CustomerPhone = dto.CustomerPhone;
-        entity.AppointmentDate = dto.AppointmentDate;
-        entity.AppointmentTime = dto.AppointmentTime;
+        entity.StartTime = dto.StartTime;
         entity.EndTime = endTime;
 
         // 状态流转校验：非法流转返回 400 并提示允许的下一状态
@@ -368,15 +418,19 @@ public class AppointmentAppService : IAppointmentAppService
     }
 
     /// <summary>
-    /// 检查预约资源冲突并返回用户可读提示信息
-    /// 委托 IResourceConflictCheckService 跨 Appointment + OrderItem 双向检测
-    /// 状态过滤：Appointment.Status IN (2已预约, 3已到店) / Order.Status = 1进行中
+    /// 检查预约冲突并返回用户可读提示信息
+    /// 1. 资源冲突：委托 IResourceConflictCheckService 跨 Appointment + OrderItem 双向检测
+    ///    状态过滤：Appointment.Status IN (1已预约, 2已到店) / Order.Status = 2已完成
+    /// 2. 客户时段冲突：同一客户在目标时段内已有其他预约（时间段交集，仅限 Appointment 之间）
     /// </summary>
-    /// <param name="start">预约开始时间（由调用方根据 AppointmentDate + AppointmentTime 计算）</param>
+    /// <param name="customerId">客户ID（同一客户时段不可交集）</param>
+    /// <param name="start">预约开始时间（由调用方从 StartTime 传入）</param>
     /// <param name="end">预约结束时间（由调用方根据 ServiceProduct.Duration 计算）</param>
     /// <returns>冲突提示信息;无冲突返回 null</returns>
     private async Task<string?> BuildConflictMessageAsync(
         long tenantId,
+        long storeId,
+        long customerId,
         long? technicianId,
         long? roomId,
         long? equipmentId,
@@ -384,23 +438,89 @@ public class AppointmentAppService : IAppointmentAppService
         DateTime end,
         long? excludeAppointmentId = null)
     {
-        var result = await _resourceConflictCheckService.CheckAsync(
-            tenantId, technicianId, roomId, equipmentId,
-            start, end, excludeAppointmentId);
+        var blocks = new List<string>();
 
-        if (!result.HasAnyConflict)
+        // 1. 资源冲突（技师/房间/设备）：冲突块内部"告知 + 建议"用逗号连接
+        var result = await _resourceConflictCheckService.CheckAsync(
+            tenantId, storeId, technicianId, roomId, equipmentId,
+            start, end, excludeAppointmentId);
+        var resources = new List<(string Name, string Info)>();
+        if (result.TechnicianConflict)
+            resources.Add(("技师", result.TechnicianConflictInfo ?? string.Empty));
+        if (result.RoomConflict)
+            resources.Add(("房间", result.RoomConflictInfo ?? string.Empty));
+        if (result.EquipmentConflict)
+            resources.Add(("设备", result.EquipmentConflictInfo ?? string.Empty));
+
+        if (resources.Count == 1)
+        {
+            blocks.Add($"您选择的{resources[0].Name}在该时段已有安排（{resources[0].Info}），请更换{resources[0].Name}或调整预约时间");
+        }
+        else if (resources.Count > 1)
+        {
+            var resourceDetail = string.Join("与", resources.Select(r => $"{r.Name}（{r.Info}）"));
+            blocks.Add($"您选择的{resourceDetail}在该时段已有安排，请更换{string.Join("、", resources.Select(r => r.Name))}或调整预约时间");
+        }
+
+        // 2. 同一客户时段冲突
+        var customerConflict = await CheckCustomerTimeConflictAsync(
+            tenantId, storeId, customerId, start, end, excludeAppointmentId);
+        if (customerConflict != null)
+        {
+            blocks.Add($"该客户在该时段已有其他预约（{customerConflict}），请调整预约时间");
+        }
+
+        if (blocks.Count == 0)
             return null;
 
-        // 拼接用户可读的冲突提示
-        var parts = new List<string>();
-        if (result.TechnicianConflict)
-            parts.Add($"技师（{result.TechnicianConflictInfo}）");
-        if (result.RoomConflict)
-            parts.Add($"房间（{result.RoomConflictInfo}）");
-        if (result.EquipmentConflict)
-            parts.Add($"设备（{result.EquipmentConflictInfo}）");
+        // 不同冲突块之间用分号分隔，同一冲突块内部用逗号连接
+        return string.Join("；", blocks);
+    }
 
-        return $"{string.Join("；", parts)}已被占用，请更换时段或资源";
+    /// <summary>
+    /// 检查同一客户在目标时段内是否已有其他预约（时间段交集冲突）
+    /// 规则：同一租户 + 同一门店 + 同一客户 的预约，状态 IN (1已预约, 2已到店) 且时段半开区间 [start, end) 重叠即冲突
+    /// 已完成/已取消/爽约 不占用时段，不算冲突
+    /// </summary>
+    /// <param name="tenantId">租户ID</param>
+    /// <param name="storeId">门店ID（按门店维度隔离）</param>
+    /// <param name="customerId">客户ID</param>
+    /// <param name="start">目标时段开始时间（含）</param>
+    /// <param name="end">目标时段结束时间（不含）</param>
+    /// <param name="excludeAppointmentId">排除的预约ID（更新场景排除自身）</param>
+    /// <returns>冲突预约信息（预约号+时段）；无冲突返回 null</returns>
+    private async Task<string?> CheckCustomerTimeConflictAsync(
+        long tenantId,
+        long storeId,
+        long customerId,
+        DateTime start,
+        DateTime end,
+        long? excludeAppointmentId = null)
+    {
+        var apptStatuses = new[] { AppointmentStatus.Confirmed, AppointmentStatus.Arrived };
+        var query = _dbContext.Appointments
+            .Where(a => a.TenantId == tenantId && a.StoreId == storeId
+                && a.CustomerId == customerId
+                && apptStatuses.Contains(a.Status)
+                && a.EndTime.HasValue
+                // 日期范围粗筛 [start.Date-1, end.Date]：兜底跨日预约（前日跨到今日 / 今日跨到明日）
+                && a.StartTime.Date >= start.Date.AddDays(-1)
+                && a.StartTime.Date <= end.Date);
+        if (excludeAppointmentId.HasValue)
+            query = query.Where(a => a.Id != excludeAppointmentId.Value);
+
+        var appts = await query.ToListAsync();
+        foreach (var a in appts)
+        {
+            var aStart = a.StartTime;
+            var aEnd = a.EndTime!.Value;
+            // 时段重叠判断：[start, end) 与 [aStart, aEnd) 重叠
+            if (!(start < aEnd && aStart < end)) continue;
+
+            return $"{a.AppointmentNo} {aStart:HH:mm}-{aEnd:HH:mm}";
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -416,8 +536,10 @@ public class AppointmentAppService : IAppointmentAppService
         if (product == null)
             return (null, null);
 
+        // 注意：productId 是门店档案 Product.Id，而 ServiceProduct.MasterId 指向商品主档 ProductMaster.Id，
+        // 必须用 product.MasterId 关联，否则查不到子表导致误报"服务项目未配置服务时长"
         var serviceProduct = await _dbContext.ServiceProducts
-            .FirstOrDefaultAsync(sp => sp.MasterId == productId && sp.TenantId == tenantId);
+            .FirstOrDefaultAsync(sp => sp.MasterId == product.MasterId && sp.TenantId == tenantId);
         return (product, serviceProduct);
     }
 
@@ -430,7 +552,7 @@ public class AppointmentAppService : IAppointmentAppService
             return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
 
         var entity = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
+            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value && a.StoreId == (_currentUser.StoreId ?? 0));
         if (entity == null)
             return ApiResponseDto.Fail("预约不存在", 404);
 
@@ -450,139 +572,11 @@ public class AppointmentAppService : IAppointmentAppService
             return ApiResponseDto.Fail("请选择要删除的数据", 400);
 
         var entities = await _dbContext.Appointments
-            .Where(a => ids.Contains(a.Id) && a.TenantId == _currentUser.TenantId.Value)
+            .Where(a => ids.Contains(a.Id) && a.TenantId == _currentUser.TenantId.Value && a.StoreId == (_currentUser.StoreId ?? 0))
             .ToListAsync();
 
         _dbContext.Appointments.RemoveRange(entities);
         await _dbContext.SaveChangesAsync();
         return ApiResponseDto.Success(null, $"成功删除 {entities.Count} 条数据");
     }
-
-    /// <summary>
-    /// 获取明日预约提醒分页列表
-    /// 查询条件：AppointmentDate=明天 AND Status IN(1待确认,2已确认)
-    /// </summary>
-    public async Task<ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>> GetTomorrowRemindersAsync(TomorrowReminderQueryDto query)
-    {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>.Fail("登录状态异常，请重新登录", 401);
-
-        var tenantId = _currentUser.TenantId.Value;
-        // 明天的日期范围（避免 DateTime 比较时的时间部分干扰）
-        var tomorrow = DateTime.Today.AddDays(1);
-        var dayAfterTomorrow = tomorrow.AddDays(1);
-
-        var queryable = _dbContext.Appointments
-            .Where(a => a.TenantId == tenantId
-                && a.AppointmentDate >= tomorrow
-                && a.AppointmentDate < dayAfterTomorrow
-                && (a.Status == 1 || a.Status == 2));
-
-        if (!string.IsNullOrWhiteSpace(query.CustomerName))
-            queryable = queryable.Where(a => a.CustomerName.Contains(query.CustomerName));
-        if (!string.IsNullOrWhiteSpace(query.Phone))
-            queryable = queryable.Where(a => a.CustomerPhone.Contains(query.Phone));
-        if (query.RemindStatus.HasValue)
-            queryable = queryable.Where(a => a.ReminderStatus == query.RemindStatus.Value);
-
-        var total = await queryable.CountAsync();
-        var items = await queryable
-            .OrderBy(a => a.AppointmentTime)
-            .Skip((query.PageIndex - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .ToListAsync();
-
-        // 批量查询关联技师名称，避免 N+1
-        var technicianIds = items.Where(a => a.TechnicianId.HasValue).Select(a => a.TechnicianId!.Value).Distinct().ToList();
-        var technicianNames = await _dbContext.Technicians
-            .Where(t => technicianIds.Contains(t.Id))
-            .Select(t => new { t.Id, t.Name })
-            .ToListAsync();
-
-        // 批量查询关联商品名称，避免 N+1（替代原 ServiceItem 字符串字段）
-        var productIds = items.Select(a => a.ProductId).Distinct().ToList();
-        var productNames = await _dbContext.Products
-            .Where(p => productIds.Contains(p.Id))
-            .Select(p => new { p.Id, Name = p.Master.Name })
-            .ToDictionaryAsync(p => p.Id, p => p.Name);
-
-        var dtos = items.Select(a => new TomorrowReminderDto
-        {
-            Id = a.Id,
-            AppointmentNo = a.AppointmentNo,
-            CustomerName = a.CustomerName,
-            Phone = a.CustomerPhone,
-            ServiceName = productNames.TryGetValue(a.ProductId, out var name) ? name : string.Empty,
-            TechnicianName = a.TechnicianId.HasValue
-                ? technicianNames.FirstOrDefault(t => t.Id == a.TechnicianId.Value)?.Name
-                : null,
-            AppointmentTime = $"{a.AppointmentDate:yyyy-MM-dd} {a.AppointmentTime:hh\\:mm}",
-            RemindStatus = a.ReminderStatus,
-            CustomerConfirmStatus = MapCustomerConfirmStatus(a.Status),
-            Remark = a.Remark
-        }).ToList();
-
-        var result = new PagedResponseDto<TomorrowReminderDto>
-        {
-            List = dtos,
-            Total = total,
-            PageIndex = query.PageIndex,
-            PageSize = query.PageSize
-        };
-        return ApiResponseDto<PagedResponseDto<TomorrowReminderDto>>.Ok(result);
-    }
-
-    /// <summary>
-    /// 发送提醒（更新提醒状态为已提醒，记录提醒时间）
-    /// </summary>
-    public async Task<ApiResponseDto> SendReminderAsync(long id)
-    {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
-
-        var entity = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
-        if (entity == null)
-            return ApiResponseDto.Fail("预约不存在", 404);
-
-        entity.ReminderStatus = 2;
-        entity.ReminderTime = DateTime.Now;
-        entity.UpdatedTime = DateTime.Now;
-
-        await _dbContext.SaveChangesAsync();
-        return ApiResponseDto.Success(null, "提醒已发送");
-    }
-
-    /// <summary>
-    /// 确认明日预约（更新状态为已确认，记录确认时间）
-    /// </summary>
-    public async Task<ApiResponseDto> ConfirmTomorrowAppointmentAsync(long id)
-    {
-        if (!_currentUser.TenantId.HasValue)
-            return ApiResponseDto.Fail("登录状态异常，请重新登录", 401);
-
-        var entity = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == _currentUser.TenantId.Value);
-        if (entity == null)
-            return ApiResponseDto.Fail("预约不存在", 404);
-
-        entity.Status = 2;
-        entity.ConfirmTime = DateTime.Now;
-        entity.UpdatedTime = DateTime.Now;
-
-        await _dbContext.SaveChangesAsync();
-        return ApiResponseDto.Success(null, "预约已确认");
-    }
-
-    /// <summary>
-    /// 预约状态映射为客户确认状态
-    /// 1待确认->1, 2已预约->2, 5已取消->3需改期
-    /// </summary>
-    private static int MapCustomerConfirmStatus(int status) => status switch
-    {
-        1 => 1,
-        2 => 2,
-        5 => 3,
-        _ => 1
-    };
 }

@@ -35,7 +35,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd()">
+        <el-button type="primary" @click="handleAdd()" v-if="hasPermission('store:storedvalue:rule:add')">
           <el-icon><Plus /></el-icon>
           新增规则
         </el-button>
@@ -43,6 +43,7 @@
           type="danger"
           :disabled="selectedRows.length === 0"
           @click="handleBatchDelete"
+          v-if="hasPermission('store:storedvalue:rule:batchDelete')"
         >
           <el-icon><Delete /></el-icon>
           批量删除
@@ -107,11 +108,11 @@
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:storedvalue:rule:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:storedvalue:rule:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -214,9 +215,13 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import { getRechargeRules, createRechargeRule, updateRechargeRule, deleteRechargeRule } from '@/api/member'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import type { RechargeRule } from '@/api/member/types'
+import { formatDate } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -319,7 +324,7 @@ const resetFormData = () => {
   formData.giftAmount = 50
   formData.isEnabled = true
   formData.sort = 0
-  formData.startDate = new Date().toISOString().substring(0, 10)
+  formData.startDate = formatDate(new Date())
   formData.endDate = ''
   formData.remark = ''
 }
@@ -340,8 +345,8 @@ const handleEdit = (row: RechargeRule) => {
   formData.giftAmount = row.giftAmount
   formData.isEnabled = row.isEnabled
   formData.sort = row.sort
-  formData.startDate = formatDate(row.startDate)
-  formData.endDate = formatDate(row.endDate)
+  formData.startDate = formatDate(row.startDate) || ''
+  formData.endDate = formatDate(row.endDate) || ''
   formData.remark = row.remark || ''
   dialogVisible.value = true
 }
@@ -432,11 +437,6 @@ const formatPrice = (price: number | undefined) => {
   return price.toFixed(2)
 }
 
-/** 截取后端返回的日期时间为 YYYY-MM-DD，供展示与日期选择器回填使用 */
-const formatDate = (value: string | undefined) => {
-  if (!value) return ''
-  return value.substring(0, 10)
-}
 
 /** 赠送比例由充值金额与赠送金额实时换算（后端不存储比例字段） */
 const formatBonusRate = (amount: number | undefined, giftAmount: number | undefined) => {

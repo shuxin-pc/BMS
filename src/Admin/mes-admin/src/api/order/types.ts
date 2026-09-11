@@ -17,18 +17,17 @@ export type PaymentMethod = 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 /**
  * 订单状态
- * - 1: 进行中（服务进行中）
  * - 2: 已完成
  * - 3: 已退款
  * - 4: 已取消
  */
-export type OrderStatus = 1 | 2 | 3 | 4
+export type OrderStatus = 2 | 3 | 4
 
 /**
  * 订单类型
  * - 1: 零售（实物商品销售）
  * - 2: 服务（服务项目消费）
- * - 3: 疗程卡核销
+ * - 3: 项目卡核销
  * - 4: 储值消费
  */
 export type OrderType = 1 | 2 | 3 | 4
@@ -54,6 +53,8 @@ export interface OrderItem {
   productName: string
   /** 商品编码 */
   productCode: string
+  /** 商品类型：1-实物商品，2-服务商品，3-耗材，4-样品，5-赠品（来自商品主档 ProductMaster.Type） */
+  productType: number
   /** 技师ID（服务商品时选择） */
   technicianId?: number
   /** 技师来源：1-商家技师，2-平台技师 */
@@ -68,6 +69,10 @@ export interface OrderItem {
   equipmentId?: number
   /** 设备名称（后端关联查询填充） */
   equipmentName?: string
+  /** 服务开始时间（服务内容弹窗/核销项目录入的真实服务开始时间，ISO 字符串） */
+  serviceStartTime?: string
+  /** 服务结束时间（服务开始时间 + 服务时长自动计算，ISO 字符串） */
+  serviceEndTime?: string
   /** 数量 */
   quantity: number
   /** 单价 */
@@ -103,6 +108,8 @@ export interface OrderItemBatch {
   orderId: number
   /** 商品ID（冗余，用于按商品聚合统计） */
   productId: number
+  /** 商品名称（后端关联查询填充，用于退款弹窗展示可退批次所属商品；服务项目行的批次即 BOM 耗材，此处为耗材名称） */
+  productName?: string
   /** 库存批次ID（可空：库存批次被删除时仍保留快照） */
   batchId?: number
   /** 批次号（快照） */
@@ -131,9 +138,13 @@ export interface Order {
   orderNo: string
   /** 客户ID */
   customerId?: number
-  /** 订单类型：1-零售，2-服务，3-疗程卡核销，4-储值消费 */
+  /** 客户姓名（后端左连接 Customer 填充，散客订单为空） */
+  customerName?: string
+  /** 客户手机号（后端左连接 Customer 填充，散客订单为空） */
+  phone?: string
+  /** 订单类型：1-零售，2-服务，3-项目卡核销，4-储值消费 */
   orderType: OrderType
-  /** 订单状态：1-进行中，2-已完成，3-已退款，4-已取消 */
+  /** 订单状态：2-已完成，3-已退款，4-已取消 */
   status: OrderStatus
   /** 补录状态 */
   backfillStatus?: number
@@ -155,6 +166,8 @@ export interface Order {
   storedValueAmount?: number
   /** 组合支付-类别3积分抵扣金额（payMethod=7 时返回） */
   pointsAmount?: number
+  /** 下单时的积分抵扣比例快照（PointsRule.DeductRate，元/积分，100分=1元时=0.01；0 表示无快照） */
+  deductRate?: number
   /** 下单时间 */
   orderTime: string
   /** 完成时间 */
@@ -185,6 +198,8 @@ export interface OrderQuery {
   orderNo?: string
   /** 客户ID */
   customerId?: number
+  /** 客户名称或手机号关键字（模糊匹配，OR 语义） */
+  keyword?: string
   /** 订单类型 */
   orderType?: OrderType
   /** 订单状态 */
@@ -204,6 +219,18 @@ export interface OrderQuery {
 }
 
 /**
+ * 退款退库明细项（对齐后端 RefundItemDto）
+ * 粒度：订单明细批次（OrderItemBatch.Id），只从订单中已有的批次选择退回，绝不新建退货批次；
+ * 服务项目/项目卡核销行的 BOM 耗材扣减明细同样是 OrderItemBatch（ProductId = 耗材），可直接选择退回
+ */
+export interface RefundItem {
+  /** 订单明细批次ID（OrderItemBatch.Id） */
+  orderItemBatchId: number
+  /** 退库数量（>0，≤ 可退数量 = quantity - refundedQuantity） */
+  quantity: number
+}
+
+/**
  * 退款请求
  * 对齐后端 RefundRequestDto（POST /orders/{id}/refund）
  */
@@ -214,12 +241,14 @@ export interface RefundRequest {
   refundAmount: number
   /** 退款原因 */
   reason: string
+  /** 退库明细列表（门店手动选择退回的批次+数量，可空/为空表示本次退款不执行库存回退） */
+  refundItems?: RefundItem[]
 }
 
 /**
  * 取消订单请求
  * 对齐后端 OrderCancelDto（POST /orders/{id}/cancel）
- * 取消订单视为订单未发生，后端执行全量事务回滚（库存/BOM/疗程卡/积分/储值/统计/消费记录），订单 Status 改为 4（已取消）
+ * 取消订单视为订单未发生，后端执行全量事务回滚（库存/BOM/项目卡/积分/储值/统计/消费记录），订单 Status 改为 4（已取消）
  */
 export interface CancelRequest {
   /** 订单ID */
@@ -241,7 +270,7 @@ export interface RefundResult {
   thisRefundAmount: number
   /** 累计已退款金额 */
   totalRefundedAmount: number
-  /** 订单状态（1:进行中 2:已完成 3:已退款 4:已取消） */
+  /** 订单状态（2:已完成 3:已退款 4:已取消） */
   orderStatus: number
   /** 退款时间 */
   refundTime: string
@@ -275,6 +304,21 @@ export interface ApiResponse<T> {
 /**
  * 创建订单明细项
  */
+/**
+ * 服务项目绑定耗材的效期选择（快速开单加购服务项目时店员选择的耗材效期）
+ * 服务项目订单明细（OrderItemCreate.consumableExpiries）与项目卡核销项（TreatmentCardVerifyItemInput.consumableExpiries）共用
+ */
+export interface ConsumableExpiry {
+  /** 耗材商品ID（对应 ServiceBom.ConsumableProductId） */
+  productId: number
+  /** 耗材商品名称（冗余，便于展示/提示） */
+  productName: string
+  /** 需求数量 = BOM 单次消耗量 × 服务数量/核销次数 */
+  quantity: number
+  /** 店员选择的效期列表（按扣减顺序）；undefined 表示系统自动按近效期扣减（FEFO）；null 元素表示"无效期限制"批次 */
+  expirationDates?: (string | null)[]
+}
+
 export interface OrderItemCreate {
   productId: number
   productName: string
@@ -285,6 +329,10 @@ export interface OrderItemCreate {
   roomId?: number
   /** 设备ID（服务订单占用设备资源，可空） */
   equipmentId?: number
+  /** 服务开始时间（服务内容弹窗/核销项目录入的真实服务开始时间，ISO 字符串，可空） */
+  serviceStartTime?: string
+  /** 服务结束时间（服务开始时间 + 服务时长自动计算，ISO 字符串，可空） */
+  serviceEndTime?: string
   quantity: number
   price: number
   discountRate?: number
@@ -297,17 +345,20 @@ export interface OrderItemCreate {
   /** 关联活动ID（可选，仅赠品项 Type=5 有意义，用于活动维度归因统计） */
   activityId?: number | null
   remark?: string
+  /** 服务项目绑定耗材的效期选择（仅服务项目 Type=2 有意义，对应后端 OrderItemCreateDto.ConsumableExpiries） */
+  consumableExpiries?: ConsumableExpiry[]
 }
 
 /**
  * 创建订单请求
  */
 export interface OrderCreate {
-  orderNo: string
+  /** 订单号（可选：不再由前端生成，后端 OrderAppService 自动生成正式单号） */
+  orderNo?: string
   customerId?: number
-  /** 订单类型：1-零售，2-服务，3-疗程卡核销 */
+  /** 订单类型：1-零售，2-服务，3-项目卡核销 */
   orderType: OrderType
-  /** 订单状态：1-进行中，2-已完成 */
+  /** 订单状态：2-已完成 */
   status: OrderStatus
   /** 补录状态：0-非补录，1-待补录 */
   backfillStatus?: number
@@ -330,8 +381,10 @@ export interface OrderCreate {
   operatorId?: number
   remark?: string
   items: OrderItemCreate[]
-  /** 疗程卡销售ID（仅 OrderType=3 疗程卡核销时需要） */
+  /** 项目卡销售ID（仅 OrderType=3 项目卡核销时需要） */
   cardSaleId?: number
   /** 源预约ID（预约转订单时由前端传入；后端会从源预约复制 TechnicianId/RoomId/EquipmentId 到 OrderItem） */
   sourceAppointmentId?: number
+  /** 购物车结算批次号（POS 购物车一次结算生成，用于订单/核销/开卡三单据聚合追溯；独立下单为空） */
+  checkoutSessionNo?: string
 }

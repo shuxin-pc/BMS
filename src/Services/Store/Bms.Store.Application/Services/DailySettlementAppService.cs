@@ -1,6 +1,7 @@
 using Mapster;
 using Microsoft.EntityFrameworkCore;
 using Bms.BuildingBlocks.Abstractions.Security;
+using Bms.BuildingBlocks.Core.Context;
 using Bms.Store.Application.Dtos;
 using Bms.Store.Application.Dtos.DailySettlements;
 using Bms.Store.Domain.Entities;
@@ -25,15 +26,15 @@ public record SettlementSummaryData(
     decimal PointsDeductAmount,
     // 成本维度拆分（按 InventoryLog.SourceType 分类）
     decimal SalesOutboundCost,           // 销售出库成本（主营成本）
-    decimal TreatmentCardOutboundCost,   // 疗程卡核销出库成本（主营成本）
+    decimal TreatmentCardOutboundCost,   // 项目卡核销出库成本（主营成本）
     decimal InventoryLossAmount,         // 盘亏损失（营业外支出）
     decimal SampleGiftAmount,            // 样品赠品费用（营业外支出）
     decimal TransferOutAmount,           // 调拨出库金额（资产变动）
     decimal TransferInAmount,            // 调拨入库金额（资产变动）
     decimal PurchaseReturnAmount,        // 采购退货金额（资产变动）
     // 营收补充维度
-    decimal TreatmentCardVerifyAmount,   // 疗程卡核销折算金额（权责发生制转营收）
-    // 退款按 PayMethod 拆分（P-DS-03）
+    decimal TreatmentCardVerifyAmount,   // 项目卡核销折算金额（权责发生制转营收）
+    // 退款按 PayMethod 拆分
     decimal CashRefundAmount,            // 现金类退款（PayMethod=1-4 全额 + PayMethod=7 CashAmount 分摊，冲减营收）
     decimal StoredValueRefundAmount,     // 储值类退款（PayMethod=5 全额 + PayMethod=7 StoredValueAmount 分摊，不影响营收）
     decimal PointsRefundAmount);         // 积分类退款（PayMethod=6 全额 + PayMethod=7 PointsAmount 分摊，不影响营收）
@@ -47,15 +48,18 @@ public class DailySettlementAppService : IDailySettlementAppService
     private readonly StoreDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
     private readonly IMonthlyStatAppService _monthlyStatAppService;
+    private readonly IAuditLogContext _auditLogContext;
 
     public DailySettlementAppService(
         StoreDbContext dbContext,
         ICurrentUser currentUser,
-        IMonthlyStatAppService monthlyStatAppService)
+        IMonthlyStatAppService monthlyStatAppService,
+        IAuditLogContext auditLogContext)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _monthlyStatAppService = monthlyStatAppService;
+        _auditLogContext = auditLogContext;
     }
 
     /// <summary>
@@ -79,7 +83,7 @@ public class DailySettlementAppService : IDailySettlementAppService
                 && (o.Status == 2 || o.Status == 3));
 
         // 营收聚合口径：当日下单的所有订单（含已退款），已退款订单的 PaidAmount 计入当日营收，
-        // 通过 RefundAmount 在同日抵消。方案 A：退款追溯到原下单日，避免"当日下单当日退款"时退款无源之扣（P-DS-03 边界场景）
+        // 通过 RefundAmount 在同日抵消。退款追溯到原下单日，避免"当日下单当日退款"时退款无源之扣
         var completedOrders = dayOrders;
 
         // 现金类营收：PayMethod=1-4 的 PaidAmount + PayMethod=7 的 CashAmount
@@ -97,20 +101,23 @@ public class DailySettlementAppService : IDailySettlementAppService
             .SumAsync(o => (decimal?)(o.PayMethod == 6 ? o.PaidAmount
                 : (o.PayMethod == 7 ? (o.PointsAmount ?? 0m) : 0m)), cancellationToken) ?? 0m;
 
-        // 疗程卡核销折算金额：当日核销记录的 VerifyAmount 之和（权责发生制，核销转营收）
+        // 项目卡核销折算金额：当日核销记录的 VerifyAmount 之和（权责发生制，核销转营收）
+        // 仅统计未冲正（ReverseStatus=0）的核销：核销订单退款/核销冲正会标记 ReverseStatus=1，
+        // 已冲正核销的折算营收应冲减（退款即撤销本次核销，营收不得虚高），跨日退款反日结重算时同样适用
         var treatmentCardVerifyAmount = await _dbContext.TreatmentCardVerifies
             .Where(v => v.TenantId == tenantId && v.StoreId == storeId
+                && v.ReverseStatus == 0
                 && v.VerifyTime >= dateStart && v.VerifyTime < dateEnd)
             .SumAsync(v => (decimal?)v.VerifyAmount, cancellationToken) ?? 0m;
 
-        // 总营收 = 现金营收 + 储值营收 + 疗程卡核销折算 - 现金退款（储值消费已含在 PaidAmount 中，不重复计入）
+        // 总营收 = 现金营收 + 储值营收 + 项目卡核销折算 - 现金退款（储值消费已含在 PaidAmount 中，不重复计入）
         // 注：储值消费（StoredValueLog.Type=2）作为统计字段单独展示，不计入 Revenue 避免与 PaidAmount 重复
         var totalRevenue = cashRevenue + storedValueRevenue + treatmentCardVerifyAmount;
 
         // 订单数：已完成 + 已退款（按下单时间）
         var orderCount = await dayOrders.CountAsync(cancellationToken);
 
-        // 退款按 PayMethod 拆分（P-DS-03）
+        // 退款按 PayMethod 拆分
         // 方案 A：按原下单日归属（而非退款发生日），当日下单且已退款的订单，RefundAmount 在下单日同日抵消营收
         // 注：过滤条件用 RefundAmount > 0 而非 Status == 3，确保部分退款（Status=2 但有退款金额）也计入
         // 现金类退款（冲减营收）：PayMethod=1-4 全额 + PayMethod=7 CashAmount 比例分摊
@@ -162,31 +169,51 @@ public class DailySettlementAppService : IDailySettlementAppService
         var totalStoredValueConsume = -consumeSum;
 
         // 成本维度拆分：按 InventoryLog.SourceType 分组统计
-        // 主营成本 = 销售出库（SalesOutbound）+ 疗程卡核销出库（TreatmentCardOutbound）
-        // 营业外支出 = 盘亏损失（CheckAdjustment 出库）+ 样品赠品费用（SampleReceiveOutbound/GiftOutbound，兼容历史值 SampleGiftOutbound）
+        // 主营成本 = 销售出库（SalesOutbound）+ 项目卡核销出库（TreatmentCardOutbound）
+        // 营业外支出 = 盘亏损失（CheckAdjustment 出库）+ 样品赠品费用（SampleReceiveOutbound/GiftOutbound）
         // 资产变动 = 调拨出库（TransferOutbound）- 调拨入库（TransferInbound）+ 采购退货（PurchaseReturnOutbound）
         var outboundLogs = _dbContext.InventoryLogs
             .Where(l => l.TenantId == tenantId && l.StoreId == storeId
                 && l.Type == 2
                 && l.CreatedTime >= dateStart && l.CreatedTime < dateEnd);
 
-        var salesOutboundCost = await outboundLogs
-            .Where(l => l.SourceType == InventoryLogSourceTypes.SalesOutbound)
-            .SumAsync(l => (decimal?)(Math.Abs(l.Quantity) * l.UnitPrice), cancellationToken) ?? 0m;
+        // 主营成本按订单所属日（OrderTime）归集，与营收同口径（营收按 OrderTime 归日，见上方 dayOrders）。
+        // 补录订单（OrderTime 为历史日期）的实物/服务耗材出库流水 CreatedTime 是补录当天，若按 CreatedTime 归日，
+        // 会导致"订单所属日有营收无成本"、成本错记到补录当天。故经 RelatedId=OrderId 关联订单按下单时间归日
+        // （与下方 ReturnInbound 退货入库成本按原下单日归属的模式一致）。已退款(3)订单出库成本一并计入，
+        // 退款回库成本由下方 ReturnInbound 逻辑冲减，避免重复计成本。
+        var outboundOrderCosts = await _dbContext.InventoryLogs
+            .Where(l => l.TenantId == tenantId && l.StoreId == storeId
+                && l.Type == 2
+                && (l.SourceType == InventoryLogSourceTypes.SalesOutbound
+                    || l.SourceType == InventoryLogSourceTypes.TreatmentCardOutbound))
+            .Join(_dbContext.Orders,
+                l => l.RelatedId,
+                o => (long?)o.Id,
+                (l, o) => new { l, o })
+            .Where(j => j.o.OrderTime >= dateStart && j.o.OrderTime < dateEnd
+                && (j.o.Status == 2 || j.o.Status == 3))
+            .GroupBy(j => j.l.SourceType)
+            .Select(g => new
+            {
+                SourceType = g.Key,
+                Amount = g.Sum(j => (decimal?)(Math.Abs(j.l.Quantity) * j.l.UnitPrice))
+            })
+            .ToListAsync(cancellationToken);
 
-        var treatmentCardOutboundCost = await outboundLogs
-            .Where(l => l.SourceType == InventoryLogSourceTypes.TreatmentCardOutbound)
-            .SumAsync(l => (decimal?)(Math.Abs(l.Quantity) * l.UnitPrice), cancellationToken) ?? 0m;
+        var salesOutboundCost = outboundOrderCosts
+            .FirstOrDefault(x => x.SourceType == InventoryLogSourceTypes.SalesOutbound)?.Amount ?? 0m;
+
+        var treatmentCardOutboundCost = outboundOrderCosts
+            .FirstOrDefault(x => x.SourceType == InventoryLogSourceTypes.TreatmentCardOutbound)?.Amount ?? 0m;
 
         var inventoryLossAmount = await outboundLogs
             .Where(l => l.SourceType == InventoryLogSourceTypes.CheckAdjustment)
             .SumAsync(l => (decimal?)(Math.Abs(l.Quantity) * l.UnitPrice), cancellationToken) ?? 0m;
 
-        // P-SG-02：样品赠品费用聚合三种 SourceType（兼容历史数据 SampleGiftOutbound=9 + 新细分 SampleReceiveOutbound=10 + GiftOutbound=11）
-        // 历史数据迁移回填前，三种 SourceType 均可能出现，需全量统计避免遗漏
+        // 样品赠品费用聚合两种 SourceType（SampleReceiveOutbound=8 样品领用出库 + GiftOutbound=9 赠品活动出库）
         var sampleGiftAmount = await outboundLogs
-            .Where(l => l.SourceType == InventoryLogSourceTypes.SampleGiftOutbound
-                     || l.SourceType == InventoryLogSourceTypes.SampleReceiveOutbound
+            .Where(l => l.SourceType == InventoryLogSourceTypes.SampleReceiveOutbound
                      || l.SourceType == InventoryLogSourceTypes.GiftOutbound)
             .SumAsync(l => (decimal?)(Math.Abs(l.Quantity) * l.UnitPrice), cancellationToken) ?? 0m;
 
@@ -206,7 +233,40 @@ public class DailySettlementAppService : IDailySettlementAppService
                 && l.CreatedTime >= dateStart && l.CreatedTime < dateEnd)
             .SumAsync(l => (decimal?)(Math.Abs(l.Quantity) * l.UnitPrice), cancellationToken) ?? 0m;
 
-        // 主营成本 = 销售出库 + 疗程卡核销出库
+        // 退货成本转回库存：冲减主营成本（与营收冲减同口径，按订单原下单日归属）
+        // 销售时成本已通过出库流水计入主营成本（COGS），退款（Status=3）回库（ReturnInbound）后商品退回库存，
+        // 若不冲减，同一商品被卖两次成本记两次，毛利被低估。回库成本按订单原下单日归属（而非退款发生日），
+        // 通过 RelatedId=OrderId 关联订单按下单时间落当日；按订单类型区分冲减维度：
+        // 零售/服务(1/2)→销售出库成本，项目卡核销(3)→项目卡核销出库成本。Math.Max(0) 防冲减过头
+        // 注：仅对已退款(3)订单冲减。取消订单(4)的出库成本已因主营成本仅统计 Status∈{2,3} 而不计入，
+        //     若再对取消回库冲减会造成正常成本被过度冲减，故取消订单回库不冲减（成本口径与营收一致，见上方 outboundOrderCosts）
+        var returnInboundCosts = await _dbContext.InventoryLogs
+            .Where(l => l.TenantId == tenantId && l.StoreId == storeId
+                && l.Type == 1
+                && l.SourceType == InventoryLogSourceTypes.ReturnInbound)
+            .Join(_dbContext.Orders,
+                l => l.RelatedId,
+                o => (long?)o.Id,
+                (l, o) => new { l, o })
+            .Where(j => j.o.OrderTime >= dateStart && j.o.OrderTime < dateEnd
+                && j.o.Status == 3)
+            .GroupBy(j => j.o.OrderType)
+            .Select(g => new
+            {
+                OrderType = g.Key,
+                Amount = g.Sum(j => (decimal?)(Math.Abs(j.l.Quantity) * j.l.UnitPrice))
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in returnInboundCosts)
+        {
+            if (item.OrderType == OrderTypes.TreatmentCardVerify)
+                treatmentCardOutboundCost = Math.Max(0m, treatmentCardOutboundCost - (item.Amount ?? 0m));
+            else
+                salesOutboundCost = Math.Max(0m, salesOutboundCost - (item.Amount ?? 0m));
+        }
+
+        // 主营成本 = 销售出库 + 项目卡核销出库
         var totalCost = salesOutboundCost + treatmentCardOutboundCost;
 
         return new SettlementSummaryData(
@@ -252,7 +312,8 @@ public class DailySettlementAppService : IDailySettlementAppService
         // 预约数
         var appointmentCount = await _dbContext.Appointments
             .Where(a => a.TenantId == tenantId
-                && a.AppointmentDate == dateStart)
+                && a.StoreId == storeId
+                && a.StartTime.Date == dateStart)
             .CountAsync();
 
         // 库存预警数（未处理）
@@ -421,10 +482,12 @@ public class DailySettlementAppService : IDailySettlementAppService
     }
 
     /// <summary>
-    /// 确认日结（待确认 -> 已确认）
+    /// 确认日结（待确认 -> 已确认），确认时可修改备注
     /// </summary>
-    public async Task<ApiResponseDto<DailySettlementDto>> ConfirmAsync(long id)
+    public async Task<ApiResponseDto<DailySettlementDto>> ConfirmAsync(long id, string? remark = null)
     {
+        // 审计日志语义化：标记业务动作类型
+        _auditLogContext.CustomOperationType = "日结确认";
         var ctx = ResolveTenantStore();
         if (ctx.Error != null)
             return ApiResponseDto<DailySettlementDto>.Fail(ctx.Error, ctx.Code);
@@ -445,6 +508,10 @@ public class DailySettlementAppService : IDailySettlementAppService
         entity.ConfirmedBy = _currentUser.UserId;
         entity.ConfirmedTime = DateTime.Now;
         entity.UpdatedTime = DateTime.Now;
+
+        // 确认时支持修改备注：remark 为 null 保持原值，空字符串清空，非空则覆盖
+        if (remark != null)
+            entity.Remark = string.IsNullOrWhiteSpace(remark) ? null : remark;
 
         // 日结确认时同步生成/更新 DailyStat 记录
         await EnsureDailyStatAsync(ctx.TenantId, ctx.StoreId, entity.SettlementDate);
@@ -472,6 +539,8 @@ public class DailySettlementAppService : IDailySettlementAppService
     /// </summary>
     public async Task<ApiResponseDto<DailySettlementDto>> ReverseAsync(long id, ReverseRequestDto request)
     {
+        // 审计日志语义化：标记业务动作类型
+        _auditLogContext.CustomOperationType = "反日结";
         var ctx = ResolveTenantStore();
         if (ctx.Error != null)
             return ApiResponseDto<DailySettlementDto>.Fail(ctx.Error, ctx.Code);

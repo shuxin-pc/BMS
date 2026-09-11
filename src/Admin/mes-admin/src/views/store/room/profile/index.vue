@@ -49,7 +49,7 @@
     <!-- 操作栏 -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" v-if="hasPermission('store:room:profile:add')">
           <el-icon><Plus /></el-icon>
           新增
         </el-button>
@@ -91,7 +91,7 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click="handleEdit(row)" v-if="hasPermission('store:room:profile:edit')">
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
@@ -100,10 +100,11 @@
               :type="row.status === 1 ? 'warning' : 'success'"
               size="small"
               @click="handleToggleStatus(row)"
+              v-if="hasPermission('store:room:profile:toggleStatus')"
             >
               {{ row.status === 1 ? '禁用' : '启用' }}
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click="handleDelete(row)" v-if="hasPermission('store:room:profile:delete')">
               <el-icon><Delete /></el-icon>
               删除
             </el-button>
@@ -188,6 +189,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import {
   getRoomList,
   createRoom,
@@ -195,8 +197,11 @@ import {
   deleteRoom
 } from '@/api/room'
 import type { Room, RoomType, RoomStatus } from '@/api/room/types'
+import { formatDateTimeSeconds as formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 搜索表单
 const searchForm = reactive({
@@ -248,14 +253,6 @@ const formRules: FormRules = {
   status: [
     { required: true, message: '请选择状态', trigger: 'change' }
   ]
-}
-
-/**
- * 格式化日期时间
- */
-const formatDateTime = (dateStr?: string): string => {
-  if (!dateStr) return '-'
-  return dateStr.replace('T', ' ')
 }
 
 // 加载数据

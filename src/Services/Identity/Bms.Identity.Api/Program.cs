@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Bms.BuildingBlocks.Core.Extensions;
 using Bms.BuildingBlocks.Web.Converters;
 using Bms.Identity.Api.Data;
@@ -51,6 +52,10 @@ builder.Services.AddDbContext<IdentityDbContext>(options =>
 {
     options.UseNpgsql(builder.Configuration.GetConnectionString("IdentityDb"));
     options.UseOpenIddict();
+    // OpenIddict 的运行时模型初始化（IModelRuntimeInitializer）会引入仅运行时存在的模型差异，
+    // 与 EF Core 9+ 在 Migrate() 时的 PendingModelChangesWarning 校验冲突，属误报。
+    // 迁移通过 dotnet-ef 设计链路生成并应用，此处抑制该校验避免启动误报。
+    options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
 });
 
 // 配置 OpenIddict
@@ -191,6 +196,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+
+        context.Database.EnsureDatabaseExists(logger);
 
         logger.LogInformation("正在应用 Identity 数据库迁移...");
         context.Database.Migrate();

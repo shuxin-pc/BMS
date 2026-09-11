@@ -14,9 +14,7 @@ public static class AppointmentStatusTransition
     /// </summary>
     private static readonly Dictionary<int, HashSet<int>> _transitions = new()
     {
-        // 待确认 -> 已预约 / 已取消
-        { AppointmentStatus.Pending, new() { AppointmentStatus.Confirmed, AppointmentStatus.Cancelled } },
-        // 已预约 -> 已到店 / 已完成 / 已取消 / 爽约
+        // 已预约（创建即已预约）-> 已到店 / 已完成 / 已取消 / 爽约
         { AppointmentStatus.Confirmed, new() { AppointmentStatus.Arrived, AppointmentStatus.Completed, AppointmentStatus.Cancelled, AppointmentStatus.NoShow } },
         // 已到店 -> 已完成 / 已取消
         { AppointmentStatus.Arrived, new() { AppointmentStatus.Completed, AppointmentStatus.Cancelled } },

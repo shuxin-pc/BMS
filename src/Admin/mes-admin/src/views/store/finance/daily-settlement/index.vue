@@ -5,7 +5,7 @@
       <div class="summary-header">
         <div class="summary-title">
           <span class="title-text">今日经营汇总</span>
-          <span class="title-date">{{ todaySummary.date }}</span>
+          <span class="title-date">{{ formatDate(todaySummary.date) }}</span>
           <el-tag v-if="todaySettlement?.status === 1" type="success" size="small" effect="dark">已确认</el-tag>
           <el-tag v-else-if="todaySettlement?.status === 0" type="warning" size="small" effect="dark">待确认</el-tag>
           <el-tag v-else type="info" size="small" effect="dark">未汇总</el-tag>
@@ -13,7 +13,7 @@
         <div class="summary-action">
           <!-- 未汇总：执行汇总日结 -->
           <el-button
-            v-if="!todaySummary.isSettled"
+            v-if="!todaySummary.isSettled && hasPermission('store:finance:daily-settlement:summarize')"
             type="primary"
             :loading="settleLoading"
             @click="handleSummarize"
@@ -23,17 +23,17 @@
           </el-button>
           <!-- 待确认：确认 + 重算 -->
           <template v-else-if="todaySettlement?.status === 0">
-            <el-button type="success" :loading="confirmLoading" @click="handleConfirm(todaySettlement)">
+            <el-button type="success" :loading="confirmLoading" @click="handleConfirm(todaySettlement)" v-if="hasPermission('store:finance:daily-settlement:confirm')">
               <el-icon><Check /></el-icon>
               确认
             </el-button>
-            <el-button :loading="recalcLoading" @click="handleRecalculate(todaySettlement.id)">
+            <el-button :loading="recalcLoading" @click="handleRecalculate(todaySettlement.id)" v-if="hasPermission('store:finance:daily-settlement:recalculate')">
               重算
             </el-button>
           </template>
           <!-- 已确认：反日结 -->
           <el-button
-            v-else-if="todaySettlement?.status === 1"
+            v-else-if="todaySettlement?.status === 1 && hasPermission('store:finance:daily-settlement:reverse')"
             type="warning"
             @click="handleReverse(todaySettlement)"
           >
@@ -131,7 +131,7 @@
         <el-table-column label="日结日期" width="120">
           <template #default="{ row }">
             <el-link type="primary" :underline="false" @click="handleViewDetail(row)">
-              {{ row.settlementDate }}
+              {{ formatDate(row.settlementDate) }}
             </el-link>
           </template>
         </el-table-column>
@@ -178,25 +178,24 @@
             <el-tag v-else type="warning" size="small" effect="dark">待确认</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="日结时间" width="170">
+        <el-table-column label="日结时间" min-width="170">
           <template #default="{ row }">
             {{ formatDateTime(row.settlementTime) }}
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="info" link size="small" @click="handleViewDetail(row)">详情</el-button>
             <template v-if="row.status === 0">
-              <el-button type="primary" link size="small" @click="handleConfirm(row)">确认</el-button>
+              <el-button type="primary" link size="small" @click="handleConfirm(row)" v-if="hasPermission('store:finance:daily-settlement:confirm')">确认</el-button>
               <el-tooltip content="重新汇总" placement="top">
-                <el-button type="primary" link size="small" :loading="recalcLoading" @click="handleRecalculate(row.id)">
+                <el-button type="primary" link size="small" :loading="recalcLoading" @click="handleRecalculate(row.id)" v-if="hasPermission('store:finance:daily-settlement:recalculate')">
                   <el-icon><Refresh /></el-icon>
                 </el-button>
               </el-tooltip>
             </template>
             <template v-else>
-              <el-button type="warning" link size="small" @click="handleReverse(row)">反日结</el-button>
+              <el-button type="warning" link size="small" @click="handleReverse(row)" v-if="hasPermission('store:finance:daily-settlement:reverse')">反日结</el-button>
             </template>
           </template>
         </el-table-column>
@@ -232,7 +231,7 @@
       />
       <el-form label-width="100px">
         <el-form-item label="日结日期">
-          <span>{{ todaySummary.date }}</span>
+          <span>{{ formatDate(todaySummary.date) }}</span>
         </el-form-item>
         <el-form-item label="总营收">
           <span class="amount-text">{{ formatMoney(todaySummary.totalRevenue) }}</span>
@@ -298,10 +297,19 @@
           查看完整明细
         </el-link>
       </div>
+      <div class="confirm-remark mb-20">
+        <span class="confirm-remark-label">备注</span>
+        <el-input
+          v-model="confirmRemark"
+          type="textarea"
+          :rows="3"
+          placeholder="可修改日结备注（可选）"
+        />
+      </div>
       <div class="confirm-tip">确认后日结数据将锁定，如需修改请使用反日结。</div>
       <template #footer>
         <el-button @click="confirmDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="confirmLoading" @click="handleConfirmSubmit">
+        <el-button type="primary" :loading="confirmLoading" @click="handleConfirmSubmit" v-if="hasPermission('store:finance:daily-settlement:confirm')">
           确认日结
         </el-button>
       </template>
@@ -323,7 +331,7 @@
       />
       <el-form label-width="100px">
         <el-form-item label="日结日期">
-          <span>{{ reverseTarget?.settlementDate }}</span>
+          <span>{{ reverseTarget ? formatDate(reverseTarget.settlementDate) : '-' }}</span>
         </el-form-item>
         <el-form-item label="反日结原因">
           <el-input
@@ -336,7 +344,7 @@
       </el-form>
       <template #footer>
         <el-button @click="reverseDialogVisible = false">取消</el-button>
-        <el-button type="warning" :loading="reverseLoading" @click="handleReverseSubmit">
+        <el-button type="warning" :loading="reverseLoading" @click="handleReverseSubmit" v-if="hasPermission('store:finance:daily-settlement:reverse')">
           确认反日结
         </el-button>
       </template>
@@ -345,7 +353,7 @@
     <!-- 日结详情弹窗 -->
     <el-dialog
       v-model="detailDialogVisible"
-      :title="`日结详情 - ${detailData?.settlementDate ?? ''}`"
+      :title="`日结详情 - ${detailData ? formatDate(detailData.settlementDate) : ''}`"
       :width="dialogWidth"
       :close-on-click-modal="false"
     >
@@ -427,7 +435,7 @@
               <span class="detail-value">{{ formatMoney(detailData.salesOutboundCost) }}</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">疗程卡核销成本</span>
+              <span class="detail-label">项目卡核销成本</span>
               <span class="detail-value">{{ formatMoney(detailData.treatmentCardOutboundCost) }}</span>
             </div>
             <div class="detail-item">
@@ -560,8 +568,8 @@
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
         <template v-if="detailData">
-          <el-button v-if="detailData.status === 0" type="primary" :loading="confirmLoading" @click="handleConfirmFromDetail">确认日结</el-button>
-          <el-button v-else type="warning" :loading="reverseLoading" @click="handleReverseFromDetail">反日结</el-button>
+          <el-button v-if="detailData.status === 0 && hasPermission('store:finance:daily-settlement:confirm')" type="primary" :loading="confirmLoading" @click="handleConfirmFromDetail">确认日结</el-button>
+          <el-button v-else-if="detailData.status !== 0 && hasPermission('store:finance:daily-settlement:reverse')" type="warning" :loading="reverseLoading" @click="handleReverseFromDetail">反日结</el-button>
         </template>
       </template>
     </el-dialog>
@@ -573,6 +581,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Check, WarningFilled, Document } from '@element-plus/icons-vue'
 import { useSystemConfigStore } from '@/stores/systemConfig'
+import { useUserStore } from '@/stores/user'
 import {
   getTodaySummary,
   getDailySettlements,
@@ -587,8 +596,11 @@ import { getUserList } from '@/api/system'
 import type { User } from '@/api/system'
 import type { DailySettlement, TodaySummary, SettlementStatus } from '@/api/settlement/types'
 import { formatMoney, formatRefundRatio } from './utils'
+import { formatDate, formatDateTimeSeconds as formatDateTime } from '@/utils/date'
 
 const systemConfigStore = useSystemConfigStore()
+const userStore = useUserStore()
+const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
 // 用户列表缓存（用于审计信息显示姓名）
 const userList = ref<User[]>([])
@@ -655,6 +667,8 @@ const confirmDialogVisible = ref(false)
 const confirmLoading = ref(false)
 const confirmTarget = ref<DailySettlement | null>(null)
 const validationWarnings = ref<string[]>([])
+// 确认时修改的日结备注（预填当前值，确认提交时随确认保存）
+const confirmRemark = ref('')
 
 // 反日结弹窗
 const reverseDialogVisible = ref(false)
@@ -752,6 +766,7 @@ const handleSummarizeConfirm = async () => {
 const handleConfirm = async (row: DailySettlement) => {
   confirmTarget.value = row
   validationWarnings.value = []
+  confirmRemark.value = row.remark ?? ''
   confirmDialogVisible.value = true
   try {
     const result = await validateSettlement(row.id)
@@ -773,7 +788,7 @@ const handleConfirmSubmit = async () => {
   if (!confirmTarget.value) return
   confirmLoading.value = true
   try {
-    await confirmSettlement(confirmTarget.value.id)
+    await confirmSettlement(confirmTarget.value.id, confirmRemark.value)
     ElMessage.success('日结已确认')
     confirmDialogVisible.value = false
     await loadTodaySummary()
@@ -803,7 +818,8 @@ const handleRecalculate = async (id: number) => {
 // 点击反日结
 const handleReverse = (row: DailySettlement) => {
   reverseTarget.value = row
-  reverseReason.value = ''
+  // 回填历史反日结原因：第 2 次反日结时沿用第 1 次原因，用户可保留或修改
+  reverseReason.value = row.reversedReason ?? ''
   reverseDialogVisible.value = true
 }
 
@@ -824,15 +840,6 @@ const handleReverseSubmit = async () => {
   }
 }
 
-// 格式化日期时间
-const formatDateTime = (dateStr: string): string => {
-  if (!dateStr) return ''
-  const dt = new Date(dateStr)
-  if (isNaN(dt.getTime())) return dateStr
-  const date = dt.toISOString().split('T')[0]
-  const time = dt.toTimeString().split(' ')[0]
-  return `${date} ${time}`
-}
 
 // 行样式：退款大于营收时高亮
 const rowClassName = ({ row }: { row: DailySettlement }): string => {
@@ -951,7 +958,7 @@ onUnmounted(() => {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   background: var(--border-primary);
 }
@@ -1128,7 +1135,8 @@ onUnmounted(() => {
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  /* 弹窗为浅色浮层，使用深色文字保证可读性 */
+  color: #1f2937;
   padding: 8px 12px;
   background: var(--el-fill-color-light);
   border-left: 3px solid var(--el-color-primary);
@@ -1153,14 +1161,19 @@ onUnmounted(() => {
 
 .detail-item-full {
   grid-column: 1 / -1;
+  /* 整行项（备注）：纵向排列并靠左，避免内容被 space-between 推到最右 */
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .detail-label {
-  color: var(--text-tertiary);
+  /* 弹窗为浅色浮层，使用深色文字保证可读性 */
+  color: #6b7280;
 }
 
 .detail-value {
-  color: var(--text-primary);
+  /* 弹窗为浅色浮层，使用深色文字保证可读性 */
+  color: #1f2937;
   font-weight: 500;
 }
 
@@ -1183,6 +1196,14 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--el-color-warning);
   line-height: 1.8;
+}
+
+/* 确认弹窗备注输入区（弹窗为浅色浮层，label 使用深色保证可读） */
+.confirm-remark-label {
+  display: block;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 6px;
 }
 
 .confirm-tip {

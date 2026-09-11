@@ -227,6 +227,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import IconPicker from '@/components/IconPicker/index.vue'
 import { useSortAutoFill } from '@/composables/useSortAutoFill'
+import { formatDateTime as formatDate } from '@/utils/date'
 
 const userStore = useUserStore()
 
@@ -289,18 +290,6 @@ const treeProps = {
   label: 'name'
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 // 获取授权的子系统列表（从 userStore 获取已过滤的数据）
 const authorizedSubsystems = computed(() => userStore.authorizedSubsystems)
