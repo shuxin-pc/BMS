@@ -111,6 +111,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISampleGiftReceiveAppService, SampleGiftReceiveAppService>();
         services.AddScoped<IServiceProductAppService, ServiceProductAppService>();
 
+        // 全局搜索（跨顾客/订单/商品/项目卡/储值/预约）
+        services.AddScoped<IGlobalSearchAppService, GlobalSearchAppService>();
+
         // 注册 FluentValidation
         services.AddValidatorsFromAssemblyContaining<StoreCreateDtoValidator>();
         services.AddFluentValidationAutoValidation();
