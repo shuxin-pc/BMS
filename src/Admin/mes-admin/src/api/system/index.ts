@@ -12,6 +12,7 @@ import type {
   Subsystem, SubsystemQuery, SubsystemCreate, SubsystemUpdate,
   SubsystemMenuAssign, TenantSubsystemAssign, RoleMenuAssign,
   RoleMenuGrouped,
+  SubsystemMenus,
   CurrentUser
 } from './types'
 import { handleUnauthorized } from '../shared/auth'
@@ -30,6 +31,7 @@ export type {
   Subsystem, SubsystemQuery, SubsystemCreate, SubsystemUpdate,
   SubsystemMenuAssign, TenantSubsystemAssign, RoleMenuAssign,
   RoleMenuGrouped,
+  SubsystemMenus,
   CurrentUser
 }
 
@@ -933,4 +935,13 @@ export async function removeRoleMenuAuth(roleId: number, menuId: number): Promis
   return request<void>(`${API_BASE}/roles/${roleId}/menus/auth/${menuId}`, {
     method: 'DELETE'
   })
+}
+
+/**
+ * 获取当前用户所有已授权子系统的菜单树（全局搜索功能源数据源）
+ * 按「用户授权菜单 ∩ 各子系统关联菜单」分组，无授权菜单的子系统不返回
+ * @returns 子系统菜单树列表
+ */
+export async function getAuthorizedSubsystemMenus(): Promise<SubsystemMenus[]> {
+  return request<SubsystemMenus[]>(`${API_BASE}/menus/authorized-all`)
 }

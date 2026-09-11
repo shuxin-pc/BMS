@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { getMenuTree, login, getCurrentUser } from '@/api/system'
 import { getAuthorizedStores as fetchAuthorizedStores } from '@/api/store'
 import type { Store } from '@/api/store/types'
-import type { Menu, Subsystem } from '@/api/system/types'
+import type { Menu, Subsystem, SubsystemMenus } from '@/api/system/types'
 
 export interface UserInfo {
   id: number
@@ -45,6 +45,8 @@ export const useUserStore = defineStore('user', {
     authorizedStores: [] as Store[],
     // 当前选中的门店ID（string 存储，与 currentSubsystemId 一致）
     currentStoreId: localStorage.getItem('currentStoreId') || '',
+    // 所有已授权子系统的菜单树（全局搜索功能源数据，懒加载）
+    allSubsystemMenus: [] as SubsystemMenus[],
     // 菜单数据
     menus: [
       {
@@ -255,6 +257,8 @@ export const useUserStore = defineStore('user', {
       // 清空门店数据
       this.authorizedStores = []
       this.currentStoreId = ''
+      // 清空全量子系统菜单缓存（全局搜索功能源）
+      this.allSubsystemMenus = []
       localStorage.removeItem('token')
       localStorage.removeItem('tenantId')
       localStorage.removeItem('tenantCode')
@@ -400,6 +404,23 @@ export const useUserStore = defineStore('user', {
       const id = String(storeId)
       this.currentStoreId = id
       localStorage.setItem('currentStoreId', id)
+    },
+
+    /**
+     * 获取所有已授权子系统的菜单树（全局搜索功能源数据）
+     * 懒加载：已有数据时直接返回，避免每次打开搜索面板重复请求
+     */
+    async getAllSubsystemMenus(): Promise<SubsystemMenus[]> {
+      if (this.allSubsystemMenus.length > 0) {
+        return this.allSubsystemMenus
+      }
+      try {
+        const { getAuthorizedSubsystemMenus } = await import('@/api/system')
+        this.allSubsystemMenus = await getAuthorizedSubsystemMenus()
+      } catch {
+        this.allSubsystemMenus = []
+      }
+      return this.allSubsystemMenus
     },
 
     /**

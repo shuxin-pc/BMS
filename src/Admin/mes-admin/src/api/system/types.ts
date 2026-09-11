@@ -426,6 +426,19 @@ export interface Menu {
 }
 
 /**
+ * 子系统菜单树（当前用户在单个子系统下的授权菜单）
+ * 供全局搜索功能源使用：返回用户所有已授权子系统的菜单，按子系统分组
+ */
+export interface SubsystemMenus {
+  /** 子系统ID（后端雪花ID，序列化为字符串） */
+  subsystemId: string
+  /** 子系统名称 */
+  subsystemName: string
+  /** 该子系统的授权菜单树（含目录/页面，不含按钮） */
+  menus: Menu[]
+}
+
+/**
  * 菜单查询参数
  */
 export interface MenuQuery {
