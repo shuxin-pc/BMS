@@ -203,6 +203,8 @@ watch(flatItems, () => {
 // ============ 打开/关闭/跳转 ============
 
 async function open() {
+  // 每次打开清空上次关键字（watch 联动清空结果列表与防抖计时）
+  keyword.value = ''
   historyList.value = loadHistory()
   visible.value = true
   await nextTick()
