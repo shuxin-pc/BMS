@@ -85,6 +85,10 @@ export function buildStoreProvider(): SearchProvider {
   return {
     id: 'store',
     async search(keyword: string, limit: number): Promise<SearchEntry[]> {
+      // 未选门店时跳过该源：storeRequest 对无门店请求会跳转 no-store 页面，
+      // 命令面板内发起搜索不能把用户踢离当前页面
+      const userStore = useUserStore()
+      if (!userStore.currentStoreId) return []
       const groups = await searchStore(keyword, limit)
       const intent = getIntentBoost(keyword)
       return groups.flatMap(g =>
