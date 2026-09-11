@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Application.Services;
@@ -44,6 +45,19 @@ public class MenusController : ControllerBase
     public async Task<ApiResponseDto<List<MenuDto>>> GetUserMenus(long userId)
     {
         return await _menuService.GetUserMenusAsync(userId);
+    }
+
+    /// <summary>
+    /// 获取当前用户所有已授权子系统的菜单树（全局搜索功能源数据源）
+    /// </summary>
+    [HttpGet("authorized-all")]
+    public async Task<ApiResponseDto<List<SubsystemMenusDto>>> GetAuthorizedAll()
+    {
+        // 兼容 "sub"（OpenIddict 原始 claim）与 ClaimTypes.NameIdentifier（JWT 默认映射），与 PermissionMiddleware 取法一致
+        var userIdClaim = User.FindFirst("sub")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = long.TryParse(userIdClaim, out var id) ? id : 0;
+        return await _menuService.GetAuthorizedAllAsync(userId);
     }
 
     /// <summary>

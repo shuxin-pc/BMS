@@ -3,16 +3,20 @@ using Bms.System.Application.Dtos;
 using Bms.System.Application.Dtos.Menus;
 using Bms.System.Domain.Entities;
 using Bms.System.Domain.IRepositories;
+using Bms.System.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace Bms.System.Application.Services;
 
 public class MenuAppService : IMenuAppService
 {
     private readonly IMenuRepository _menuRepository;
+    private readonly SystemDbContext _context;
 
-    public MenuAppService(IMenuRepository menuRepository)
+    public MenuAppService(IMenuRepository menuRepository, SystemDbContext context)
     {
         _menuRepository = menuRepository;
+        _context = context;
     }
 
     public async Task<ApiResponseDto<List<MenuDto>>> GetTreeListAsync()
@@ -57,6 +61,83 @@ public class MenuAppService : IMenuAppService
             return ApiResponseDto<MenuDto?>.Fail("菜单不存在", 404);
         }
         return ApiResponseDto<MenuDto?>.Success(menu.Adapt<MenuDto>());
+    }
+
+    /// <summary>
+    /// 获取当前用户在所有已授权子系统下的菜单树（全局搜索功能源数据源）
+    /// 按「用户授权菜单 ∩ 各子系统关联菜单」取交集分组，未授权菜单的子系统不返回
+    /// </summary>
+    public async Task<ApiResponseDto<List<SubsystemMenusDto>>> GetAuthorizedAllAsync(long userId)
+    {
+        var menus = await _menuRepository.GetByUserIdAsync(userId);
+        var authorizedMenuIds = menus.Select(m => m.Id).ToHashSet();
+
+        // 已按授权菜单过滤的「菜单-子系统」关联
+        var subsystemMenus = await _context.SubsystemMenus
+            .Where(sm => authorizedMenuIds.Contains(sm.MenuId))
+            .ToListAsync();
+        var subsystems = await _context.Subsystems
+            .Where(s => s.Status == 1)
+            .OrderBy(s => s.Sort)
+            .ToListAsync();
+
+        var result = new List<SubsystemMenusDto>();
+        foreach (var subsystem in subsystems)
+        {
+            var menuIdSet = subsystemMenus
+                .Where(sm => sm.SubsystemId == subsystem.Id)
+                .Select(sm => sm.MenuId)
+                .ToHashSet();
+            if (menuIdSet.Count == 0)
+                continue;
+
+            var subsystemMenuList = menus.Where(m => menuIdSet.Contains(m.Id)).ToList();
+            result.Add(new SubsystemMenusDto
+            {
+                SubsystemId = subsystem.Id,
+                SubsystemName = subsystem.Name,
+                Menus = BuildTreeFromFlat(subsystemMenuList)
+            });
+        }
+
+        return ApiResponseDto<List<SubsystemMenusDto>>.Success(result);
+    }
+
+    /// <summary>
+    /// 将平铺菜单列表按 ParentId 组装为树
+    /// （GetByUserIdAsync 返回平铺集合且 Children 导航未加载，MapToTreeDto 无法建树）
+    /// </summary>
+    private static List<MenuDto> BuildTreeFromFlat(List<Menu> menus)
+    {
+        MenuDto Map(Menu m) => new MenuDto
+        {
+            Id = m.Id,
+            ParentId = m.ParentId,
+            Name = m.Name,
+            Code = m.Code,
+            Path = m.Path,
+            Component = m.Component,
+            Icon = m.Icon,
+            Sort = m.Sort,
+            Type = m.Type,
+            Status = m.Status,
+            PermissionCode = m.PermissionCode,
+            IsVisible = m.IsVisible,
+            IsCache = m.IsCache,
+            IsAlwaysShow = m.IsAlwaysShow,
+            Children = new List<MenuDto>()
+        };
+
+        var dtoMap = menus.ToDictionary(m => m.Id, Map);
+        var roots = new List<MenuDto>();
+        foreach (var m in menus.OrderBy(x => x.Sort))
+        {
+            if (m.ParentId.HasValue && dtoMap.TryGetValue(m.ParentId.Value, out var parent))
+                parent.Children.Add(dtoMap[m.Id]);
+            else
+                roots.Add(dtoMap[m.Id]);
+        }
+        return roots;
     }
 
     public async Task<ApiResponseDto<MenuDto>> CreateAsync(MenuCreateDto dto)
