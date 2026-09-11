@@ -26,6 +26,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISubsystemMigrationService, SubsystemMigrationService>();
         services.AddScoped<IMessageAppService, MessageAppService>();
 
+        // 全局搜索（用户分组）
+        services.AddScoped<IGlobalSearchAppService, GlobalSearchAppService>();
+
         // 注册 FluentValidation 验证器
         services.AddFluentValidationServices();
 
