@@ -45,6 +45,7 @@ function groupWeight(group: string, intent: Record<string, number>): number {
 export function buildMenuProvider(): SearchProvider {
   return {
     id: 'menu',
+    label: '功能',
     async search(keyword: string, limit: number): Promise<SearchEntry[]> {
       const userStore = useUserStore()
       const subsystemMenus = await userStore.getAllSubsystemMenus()
@@ -84,6 +85,7 @@ export function buildMenuProvider(): SearchProvider {
 export function buildStoreProvider(): SearchProvider {
   return {
     id: 'store',
+    label: '顾客、订单、商品',
     async search(keyword: string, limit: number): Promise<SearchEntry[]> {
       // 未选门店时跳过该源：storeRequest 对无门店请求会跳转 no-store 页面，
       // 命令面板内发起搜索不能把用户踢离当前页面
@@ -103,6 +105,7 @@ export function buildStoreProvider(): SearchProvider {
 export function buildSystemProvider(): SearchProvider {
   return {
     id: 'system',
+    label: '用户',
     async search(keyword: string, limit: number): Promise<SearchEntry[]> {
       const groups = await searchSystem(keyword, limit)
       const intent = getIntentBoost(keyword)

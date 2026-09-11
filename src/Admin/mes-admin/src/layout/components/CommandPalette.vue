@@ -9,7 +9,7 @@
             <input
               ref="inputRef"
               v-model="keyword"
-              placeholder="搜索功能、顾客、订单、商品…"
+              :placeholder="searchPlaceholder"
             />
           </div>
 
@@ -103,6 +103,12 @@ const flatItems = ref<SearchEntry[]>([])
 const historyList = ref<string[]>([])
 
 const trimmedKeyword = computed(() => keyword.value.trim())
+
+// 输入框提示文案按当前用户可用的搜索源动态拼接（未接入门店系统的租户不显示门店词汇）
+const searchPlaceholder = computed(() => {
+  const labels = getActiveProviders().map(p => p.label)
+  return `搜索${labels.join('、')}…`
+})
 
 // ============ 最近搜索（localStorage） ============
 
@@ -221,24 +227,15 @@ function close() {
  */
 async function select(entry: SearchEntry) {
   const kw = trimmedKeyword.value
-  // TODO(调试日志 2026-09-11): 定位「点击条目仅关闭无跳转」问题后移除
-  console.log('[GlobalSearch] 点击条目:', entry.group, entry.title, 'menuJump=', entry.menuJump)
   close()
   if (kw) pushHistory(kw)
   const target = resolveSearchTarget(entry)
-  console.log('[GlobalSearch] 解析跳转目标:', target)
   if (!target) return
   const userStore = useUserStore()
-  console.log('[GlobalSearch] 当前子系统:', userStore.currentSubsystemId, '目标子系统:', target.subsystemId)
   if (String(userStore.currentSubsystemId) !== target.subsystemId) {
     await userStore.switchSubsystem(target.subsystemId)
   }
-  console.log('[GlobalSearch] 执行跳转:', target.path, 'query.keyword=', kw)
-  router.push({ path: target.path, query: kw ? { keyword: kw } : undefined }).then(result => {
-    console.log('[GlobalSearch] 跳转结果:', result)
-  }).catch(err => {
-    console.error('[GlobalSearch] 跳转异常:', err)
-  })
+  router.push({ path: target.path, query: kw ? { keyword: kw } : undefined })
 }
 
 // ============ 全局快捷键（Ctrl+K） ============

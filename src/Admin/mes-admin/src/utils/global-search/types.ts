@@ -25,6 +25,8 @@ export interface SearchEntry extends SearchResultItem {
 export interface SearchProvider {
   /** 源唯一标识（menu / store / system） */
   id: string
+  /** 内容描述（用于动态拼接输入框 placeholder，如「功能」「顾客、订单、商品」） */
+  label: string
   /**
    * 执行搜索
    * @param keyword 关键字
