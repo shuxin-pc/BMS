@@ -91,8 +91,9 @@ export function buildStoreProvider(): SearchProvider {
       if (!userStore.currentStoreId) return []
       const groups = await searchStore(keyword, limit)
       const intent = getIntentBoost(keyword)
+      // 后端契约中 group 在分组级，摊平时注入到每个条目（跳转路由映射依赖条目级 group）
       return groups.flatMap(g =>
-        g.items.map(item => ({ ...item, weight: groupWeight(g.group, intent) }))
+        g.items.map(item => ({ ...item, group: g.group, weight: groupWeight(g.group, intent) }))
       )
     }
   }
@@ -105,8 +106,9 @@ export function buildSystemProvider(): SearchProvider {
     async search(keyword: string, limit: number): Promise<SearchEntry[]> {
       const groups = await searchSystem(keyword, limit)
       const intent = getIntentBoost(keyword)
+      // 后端契约中 group 在分组级，摊平时注入到每个条目（跳转路由映射依赖条目级 group）
       return groups.flatMap(g =>
-        g.items.map(item => ({ ...item, weight: groupWeight(g.group, intent) }))
+        g.items.map(item => ({ ...item, group: g.group, weight: groupWeight(g.group, intent) }))
       )
     }
   }

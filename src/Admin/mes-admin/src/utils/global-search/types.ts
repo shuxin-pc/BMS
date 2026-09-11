@@ -13,6 +13,8 @@ export interface MenuJump {
 
 /** 命令面板搜索条目（共享契约 + 排序权重 + 菜单跳转信息） */
 export interface SearchEntry extends SearchResultItem {
+  /** 分组名（搜索源摊平分组时注入，条目级必带） */
+  group: string
   /** 排序权重（越大越靠前），由搜索源按分组基础权重 + 意图加权计算 */
   weight?: number
   /** 菜单源条目专属：直接携带跳转信息；业务数据条目跳转经 resolveSearchTarget 按分组路由映射解析 */

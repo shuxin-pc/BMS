@@ -10,9 +10,7 @@
               ref="inputRef"
               v-model="keyword"
               placeholder="搜索功能、顾客、订单、商品…"
-              @keydown="onInputKeydown"
             />
-            <span class="palette-kbd">ESC</span>
           </div>
 
           <!-- 结果区 -->
@@ -21,11 +19,9 @@
             <template v-if="!trimmedKeyword">
               <div v-if="historyList.length > 0" class="palette-section-title">最近搜索</div>
               <div
-                v-for="(h, i) in historyList"
+                v-for="h in historyList"
                 :key="h"
                 class="palette-item"
-                :class="{ active: i === historyActiveIndex }"
-                @mouseenter="historyActiveIndex = i"
                 @click="applyHistory(h)"
               >
                 <div class="palette-item-main">
@@ -54,9 +50,6 @@
                   >{{ item.group }}</div>
                   <div
                     class="palette-item"
-                    :class="{ active: index === activeIndex }"
-                    :data-item-index="index"
-                    @mouseenter="activeIndex = index"
                     @click="select(item)"
                   >
                     <div class="palette-item-main">
@@ -78,13 +71,6 @@
                 </template>
               </template>
             </template>
-          </div>
-
-          <!-- 底部按键提示 -->
-          <div class="palette-footer">
-            <span><kbd>↑</kbd><kbd>↓</kbd> 切换</span>
-            <span><kbd>Enter</kbd> 打开</span>
-            <span><kbd>Esc</kbd> 关闭</span>
           </div>
         </div>
       </div>
@@ -114,9 +100,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const flatItems = ref<SearchEntry[]>([])
-const activeIndex = ref(0)
 const historyList = ref<string[]>([])
-const historyActiveIndex = ref(0)
 
 const trimmedKeyword = computed(() => keyword.value.trim())
 
@@ -187,7 +171,6 @@ async function doSearch() {
   const items = results.flatMap(r => (r.status === 'fulfilled' ? r.value : []))
   items.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
   flatItems.value = items
-  activeIndex.value = 0
   loading.value = false
 }
 
@@ -196,8 +179,6 @@ watch(keyword, () => {
     window.clearTimeout(debounceTimer)
     debounceTimer = null
   }
-  activeIndex.value = 0
-  historyActiveIndex.value = 0
   if (!trimmedKeyword.value) {
     searchSeq++ // 使进行中的搜索结果失效
     loading.value = false
@@ -219,44 +200,10 @@ watch(flatItems, () => {
   })
 })
 
-// ============ 键盘交互 ============
-
-function onInputKeydown(e: KeyboardEvent) {
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    const delta = e.key === 'ArrowDown' ? 1 : -1
-    if (!trimmedKeyword.value) {
-      // 历史模式上下导航
-      if (historyList.value.length === 0) return
-      historyActiveIndex.value = (historyActiveIndex.value + delta + historyList.value.length) % historyList.value.length
-    } else if (flatItems.value.length > 0) {
-      activeIndex.value = (activeIndex.value + delta + flatItems.value.length) % flatItems.value.length
-    }
-    return
-  }
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    if (!trimmedKeyword.value) {
-      if (historyList.value.length > 0) applyHistory(historyList.value[historyActiveIndex.value])
-      return
-    }
-    const item = flatItems.value[activeIndex.value]
-    if (item) select(item)
-  }
-}
-
-// 高亮时滚动到可视区
-watch(activeIndex, idx => {
-  nextTick(() => {
-    listRef.value?.querySelector(`[data-item-index="${idx}"]`)?.scrollIntoView({ block: 'nearest' })
-  })
-})
-
 // ============ 打开/关闭/跳转 ============
 
 async function open() {
   historyList.value = loadHistory()
-  historyActiveIndex.value = 0
   visible.value = true
   await nextTick()
   inputRef.value?.focus()
@@ -272,28 +219,32 @@ function close() {
  */
 async function select(entry: SearchEntry) {
   const kw = trimmedKeyword.value
+  // TODO(调试日志 2026-09-11): 定位「点击条目仅关闭无跳转」问题后移除
+  console.log('[GlobalSearch] 点击条目:', entry.group, entry.title, 'menuJump=', entry.menuJump)
   close()
   if (kw) pushHistory(kw)
   const target = resolveSearchTarget(entry)
+  console.log('[GlobalSearch] 解析跳转目标:', target)
   if (!target) return
   const userStore = useUserStore()
+  console.log('[GlobalSearch] 当前子系统:', userStore.currentSubsystemId, '目标子系统:', target.subsystemId)
   if (String(userStore.currentSubsystemId) !== target.subsystemId) {
     await userStore.switchSubsystem(target.subsystemId)
   }
-  router.push({ path: target.path, query: kw ? { keyword: kw } : undefined })
+  console.log('[GlobalSearch] 执行跳转:', target.path, 'query.keyword=', kw)
+  router.push({ path: target.path, query: kw ? { keyword: kw } : undefined }).then(result => {
+    console.log('[GlobalSearch] 跳转结果:', result)
+  }).catch(err => {
+    console.error('[GlobalSearch] 跳转异常:', err)
+  })
 }
 
-// ============ 全局快捷键（Ctrl+K / Esc） ============
+// ============ 全局快捷键（Ctrl+K） ============
 
 function onGlobalKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
     open()
-    return
-  }
-  if (visible.value && e.key === 'Escape') {
-    e.preventDefault()
-    close()
   }
 }
 
@@ -373,14 +324,6 @@ defineExpose({ open })
   color: var(--text-tertiary);
 }
 
-.palette-kbd {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  padding: 2px 6px;
-}
-
 /* 结果区 */
 .palette-body {
   max-height: 420px;
@@ -406,7 +349,7 @@ defineExpose({ open })
   transition: background 0.15s ease;
 }
 
-.palette-item.active {
+.palette-item:hover {
   background: var(--bg-hover);
   border-left-color: var(--primary);
   box-shadow: inset 0 0 20px rgba(6, 212, 228, 0.05);
@@ -473,26 +416,6 @@ defineExpose({ open })
   text-align: center;
   color: var(--text-tertiary);
   font-size: 13px;
-}
-
-/* 底部按键提示 */
-.palette-footer {
-  display: flex;
-  gap: 16px;
-  padding: 10px 18px;
-  border-top: 1px solid var(--border-primary);
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.palette-footer kbd {
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  margin-right: 2px;
 }
 
 /* 进出场动画 */
