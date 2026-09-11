@@ -15,6 +15,7 @@ import type {
   SubsystemMenus,
   CurrentUser
 } from './types'
+import type { SearchResultGroup } from '../global-search/types'
 import { handleUnauthorized } from '../shared/auth'
 
 // 导出类型供外部使用
@@ -944,4 +945,15 @@ export async function removeRoleMenuAuth(roleId: number, menuId: number): Promis
  */
 export async function getAuthorizedSubsystemMenus(): Promise<SubsystemMenus[]> {
   return request<SubsystemMenus[]>(`${API_BASE}/menus/authorized-all`)
+}
+
+/**
+ * 系统业务数据全局搜索（用户分组）
+ * @param keyword 搜索关键字
+ * @param limit 每组返回条数上限
+ * @returns 命中的搜索结果分组
+ */
+export async function searchSystem(keyword: string, limit = 5): Promise<SearchResultGroup[]> {
+  const params = new URLSearchParams({ keyword, limit: String(limit) })
+  return request<SearchResultGroup[]>(`${API_BASE}/search?${params}`)
 }
