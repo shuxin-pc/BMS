@@ -265,6 +265,17 @@ public class UserRepository : IUserRepository
 
     public async Task<List<string>> GetUserPermissionsAsync(long userId)
     {
+        // 用户所属租户已授权的子系统ID：角色可能跨租户共用（如全局 tenant_admin 挂到各租户用户），
+        // 权限码必须落在租户开通范围内，否则取消租户子系统授权后角色残留授权仍会越权生效
+        var userTenantId = await _context.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.TenantId)
+            .FirstOrDefaultAsync();
+        var authorizedSubsystemIds = await _context.TenantSubsystems
+            .Where(ts => ts.TenantId == userTenantId)
+            .Select(ts => ts.SubsystemId)
+            .ToListAsync();
+
         var roleIds = await _context.UserRoles
             .Where(ur => ur.UserId == userId)
             .Select(ur => ur.RoleId)
@@ -277,10 +288,15 @@ public class UserRepository : IUserRepository
             .Distinct()
             .ToListAsync();
 
+        // 权限码 = 角色按钮权限 ∩ 租户已授权子系统（按钮菜单经 SubsystemMenus 归属子系统）
         var permissionCodes = await _context.Menus
             .Where(m => buttonMenuIds.Contains(m.Id) && m.Type == 2 && !m.IsDeleted)
-            .Select(m => m.Code)
-            .Where(c => !string.IsNullOrEmpty(c))
+            .Join(_context.SubsystemMenus,
+                m => m.Id,
+                sm => sm.MenuId,
+                (m, sm) => new { m.Code, sm.SubsystemId })
+            .Where(x => !string.IsNullOrEmpty(x.Code) && authorizedSubsystemIds.Contains(x.SubsystemId))
+            .Select(x => x.Code)
             .Distinct()
             .ToListAsync();
 
