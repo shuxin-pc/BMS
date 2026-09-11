@@ -423,7 +423,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, View, Edit, ArrowDown, Position, Finished, CircleCloseFilled, ShoppingCart } from '@element-plus/icons-vue'
 import {
@@ -449,6 +449,9 @@ import { toLocalDateTime } from '@/utils/time'
 
 const systemConfigStore = useSystemConfigStore()
 const router = useRouter()
+const route = useRoute()
+// 全局搜索跳转预填：读取路由 keyword 参数回填搜索框
+const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
 const userStore = useUserStore()
 const hasPermission = (permissionCode: string) => userStore.hasPermission(permissionCode)
 
@@ -1381,6 +1384,9 @@ onMounted(async () => {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  if (routeKeyword) {
+    searchForm.keyword = routeKeyword
+  }
   loadData()
 })
 </script>

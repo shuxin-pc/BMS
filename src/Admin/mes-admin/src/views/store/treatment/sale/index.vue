@@ -208,6 +208,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Search, Refresh, View, RefreshLeft } from '@element-plus/icons-vue'
@@ -377,11 +378,18 @@ const handleRefundSubmit = async () => {
   })
 }
 
+// 全局搜索跳转预填：读取路由 keyword 参数回填搜索框
+const route = useRoute()
+const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+
 onMounted(async () => {
   if (!systemConfigStore.loaded) {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  if (routeKeyword) {
+    searchForm.keyword = routeKeyword
+  }
   loadData()
 })
 </script>

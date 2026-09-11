@@ -241,6 +241,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit, Key } from '@element-plus/icons-vue'
 import { getUsers, getUser, createUser, updateUser, deleteUser, deleteUsers, resetPassword, getAllRoles, getAllRolesWithoutFilter, getTenants, getOrganizationOptions } from '@/api/system'
@@ -879,6 +880,10 @@ const isSameTenant = (row: User): boolean => {
   return String(row.tenantId) === String(currentTenantId.value)
 }
 
+// 全局搜索跳转预填：读取路由 keyword 参数回填姓名搜索框
+const route = useRoute()
+const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+
 onMounted(async () => {
   // 确保系统配置已加载
   if (!systemConfigStore.loaded) {
@@ -888,6 +893,9 @@ onMounted(async () => {
   pagination.pageSize = systemConfigStore.defaultPageSize
   // 初始化默认租户：超级管理员默认平台租户，非超级管理员默认当前用户租户
   searchForm.tenantId = isSuperAdmin.value ? '1' : currentTenantId.value
+  if (routeKeyword) {
+    searchForm.realName = routeKeyword
+  }
   loadData()
   // 按当前登录用户的租户加载表单编辑用的组织和角色数据
   const initTenantId = isSuperAdmin.value ? '1' : currentTenantId.value

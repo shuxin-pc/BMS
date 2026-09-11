@@ -130,6 +130,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Wallet, RefreshLeft } from '@element-plus/icons-vue'
 import { getMemberAccounts } from '@/api/member'
@@ -237,11 +238,18 @@ const formatPrice = (price: number | undefined) => {
 }
 
 
+// 全局搜索跳转预填：读取路由 keyword 参数回填搜索框
+const route = useRoute()
+const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+
 onMounted(async () => {
   if (!systemConfigStore.loaded) {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  if (routeKeyword) {
+    searchForm.keyword = routeKeyword
+  }
   loadData()
 })
 </script>

@@ -427,6 +427,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, View, RefreshLeft, CircleClose } from '@element-plus/icons-vue'
 import { getOrders, getOrder, refundOrder, cancelOrder } from '@/api/order'
@@ -958,11 +959,18 @@ const statusTagType = (status: number) => {
   return map[status] || ''
 }
 
+// 全局搜索跳转预填：读取路由 keyword 参数回填搜索框
+const route = useRoute()
+const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+
 onMounted(async () => {
   if (!systemConfigStore.loaded) {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  if (routeKeyword) {
+    searchForm.keyword = routeKeyword
+  }
   loadData()
 })
 </script>

@@ -470,6 +470,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete, Edit, Setting, Select } from '@element-plus/icons-vue'
 import {
@@ -935,11 +936,18 @@ const getProductTypeName = (type: number) => {
   return map[type] || '-'
 }
 
+// 全局搜索跳转预填：读取路由 keyword 参数回填名称搜索框
+const route = useRoute()
+const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+
 onMounted(async () => {
   if (!systemConfigStore.loaded) {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  if (routeKeyword) {
+    searchForm.name = routeKeyword
+  }
   loadCategoryTree()
   loadStores()
   loadEquipmentTypes()

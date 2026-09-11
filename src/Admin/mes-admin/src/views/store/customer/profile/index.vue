@@ -1089,6 +1089,11 @@ onMounted(async () => {
     await systemConfigStore.loadSystemConfigs()
   }
   pagination.pageSize = systemConfigStore.defaultPageSize
+  // 全局搜索跳转预填：读取路由 keyword 参数回填搜索框
+  const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+  if (routeKeyword) {
+    searchForm.keyword = routeKeyword
+  }
   loadCustomerLevels()
   loadAllTags()
   await loadData()
