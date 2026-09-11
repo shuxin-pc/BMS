@@ -133,14 +133,11 @@
           </div>
         </div>
         <div class="header-right">
-          <!-- 搜索框 -->
-          <div class="header-search">
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜索功能、数据..."
-              :prefix-icon="SearchIcon"
-              size="default"
-            />
+          <!-- 全局搜索触发器：点击打开命令面板，Ctrl+K 亦可唤起 -->
+          <div class="header-search" @click="commandPaletteRef?.open()">
+            <el-icon class="header-search-icon"><Search /></el-icon>
+            <span class="header-search-placeholder">搜索功能、数据…</span>
+            <span class="header-search-kbd">Ctrl K</span>
           </div>
 
           <!-- 消息铃铛 -->
@@ -198,6 +195,9 @@
           </transition>
         </router-view>
       </div>
+
+      <!-- 全局搜索命令面板 -->
+      <CommandPalette ref="commandPaletteRef" />
     </div>
   </div>
 </template>
@@ -212,6 +212,7 @@ import { useSystemConfigStore } from '@/stores/systemConfig'
 import { useMessageHub } from '@/composables/useMessageHub'
 import { recordAuditLog } from '@/api/system'
 import MessageBell from './components/MessageBell.vue'
+import CommandPalette from './components/CommandPalette.vue'
 import {
   Fold, Expand, ArrowDown, User, Setting, SwitchButton, Box, Calendar, List, Check, Tools, Search, Bell,
   DataAnalysis, PieChart, TrendCharts, Histogram, Monitor, Printer,
@@ -229,8 +230,9 @@ const userStore = useUserStore()
 const systemConfig = useSystemConfigStore()
 const { start: startMessageHub, stop: stopMessageHub } = useMessageHub()
 const isCollapse = ref(false)
-const searchQuery = ref('')
 const menus = ref<SystemMenu[]>([])
+// 全局搜索命令面板
+const commandPaletteRef = ref<InstanceType<typeof CommandPalette> | null>(null)
 const menuRef = ref()
 // el-menu 选中项：用 ref 控制，菜单数据异步加载后需强制触发选中
 const activeMenu = ref(route.path)
@@ -353,9 +355,6 @@ const getIconComponent = (iconName?: string) => {
   if (!iconName) return iconMap.Setting
   return iconMap[iconName] || iconMap.Setting
 }
-
-// 图标组件使用 markRaw 避免响应式开销
-const SearchIcon = markRaw(Search)
 
 // 判断是否为 base64 图片格式
 const isBase64Image = (value: string): boolean => {
@@ -996,22 +995,46 @@ watch(() => userStore.userInfo.id, (newId, oldId) => {
   height: 100%;
 }
 
-/* 搜索框 */
+/* 全局搜索触发器（点击打开命令面板） */
 .header-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 280px;
-}
-
-.header-search :deep(.el-input__wrapper) {
-  background: var(--bg-tertiary) !important;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
-  box-shadow: none !important;
+  transition: all 0.3s ease;
 }
 
-.header-search :deep(.el-input__wrapper:hover),
-.header-search :deep(.el-input__wrapper.is-focus) {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 2px var(--primary-glow) !important;
+.header-search:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.header-search-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.header-search-placeholder {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-search-kbd {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 1px 6px;
 }
 
 /* 头部图标按钮 */
