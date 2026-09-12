@@ -189,7 +189,9 @@
       <!-- 内容区域 -->
       <div class="content-container">
         <router-view v-slot="{ Component }">
-          <transition name="fade-transform" mode="out-in">
+          <!-- 切换子系统期间禁用 out-in 转场（name 指向无 CSS 定义的名字即无过渡）：
+               转场离场动画有 0.3s，会让旧页面在导航确认后继续显示，掩盖状态原子提交的瞬间切换效果 -->
+          <transition :name="userStore.switchingSubsystem ? 'none' : 'fade-transform'" mode="out-in">
             <!-- key 拼入 currentStoreId：门店切换时 key 变化，强制当前页组件重新挂载以刷新数据 -->
             <component :is="Component" :key="$route.fullPath + (currentStoreId ? `_${currentStoreId}` : '')" />
           </transition>
@@ -382,21 +384,21 @@ const toggleCollapse = () => {
  */
 const handleSubsystemClick = async (subsystemId: number | string) => {
   const id = String(subsystemId)
-  if (id === currentSubsystemId.value) return
+  if (id === currentSubsystemId.value || userStore.switchingSubsystem) return
 
-  // 切换子系统
-  await userStore.switchSubsystem(id)
+  userStore.switchingSubsystem = true
+  try {
+    // 切换子系统：store 内部先完成菜单/路由/门店准备并导航，导航完成后才原子提交状态，
+    // 等待期页面保持旧子系统状态静止，无数据闪现
+    await userStore.switchSubsystem(id, (firstPath) => router.push(firstPath))
 
-  // 更新本地菜单数据
-  menus.value = userStore.menus
+    // 更新本地菜单数据（store 已在导航完成后提交新菜单）
+    menus.value = userStore.menus
 
-  // 跳转到该子系统的首页（已授权菜单中排序第1的叶子菜单）
-  const firstPath = userStore.firstAuthorizedLeafPath
-  if (firstPath && firstPath !== route.path) {
-    router.push(firstPath)
-  } else if (!firstPath) {
-    // 新子系统无授权菜单，跳转无权限页
-    router.push('/no-permission')
+    // 等组件切换渲染落定后再恢复转场动画
+    await nextTick()
+  } finally {
+    userStore.switchingSubsystem = false
   }
 }
 

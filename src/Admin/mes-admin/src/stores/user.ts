@@ -20,6 +20,25 @@ export interface UserInfo {
   maxRoleLevel?: number
 }
 
+/**
+ * 深度优先返回菜单树中第一个可导航叶子路径（跳过按钮类型 type=2）
+ * 供 firstAuthorizedLeafPath getter 与 switchSubsystem 编排复用
+ */
+function findFirstLeafPath(menus: Menu[]): string | null {
+  for (const menu of menus) {
+    // 跳过按钮类型，按钮不可导航
+    if (menu.type === 2) continue
+    // 有子菜单时递归查找
+    if (menu.children && menu.children.length > 0) {
+      const path = findFirstLeafPath(menu.children)
+      if (path) return path
+    } else if (menu.path) {
+      return menu.path
+    }
+  }
+  return null
+}
+
 export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem('token') || '',
@@ -45,6 +64,9 @@ export const useUserStore = defineStore('user', {
     authorizedStores: [] as Store[],
     // 当前选中的门店ID（string 存储，与 currentSubsystemId 一致）
     currentStoreId: localStorage.getItem('currentStoreId') || '',
+    // 子系统切换过渡标记：切换期间禁用 router-view 的 out-in 转场动画（转场会让旧页面在
+    // 导航确认后继续显示 0.3s，破坏状态原子提交的瞬间切换效果），供 layout 与全局搜索共用
+    switchingSubsystem: false,
     // 所有已授权子系统的菜单树（全局搜索功能源数据，懒加载）
     allSubsystemMenus: [] as SubsystemMenus[],
     // 菜单数据
@@ -179,22 +201,7 @@ export const useUserStore = defineStore('user', {
      * 菜单树按 sort 排序，深度优先遍历返回第一个有 path 的叶子（跳过按钮类型 type=2）
      */
     firstAuthorizedLeafPath: (state): string | null => {
-      const findLeaf = (menus: Menu[]): string | null => {
-        for (const menu of menus) {
-          // 跳过按钮类型，按钮不可导航
-          if (menu.type === 2) continue
-          // 有子菜单时递归查找
-          if (menu.children && menu.children.length > 0) {
-            const path = findLeaf(menu.children)
-            if (path) return path
-          } else if (menu.path) {
-            return menu.path
-          }
-        }
-        return null
-      }
-      const result = findLeaf(state.menus)
-      return result
+      return findFirstLeafPath(state.menus)
     }
   },
 
@@ -339,33 +346,69 @@ export const useUserStore = defineStore('user', {
 
     /**
      * 切换当前子系统
-     * @param subsystemId 子系统ID
+     * 编排顺序：拉取新子系统菜单（不写入 state）→ 注册动态路由 → 导航跳转 → 导航完成后原子提交状态。
+     * 这样设计的目的是：导航等待期页面保持旧子系统的状态静止（侧边栏/快捷入口/门店切换器均不更新），
+     * 所有状态更新与路由组件切换落在同一次渲染批次，旧页面不会带着新子系统的数据重渲染；
+     * 旧实现先改 currentSubsystemId/menus 再跳路由，导致旧页面在跳转完成前闪现新子系统数据。
+     * @param subsystemId 目标子系统ID
+     * @param navigate 导航回调：接收新子系统首个授权页面路径，由调用方执行路由跳转并返回导航 Promise
      */
-    async switchSubsystem(subsystemId: number | string) {
+    async switchSubsystem(subsystemId: number | string, navigate: (firstPath: string) => Promise<unknown>) {
       const id = String(subsystemId)
-      this.currentSubsystemId = id
-      localStorage.setItem('currentSubsystemId', id)
-      // 切换子系统后重新获取菜单
-      await this.getMenus()
+      // 拉取新子系统过滤后的菜单（纯获取，此时不写 this.menus，页面保持旧菜单渲染）
+      const newMenus = await this.fetchFilteredMenus(id)
 
-      // 切换子系统后用户仍在 layout，路由守卫 beforeEach 不会触发
-      // 需主动清除旧子系统动态路由并注册新子系统路由
+      // 用户仍在 layout，路由守卫 beforeEach 不会触发
+      // 需主动清除旧子系统动态路由并注册新子系统路由（导航前注册，否则目标路由 404）
       try {
         const [{ default: router }, { unregisterDynamicRoutes, registerDynamicRoutes, registerNotFoundRoute }] = await Promise.all([
           import('@/router'),
           import('@/router/modules')
         ])
         unregisterDynamicRoutes(router)
-        registerDynamicRoutes(router, this.menus, new Set<string>())
+        registerDynamicRoutes(router, newMenus, new Set<string>())
         registerNotFoundRoute(router)
       } catch {
         // 路由注册失败不影响菜单切换，但可能导致页面 404
       }
 
-      // 切换到 store 子系统时，加载授权门店列表（用于门店切换器）
+      // store 子系统：提前拉取授权门店并把门店ID写入 localStorage（新页面业务请求头 X-Store-Id 从 localStorage 读取）；
+      // Pinia state（驱动门店切换器显示与 router-view key）延后到导航完成后的提交阶段，避免旧页面因 key 变化强制重挂
+      let newStores: Store[] | null = null
+      let newStoreId = ''
       const target = this.authorizedSubsystems.find(s => String(s.id) === id)
       if (target?.code === 'StoreManagement') {
-        await this.getAuthorizedStores()
+        try {
+          newStores = (await fetchAuthorizedStores()) || []
+        } catch {
+          newStores = []
+        }
+        // 沿用已保存的门店选择，无效或未选时取第一个门店（与 getAuthorizedStores 规则一致）
+        const savedId = this.currentStoreId
+        const isValid = !!savedId && newStores.some(s => String(s.id) === savedId)
+        newStoreId = isValid ? savedId : (newStores.length > 0 ? String(newStores[0].id) : '')
+        if (newStoreId) {
+          localStorage.setItem('currentStoreId', newStoreId)
+        } else {
+          localStorage.removeItem('currentStoreId')
+        }
+      }
+
+      // 导航到新子系统首页（已授权菜单中排序第1的叶子菜单；无授权菜单时跳无权限页）
+      try {
+        await navigate(findFirstLeafPath(newMenus) ?? '/no-permission')
+      } catch {
+        // 导航中断/失败：不提交任何状态，保持旧子系统完整可用，避免出现半切换状态
+        return
+      }
+
+      // 原子提交：与路由组件切换同一次渲染批次生效，旧页面在此前不会感知到任何状态变化
+      this.currentSubsystemId = id
+      localStorage.setItem('currentSubsystemId', id)
+      this.menus = newMenus
+      if (newStores) {
+        this.authorizedStores = newStores
+        this.currentStoreId = newStoreId
       }
     },
 
@@ -555,101 +598,101 @@ export const useUserStore = defineStore('user', {
 
     async getMenus() {
       try {
-        const allMenus = await getMenuTree()
-
-        // 图标名称映射：将后端图标名称转换为 Element Plus Icons 组件名称
-        const iconMap: Record<string, string> = {
-          'Setting': 'Setting',
-          'User': 'User',
-          'Lock': 'Lock',
-          'Menu': 'Menu',
-          'OfficeBuilding': 'OfficeBuilding',
-          'Building': 'House',
-          'House': 'House',
-          'Document': 'Document',
-          'Tools': 'Tools',
-          'Folder': 'Folder',
-          'FolderOpened': 'FolderOpened',
-          'HomeFilled': 'HomeFilled',
-          'UserFilled': 'UserFilled',
-          'Grid': 'Grid',
-          'School': 'School',
-          // 旧图标名兼容映射（Element Plus Icons 中不存在的名称）
-          'Category': 'Collection',
-          'Time': 'Timer',
-          'Flash': 'Lightning',
-          'Gift': 'Present',
-          'UserPlus': 'Avatar'
-        }
-        // 处理后端返回的菜单数据，转换为前端需要的格式
-        const formatMenus = (items: Menu[]): Menu[] => {
-          return items.map(item => {
-            // 处理路径：相对路径转换为绝对路径（只需加上前缀 /）
-            let fullPath = item.path || ''
-            if (fullPath && !fullPath.startsWith('/')) {
-              fullPath = `/${fullPath}`
-            }
-            // 处理图标名称
-            const iconName = item.icon ? (iconMap[item.icon] || item.icon) : 'Folder'
-            return {
-              id: item.id,
-              parentId: item.parentId ?? 0,
-              name: item.name,
-              path: fullPath,
-              component: item.component,
-              code: item.code,
-              icon: iconName,
-              type: item.type,
-              sort: item.sort ?? 0,
-              status: item.status ?? 1,
-              isVisible: typeof item.isVisible === 'boolean' ? (item.isVisible ? 1 : 0) : item.isVisible,
-              isCache: typeof item.isCache === 'boolean' ? (item.isCache ? 1 : 0) : item.isCache,
-              isAffix: item.isAffix ?? 0,
-              isAlwaysShow: item.isAlwaysShow ?? false,
-              permissionCode: item.permissionCode || item.permission,
-              children: item.children && item.children.length > 0 ? formatMenus(item.children) : undefined
-            }
-          })
-        }
-        const formattedMenus = formatMenus(allMenus)
-
-        // 根据当前子系统和角色权限过滤菜单
-        // 无当前子系统（租户未分配任何子系统）时返回空菜单，避免泄漏全部菜单
-        let filteredMenus: Menu[] = []
-
-        if (this.currentSubsystemId) {
-          // 获取当前子系统的菜单ID列表
-          const subsystemMenuIds = await this.getSubsystemMenuIds(this.currentSubsystemId)
-
-          // 获取用户角色菜单权限ID列表
-          const roleMenuIds = await this.getRoleMenuIds()
-
-          // 取两者交集 = 最终授权菜单ID
-          const subsystemSet = new Set(subsystemMenuIds)
-          const roleSet = new Set(roleMenuIds)
-          const authorizedIds = new Set<number>()
-
-          for (const id of subsystemSet) {
-            if (roleSet.has(id)) {
-              authorizedIds.add(id)
-            }
-          }
-
-          // 如果没有交集（即没有权限），返回空菜单
-          if (authorizedIds.size === 0) {
-            filteredMenus = []
-          } else {
-            // 所有角色都要按子系统过滤菜单（包括超级管理员和管理员）
-            filteredMenus = this.filterMenusByPermission(formattedMenus, authorizedIds)
-          }
-        }
-
-        this.menus = filteredMenus
+        this.menus = await this.fetchFilteredMenus(this.currentSubsystemId)
         return this.menus
       } catch {
-        // 如果API调用失败，返回本地菜单
+        // API 调用失败时保留现有菜单
         return this.menus
       }
+    },
+
+    /**
+     * 按指定子系统与角色权限拉取并过滤菜单树（纯获取，不写入 state）
+     * 供 getMenus（当前子系统）与 switchSubsystem（目标子系统切换）复用
+     * @param subsystemId 子系统ID，为空时返回空菜单
+     */
+    async fetchFilteredMenus(subsystemId: string): Promise<Menu[]> {
+      const allMenus = await getMenuTree()
+
+      // 图标名称映射：将后端图标名称转换为 Element Plus Icons 组件名称
+      const iconMap: Record<string, string> = {
+        'Setting': 'Setting',
+        'User': 'User',
+        'Lock': 'Lock',
+        'Menu': 'Menu',
+        'OfficeBuilding': 'OfficeBuilding',
+        'Building': 'House',
+        'House': 'House',
+        'Document': 'Document',
+        'Tools': 'Tools',
+        'Folder': 'Folder',
+        'FolderOpened': 'FolderOpened',
+        'HomeFilled': 'HomeFilled',
+        'UserFilled': 'UserFilled',
+        'Grid': 'Grid',
+        'School': 'School',
+        // 旧图标名兼容映射（Element Plus Icons 中不存在的名称）
+        'Category': 'Collection',
+        'Time': 'Timer',
+        'Flash': 'Lightning',
+        'Gift': 'Present',
+        'UserPlus': 'Avatar'
+      }
+      // 处理后端返回的菜单数据，转换为前端需要的格式
+      const formatMenus = (items: Menu[]): Menu[] => {
+        return items.map(item => {
+          // 处理路径：相对路径转换为绝对路径（只需加上前缀 /）
+          let fullPath = item.path || ''
+          if (fullPath && !fullPath.startsWith('/')) {
+            fullPath = `/${fullPath}`
+          }
+          // 处理图标名称
+          const iconName = item.icon ? (iconMap[item.icon] || item.icon) : 'Folder'
+          return {
+            id: item.id,
+            parentId: item.parentId ?? 0,
+            name: item.name,
+            path: fullPath,
+            component: item.component,
+            code: item.code,
+            icon: iconName,
+            type: item.type,
+            sort: item.sort ?? 0,
+            status: item.status ?? 1,
+            isVisible: typeof item.isVisible === 'boolean' ? (item.isVisible ? 1 : 0) : item.isVisible,
+            isCache: typeof item.isCache === 'boolean' ? (item.isCache ? 1 : 0) : item.isCache,
+            isAffix: item.isAffix ?? 0,
+            isAlwaysShow: item.isAlwaysShow ?? false,
+            permissionCode: item.permissionCode || item.permission,
+            children: item.children && item.children.length > 0 ? formatMenus(item.children) : undefined
+          }
+        })
+      }
+      const formattedMenus = formatMenus(allMenus)
+
+      // 无指定子系统（租户未分配任何子系统）时返回空菜单，避免泄漏全部菜单
+      if (!subsystemId) return []
+
+      // 获取该子系统的菜单ID列表
+      const subsystemMenuIds = await this.getSubsystemMenuIds(subsystemId)
+
+      // 获取用户角色菜单权限ID列表
+      const roleMenuIds = await this.getRoleMenuIds()
+
+      // 取两者交集 = 最终授权菜单ID
+      const subsystemSet = new Set(subsystemMenuIds)
+      const roleSet = new Set(roleMenuIds)
+      const authorizedIds = new Set<number>()
+      for (const id of subsystemSet) {
+        if (roleSet.has(id)) {
+          authorizedIds.add(id)
+        }
+      }
+
+      // 没有交集（即没有权限）时返回空菜单；
+      // 否则所有角色都按子系统过滤菜单（包括超级管理员和管理员）
+      if (authorizedIds.size === 0) return []
+      return this.filterMenusByPermission(formattedMenus, authorizedIds)
     }
   }
 })

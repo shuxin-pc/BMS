@@ -232,10 +232,20 @@ async function select(entry: SearchEntry) {
   const target = resolveSearchTarget(entry)
   if (!target) return
   const userStore = useUserStore()
+  const navigation = { path: target.path, query: kw ? { keyword: kw } : undefined }
+  // 跨子系统：store 先完成菜单/路由/门店准备，导航完成后才原子提交状态，
+  // 等待期旧页面保持静止，无数据闪现；同子系统直接跳转
   if (String(userStore.currentSubsystemId) !== target.subsystemId) {
-    await userStore.switchSubsystem(target.subsystemId)
+    userStore.switchingSubsystem = true
+    try {
+      await userStore.switchSubsystem(target.subsystemId, () => router.push(navigation))
+      await nextTick()
+    } finally {
+      userStore.switchingSubsystem = false
+    }
+    return
   }
-  router.push({ path: target.path, query: kw ? { keyword: kw } : undefined })
+  router.push(navigation)
 }
 
 // ============ 全局快捷键（Ctrl+K） ============

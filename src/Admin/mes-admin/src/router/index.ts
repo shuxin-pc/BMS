@@ -155,7 +155,14 @@ router.beforeEach(async (to, _from, next) => {
   // 首页跳转：进入子系统时显示已授权菜单排序第1的页面，而非硬编码 dashboard
   // 同时拦截 / 和 /dashboard，避免登录后或直接访问 dashboard 时绕过授权菜单逻辑
   // 无授权菜单时：跳转到 /no-permission 提示页
+  // 子系统切换期间（switchingSubsystem）直接放行：切换导航目标已由 switchSubsystem 按
+  // 新子系统菜单计算；且此时 menus 尚未提交（仍为旧子系统菜单），按它重定向会指向
+  // 未注册的旧子系统路由（如从门店管理切回基础数据时 /dashboard 被重定向到 /store/home）
   if (to.path === '/' || to.path === '/dashboard') {
+    if (userStore.switchingSubsystem) {
+      next()
+      return
+    }
     const firstPath = userStore.firstAuthorizedLeafPath
     if (firstPath && firstPath !== to.path) {
       next(firstPath)
